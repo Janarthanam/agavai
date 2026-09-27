@@ -42,8 +42,12 @@ roots = ["~/Documents", "~/Downloads", "~/Projects", "~/Work"]
 max_results = 20
 
 [tts]
-# piper | espeak | notify
-prefer = "espeak"
+# kokoro (Kokoro-82M CPU ONNX) | espeak | notify
+prefer = "kokoro"
+voice = "af_bella"
+model_path = "~/.local/share/agavai/tts/kokoro-v1.0.fp16.onnx"
+voices_path = "~/.local/share/agavai/tts/voices-v1.0.bin"
+venv = "~/.local/share/agavai/tts-venv"
 
 [a2a]
 card_dir = "~/.config/agavai/a2a"

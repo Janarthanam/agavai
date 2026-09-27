@@ -100,6 +100,19 @@ class LlmConfig:
 
 
 @dataclass
+class TtsConfig:
+    prefer: str = "kokoro"
+    voice: str = "af_bella"
+    model_path: Path = field(
+        default_factory=lambda: xdg_data() / "agavai/tts/kokoro-v1.0.fp16.onnx"
+    )
+    voices_path: Path = field(
+        default_factory=lambda: xdg_data() / "agavai/tts/voices-v1.0.bin"
+    )
+    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/tts-venv")
+
+
+@dataclass
 class FilesConfig:
     roots: list[Path] = field(
         default_factory=lambda: [
@@ -116,7 +129,11 @@ class FilesConfig:
 class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
     files: FilesConfig = field(default_factory=FilesConfig)
-    tts_prefer: str = "espeak"
+    tts: TtsConfig = field(default_factory=TtsConfig)
+
+    @property
+    def tts_prefer(self) -> str:
+        return self.tts.prefer
     runtime_dir: Path = field(default_factory=lambda: xdg_runtime() / "agavai")
     config_dir: Path = field(default_factory=lambda: xdg_config() / "agavai")
     config_path: Path = field(default_factory=lambda: xdg_config() / "agavai" / "config.toml")
@@ -234,8 +251,16 @@ def load_config(path: Path | None = None) -> Config:
     if "max_results" in files:
         cfg.files.max_results = int(files["max_results"])
     tts = data.get("tts") or {}
-    if "prefer" in tts:
-        cfg.tts_prefer = str(tts["prefer"])
+    if "prefer" in tts or "engine" in tts:
+        cfg.tts.prefer = str(tts.get("prefer") or tts.get("engine") or cfg.tts.prefer)
+    if "voice" in tts:
+        cfg.tts.voice = str(tts["voice"])
+    if "model_path" in tts:
+        cfg.tts.model_path = _expand(str(tts["model_path"]))
+    if "voices_path" in tts:
+        cfg.tts.voices_path = _expand(str(tts["voices_path"]))
+    if "venv" in tts:
+        cfg.tts.venv = _expand(str(tts["venv"]))
     a2a = data.get("a2a") or {}
     if "card_dir" in a2a:
         cfg.a2a_dir = _expand(str(a2a["card_dir"]))

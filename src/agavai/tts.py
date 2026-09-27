@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -8,22 +9,24 @@ from pathlib import Path
 from agavai.config import Config
 
 
-def speak(text: str, cfg: Config) -> None:
+def speak(text: str, cfg: Config) -> str:
+    """Speak text. Returns the engine used: kokoro, espeak, notify, or empty."""
     text = " ".join(text.split())
     if not text:
-        return
+        return ""
     notify(text)
-    prefer = cfg.tts_prefer
-    order = [prefer, "piper", "espeak"]
+    prefer = (cfg.tts.prefer or "kokoro").lower()
+    order = [prefer, "kokoro", "espeak"]
     seen: set[str] = set()
     for engine in order:
-        if engine in seen:
+        if engine in seen or engine == "notify":
             continue
         seen.add(engine)
-        if engine == "piper" and _piper(text):
-            return
+        if engine == "kokoro" and _kokoro(text, cfg):
+            return "kokoro"
         if engine == "espeak" and _espeak(text):
-            return
+            return "espeak"
+    return "notify"
 
 
 def notify(text: str) -> None:
@@ -47,25 +50,46 @@ def _espeak(text: str) -> bool:
     return proc.returncode == 0
 
 
-def _piper(text: str) -> bool:
-    piper = shutil.which("piper")
+def _kokoro(text: str, cfg: Config) -> bool:
+    py = cfg.tts.venv / "bin" / "python"
+    script = Path(__file__).resolve().parents[2] / "scripts" / "kokoro_synth.py"
+    if not py.is_file() or not script.is_file():
+        return False
+    if not cfg.tts.model_path.is_file() or not cfg.tts.voices_path.is_file():
+        return False
     play = shutil.which("pw-play") or shutil.which("paplay")
-    voice = Path.home() / ".local/share/piper-voices/en_US-lessac-medium.onnx"
-    if not piper or not play or not voice.is_file():
+    if not play:
         return False
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav = tmp.name
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ""
     try:
         proc = subprocess.run(
-            [piper, "-m", str(voice), "-f", wav],
-            input=text[:800],
-            text=True,
+            [
+                str(py),
+                str(script),
+                "--model",
+                str(cfg.tts.model_path),
+                "--voices",
+                str(cfg.tts.voices_path),
+                "--voice",
+                cfg.tts.voice,
+                "--out",
+                wav,
+                text[:800],
+            ],
             check=False,
             capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
         )
-        if proc.returncode != 0:
+        if proc.returncode != 0 or not Path(wav).is_file() or Path(wav).stat().st_size < 44:
             return False
-        subprocess.run([play, wav], check=False, capture_output=True)
-        return True
+        played = subprocess.run([play, wav], check=False, capture_output=True)
+        return played.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
     finally:
         Path(wav).unlink(missing_ok=True)

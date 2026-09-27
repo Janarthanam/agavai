@@ -206,7 +206,7 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 
-**Out:** notification always. Then Piper if configured, else `espeak-ng`, else silent besides the notification.
+**Out:** notification always. Then **Kokoro-82M on CPU** (`kokoro-onnx` + onnxruntime CPU EP in `~/.local/share/agavai/tts-venv`, weights in `~/.local/share/agavai/tts/`). eSpeak-ng is G2P for Kokoro and a robotic fallback. Whisper is never used for speech.
 
 ---
 

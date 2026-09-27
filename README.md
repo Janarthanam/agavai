@@ -35,7 +35,15 @@ systemctl --user enable --now agavai-llm
 agavai ask "open the browser"
 ```
 
-Optional spoken TTS: `omarchy pkg add espeak-ng`. Without it, replies still go to a notification.
+Spoken replies use **Kokoro-82M on CPU** (Apache-2.0). Whisper stays STT only.
+
+```bash
+omarchy pkg add espeak-ng          # G2P for Kokoro, not the audible voice
+~/Projects/oma-voice/scripts/download-tts.sh
+agavai ask "what time is it"       # you should hear the reply
+```
+
+If Kokoro is missing, Agavai falls back to eSpeak then a notification.
 
 ## Tools (MCP)
 
