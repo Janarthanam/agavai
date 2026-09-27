@@ -41,7 +41,7 @@ Optional spoken TTS: `omarchy pkg add espeak-ng`. Without it, replies still go t
 
 `agavai mcp` is a stdio MCP server. The voice loop calls the same functions in-process.
 
-Allowlisted: list/focus windows, workspace, launch (browser/terminal/files/editor/about), themes, night light, reminders, fd file search, https URLs, screen OCR of the focused window, list local agents/units.
+Allowlisted: windows/workspaces, launch and open-app-by-name, themes, night light, volume/brightness/mic mute, battery, network, Bluetooth, lock, stay-awake, do-not-disturb, screenshot, reminders, notifications, clock, file search, https URLs, screen OCR, local agent list.
 
 No generic shell. No Grok. Pixel click / YOLO is not in v1.
 

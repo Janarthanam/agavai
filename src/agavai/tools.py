@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -19,7 +20,18 @@ LAUNCH_TARGETS = {
     "files": ["omarchy-launch-nautilus"],
     "editor": ["omarchy-launch-editor"],
     "about": ["omarchy-launch-about"],
+    "spotify": ["omarchy-launch-spotify"],
+    "signal": ["omarchy-launch-signal"],
+    "discord": ["omarchy-launch-discord-community"],
+    "clipboard": ["omarchy", "menu", "clipboard"],
+    "emoji": ["omarchy", "menu", "emoji"],
 }
+
+DESKTOP_DIRS = (
+    Path.home() / ".local/share/applications",
+    Path("/usr/share/applications"),
+    Path("/usr/local/share/applications"),
+)
 
 def _run(argv: list[str], timeout: int = 15) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -267,6 +279,236 @@ def list_agents(_args: dict[str, Any], cfg: Config) -> str:
     )
 
 
+def set_volume(args: dict[str, Any], _cfg: Config) -> str:
+    action = str(args.get("action") or "").strip().lower()
+    allowed = {"raise", "lower", "mute", "mute-toggle"}
+    if action == "mute":
+        action = "mute-toggle"
+    if action not in allowed:
+        return "action must be raise, lower, or mute"
+    proc = _run(["omarchy", "audio", "output", "volume", action])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "volume failed")[:500]
+    return _ok(proc.stdout) or f"volume {action}"
+
+
+def set_brightness(args: dict[str, Any], _cfg: Config) -> str:
+    action = str(args.get("action") or "show").strip().lower()
+    if action in {"show", "status", ""}:
+        proc = _run(["omarchy", "brightness", "display"])
+        return _ok(proc.stdout) or "brightness"
+    if action in {"up", "raise"}:
+        spec = "+5%"
+    elif action in {"down", "lower"}:
+        spec = "5%-"
+    elif action == "set":
+        pct = int(args.get("percent") or -1)
+        if pct < 1 or pct > 100:
+            return "percent must be 1-100"
+        spec = f"{pct}%"
+    else:
+        return "action must be show, up, down, or set"
+    proc = _run(["omarchy", "brightness", "display", spec])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "brightness failed")[:500]
+    return _ok(proc.stdout) or f"brightness {spec}"
+
+
+def mute_microphone(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "audio", "input", "mute"])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "mic mute failed")[:500]
+    return _ok(proc.stdout) or "toggled microphone mute"
+
+
+def battery_status(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "battery", "status"])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "no battery")[:500]
+    return _ok(proc.stdout) or "battery unknown"
+
+
+def network_status(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "network", "status"])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "network status failed")[:500]
+    return _ok(proc.stdout) or "network unknown"
+
+
+def bluetooth(args: dict[str, Any], _cfg: Config) -> str:
+    action = str(args.get("action") or "status").strip().lower()
+    if action == "status":
+        action = "is-on"
+    if action not in {"on", "off", "toggle", "is-on"}:
+        return "action must be on, off, toggle, or status"
+    proc = _run(["omarchy", "bluetooth", "power", action])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "bluetooth failed")[:500]
+    return _ok(proc.stdout) or f"bluetooth {action}"
+
+
+def lock_screen(_args: dict[str, Any], _cfg: Config) -> str:
+    lock = shutil.which("omarchy-system-lock")
+    if not lock:
+        return "omarchy-system-lock not on PATH"
+    proc = _run([lock], timeout=10)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "lock failed")[:500]
+    return "locked"
+
+
+def stay_awake(args: dict[str, Any], _cfg: Config) -> str:
+    action = str(args.get("action") or "status").strip().lower().replace("_", "-")
+    if action in {"on", "stay-awake", "enable"}:
+        flag = "stay-awake"
+    elif action in {"off", "allow-idle", "disable"}:
+        flag = "allow-idle"
+    elif action in {"status", "toggle"}:
+        flag = action
+    else:
+        return "action must be on, off, toggle, or status"
+    proc = _run(["omarchy", "toggle", "idle", flag])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "idle toggle failed")[:500]
+    return _ok(proc.stdout) or f"idle {flag}"
+
+
+def dnd(args: dict[str, Any], _cfg: Config) -> str:
+    action = str(args.get("action") or "toggle").strip().lower()
+    argv = ["omarchy", "toggle", "notification", "silencing"]
+    if action in {"on", "off", "toggle"}:
+        argv.append(action)
+    elif action != "toggle":
+        return "action must be on, off, or toggle"
+    proc = _run(argv)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "dnd failed")[:500]
+    return _ok(proc.stdout) or "do-not-disturb toggled"
+
+
+def screenshot(args: dict[str, Any], _cfg: Config) -> str:
+    mode = str(args.get("mode") or "fullscreen").strip().lower()
+    dest = str(args.get("dest") or "copy").strip().lower()
+    if mode not in {"fullscreen", "windows"}:
+        return "mode must be fullscreen or windows (region needs the pointer)"
+    if dest not in {"copy", "save"}:
+        return "dest must be copy or save"
+    proc = _run(["omarchy", "capture", "screenshot", mode, dest], timeout=20)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "screenshot failed")[:500]
+    return _ok(proc.stdout) or f"screenshot {mode} {dest}"
+
+
+def list_reminders(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "reminder", "show", "--json"])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "reminder show failed")[:500]
+    return _ok(proc.stdout) or "[]"
+
+
+def clear_reminders(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "reminder", "clear"])
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "reminder clear failed")[:500]
+    return _ok(proc.stdout) or "reminders cleared"
+
+
+def send_notification(args: dict[str, Any], _cfg: Config) -> str:
+    headline = str(args.get("headline") or args.get("title") or "").strip()
+    body = str(args.get("body") or args.get("message") or "").strip()
+    if not headline:
+        return "need a headline"
+    argv = ["omarchy", "notification", "send", headline]
+    if body:
+        argv.append(body)
+    proc = _run(argv)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "notify failed")[:500]
+    return "notified"
+
+
+def clock_now(_args: dict[str, Any], _cfg: Config) -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%A, %Y-%m-%d %H:%M")
+
+
+def close_window(args: dict[str, Any], _cfg: Config) -> str:
+    title = str(args.get("title") or "").strip()
+    if not title:
+        proc = _run(["hyprctl", "dispatch", "killactive"])
+        if proc.returncode != 0:
+            return proc.stderr.strip() or "close failed"
+        return "closed focused window"
+    proc = _run(["hyprctl", "clients", "-j"])
+    clients = json.loads(proc.stdout or "[]")
+    match = next(
+        (c for c in clients if title.lower() in str(c.get("title") or "").lower()),
+        None,
+    )
+    if not match:
+        return "no matching window"
+    _run(["hyprctl", "dispatch", "closewindow", f"address:{match.get('address')}"])
+    return f"closed {match.get('title')}"
+
+
+def toggle_fullscreen(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["hyprctl", "dispatch", "fullscreen"])
+    if proc.returncode != 0:
+        return proc.stderr.strip() or "fullscreen failed"
+    return "toggled fullscreen"
+
+
+def workspace_step(args: dict[str, Any], _cfg: Config) -> str:
+    direction = str(args.get("direction") or "").strip().lower()
+    if direction in {"next", "right"}:
+        token = "e+1"
+    elif direction in {"prev", "previous", "left"}:
+        token = "e-1"
+    else:
+        return "direction must be next or prev"
+    proc = _run(["hyprctl", "dispatch", "workspace", token])
+    if proc.returncode != 0:
+        return proc.stderr.strip() or "workspace step failed"
+    return f"workspace {direction}"
+
+
+def open_app(args: dict[str, Any], _cfg: Config) -> str:
+    name = str(args.get("name") or "").strip()
+    if not name or "/" in name or ".." in name:
+        return "need a simple app name"
+    needle = name.lower()
+    matches: list[tuple[str, str]] = []
+    for folder in DESKTOP_DIRS:
+        if not folder.is_dir():
+            continue
+        for path in folder.glob("*.desktop"):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "NoDisplay=true" in text:
+                continue
+            pretty = ""
+            for line in text.splitlines():
+                if line.startswith("Name="):
+                    pretty = line.split("=", 1)[1].strip()
+                    break
+            hay = f"{path.stem} {pretty}".lower()
+            if needle in hay:
+                matches.append((pretty or path.stem, path.stem))
+    if not matches:
+        return f"no app matching {name!r}"
+    exact = next((m for m in matches if m[0].lower() == needle or m[1].lower() == needle), matches[0])
+    label, desktop_id = exact
+    if not shutil.which("gtk-launch"):
+        return "gtk-launch not installed"
+    proc = _run(["gtk-launch", desktop_id], timeout=20)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "launch failed")[:500]
+    return f"opened {label}"
+
+
 def Path_read(path: str) -> str:
     with open(path, encoding="utf-8") as f:
         return f.read().strip()
@@ -311,13 +553,24 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "launch",
-            "description": "Launch a desktop app. target is one of: browser, terminal, files, editor, about.",
+            "description": "Launch a desktop app. target is one of: browser, terminal, files, editor, about, spotify, signal, discord, clipboard, emoji.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "target": {
                         "type": "string",
-                        "enum": ["browser", "terminal", "files", "editor", "about"],
+                        "enum": [
+                            "browser",
+                            "terminal",
+                            "files",
+                            "editor",
+                            "about",
+                            "spotify",
+                            "signal",
+                            "discord",
+                            "clipboard",
+                            "emoji",
+                        ],
                     }
                 },
                 "required": ["target"],
@@ -407,6 +660,203 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_volume",
+            "description": "Change speaker volume. action: raise, lower, or mute.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["raise", "lower", "mute"]},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_brightness",
+            "description": "Show or change display brightness. action: show, up, down, or set with percent 1-100.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["show", "up", "down", "set"]},
+                    "percent": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mute_microphone",
+            "description": "Toggle the microphone mute state.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "battery_status",
+            "description": "Read battery percentage and power draw.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "network_status",
+            "description": "Read Wi-Fi / network status.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bluetooth",
+            "description": "Control Bluetooth power. action: on, off, toggle, or status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["on", "off", "toggle", "status"]},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lock_screen",
+            "description": "Lock the session and turn off the display.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stay_awake",
+            "description": "Keep the machine awake or allow idle. action: on, off, toggle, or status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["on", "off", "toggle", "status"]},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dnd",
+            "description": "Do-not-disturb: silence notifications. action: on, off, or toggle.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["on", "off", "toggle"]},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screenshot",
+            "description": "Capture the screen. mode: fullscreen or windows. dest: copy or save.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "string", "enum": ["fullscreen", "windows"]},
+                    "dest": {"type": "string", "enum": ["copy", "save"]},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_reminders",
+            "description": "List pending desktop reminders.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_reminders",
+            "description": "Clear all pending desktop reminders.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_notification",
+            "description": "Show a desktop notification.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "headline": {"type": "string"},
+                    "body": {"type": "string"},
+                },
+                "required": ["headline"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clock_now",
+            "description": "Current local date and time.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_window",
+            "description": "Close the focused window, or one whose title contains the given text.",
+            "parameters": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_fullscreen",
+            "description": "Toggle fullscreen on the focused window.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "workspace_step",
+            "description": "Move to the next or previous Hyprland workspace. direction: next or prev.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string", "enum": ["next", "prev"]},
+                },
+                "required": ["direction"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_app",
+            "description": "Open an installed app by name (matches desktop file Name). Example: Firefox, Agavai, Spotify.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        },
+    },
 ]
 
 DISPATCH: dict[str, ToolFn] = {
@@ -422,6 +872,24 @@ DISPATCH: dict[str, ToolFn] = {
     "play_url": play_url,
     "screen_context": screen_context,
     "list_agents": list_agents,
+    "set_volume": set_volume,
+    "set_brightness": set_brightness,
+    "mute_microphone": mute_microphone,
+    "battery_status": battery_status,
+    "network_status": network_status,
+    "bluetooth": bluetooth,
+    "lock_screen": lock_screen,
+    "stay_awake": stay_awake,
+    "dnd": dnd,
+    "screenshot": screenshot,
+    "list_reminders": list_reminders,
+    "clear_reminders": clear_reminders,
+    "send_notification": send_notification,
+    "clock_now": clock_now,
+    "close_window": close_window,
+    "toggle_fullscreen": toggle_fullscreen,
+    "workspace_step": workspace_step,
+    "open_app": open_app,
 }
 
 

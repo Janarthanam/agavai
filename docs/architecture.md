@@ -176,11 +176,17 @@ Allowlist (no generic shell):
 
 | Tool | Backend |
 |---|---|
-| `list_windows` / `focus_window` / `to_workspace` | `hyprctl` |
-| `launch` | `omarchy-launch-{browser,terminal,nautilus,editor,about}` |
+| `list_windows` / `focus_window` / `to_workspace` / `workspace_step` / `close_window` / `toggle_fullscreen` | `hyprctl` |
+| `launch` / `open_app` | Omarchy launchers and `gtk-launch` on desktop files |
 | `list_themes` / `set_theme` | `omarchy theme` |
-| `toggle_nightlight` | `omarchy toggle nightlight` |
-| `reminder` | `omarchy reminder` |
+| `toggle_nightlight` / `stay_awake` / `dnd` | `omarchy toggle` |
+| `set_volume` / `mute_microphone` | `omarchy audio` |
+| `set_brightness` | `omarchy brightness display` |
+| `battery_status` / `network_status` / `bluetooth` | Omarchy status CLIs |
+| `lock_screen` | `omarchy-system-lock` |
+| `screenshot` | `omarchy capture screenshot` (fullscreen/windows only) |
+| `reminder` / `list_reminders` / `clear_reminders` | `omarchy reminder` |
+| `send_notification` / `clock_now` | notification send / local time |
 | `search_files` | `fd` under `[files] roots` |
 | `play_url` | https only, `omarchy-launch-webapp` / browser |
 | `screen_context` | focused window + `grim` + `tesseract` |
