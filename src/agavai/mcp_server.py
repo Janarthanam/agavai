@@ -6,8 +6,8 @@ import json
 import sys
 from typing import Any
 
-from oma_voice.config import load_config
-from oma_voice.tools import OPENAPI_TOOLS, call_tool
+from agavai.config import load_config
+from agavai.tools import OPENAPI_TOOLS, call_tool
 
 
 def _mcp_tools() -> list[dict[str, Any]]:
@@ -35,7 +35,7 @@ def handle(msg: dict[str, Any]) -> dict[str, Any] | None:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "oma-voice", "version": "0.1.0"},
+                "serverInfo": {"name": "agavai", "version": "0.1.0"},
             },
         }
     if method == "notifications/initialized":

@@ -1,5 +1,5 @@
 Feature: Top chat overlay snapshot
-  The HUD must show the user line and each tool call so we can see what oma-voice is doing.
+  The HUD must show the user line and each tool call so we can see what agavai is doing.
 
   Scenario: A turn records the user, two tool calls, and the reply
     Given a chat UI in a temp runtime dir

@@ -1,9 +1,9 @@
 Feature: MCP stdio tools
   Other agents discover the same allowlist over MCP.
 
-  Scenario: Server announces oma-voice and lists safe tools
+  Scenario: Server announces agavai and lists safe tools
     When I send MCP initialize
-    Then the MCP server name should be "oma-voice"
+    Then the MCP server name should be "agavai"
     When I send MCP tools/list
     Then MCP should list the tool "launch"
     And MCP should list the tool "list_windows"

@@ -49,7 +49,7 @@ class ModelSpec:
 
 
 def _default_model_path(filename: str) -> Path:
-    return xdg_data() / "oma-voice" / "models" / filename
+    return xdg_data() / "agavai" / "models" / filename
 
 
 BUILTIN_MODELS: dict[str, ModelSpec] = {
@@ -76,7 +76,7 @@ BUILTIN_MODELS: dict[str, ModelSpec] = {
 class LlmConfig:
     host: str = "127.0.0.1"
     port: int = 18766
-    alias: str = "oma-voice"
+    alias: str = "agavai"
     model_id: str = DEFAULT_MODEL_ID
     model_path: Path = field(
         default_factory=lambda: BUILTIN_MODELS[DEFAULT_MODEL_ID].path
@@ -117,10 +117,10 @@ class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
     files: FilesConfig = field(default_factory=FilesConfig)
     tts_prefer: str = "espeak"
-    runtime_dir: Path = field(default_factory=lambda: xdg_runtime() / "oma-voice")
-    config_dir: Path = field(default_factory=lambda: xdg_config() / "oma-voice")
-    config_path: Path = field(default_factory=lambda: xdg_config() / "oma-voice" / "config.toml")
-    a2a_dir: Path = field(default_factory=lambda: xdg_config() / "oma-voice/a2a")
+    runtime_dir: Path = field(default_factory=lambda: xdg_runtime() / "agavai")
+    config_dir: Path = field(default_factory=lambda: xdg_config() / "agavai")
+    config_path: Path = field(default_factory=lambda: xdg_config() / "agavai" / "config.toml")
+    a2a_dir: Path = field(default_factory=lambda: xdg_config() / "agavai/a2a")
 
     @property
     def prompt_file(self) -> Path:
@@ -132,10 +132,10 @@ class Config:
 
 
 def config_path() -> Path:
-    env = os.environ.get("OMA_VOICE_CONFIG")
+    env = os.environ.get("AGAVAI_CONFIG")
     if env:
         return _expand(env)
-    return xdg_config() / "oma-voice" / "config.toml"
+    return xdg_config() / "agavai" / "config.toml"
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -173,7 +173,7 @@ def load_config(path: Path | None = None) -> Config:
         cfg.llm.timeout_secs = int(llm["timeout_secs"])
     if "llama_bin" in llm:
         cfg.llm.llama_bin = _expand(str(llm["llama_bin"]))
-    env_bin = os.environ.get("OMA_VOICE_LLAMA_SERVER")
+    env_bin = os.environ.get("AGAVAI_LLAMA_SERVER")
     if env_bin:
         cfg.llm.llama_bin = Path(env_bin)
 
@@ -223,7 +223,7 @@ def load_config(path: Path | None = None) -> Config:
     if "model_path" in llm:
         cfg.llm.model_path = _expand(str(llm["model_path"]))
         cfg.llm.path_overridden = True
-    env_model = os.environ.get("OMA_VOICE_MODEL")
+    env_model = os.environ.get("AGAVAI_MODEL")
     if env_model:
         cfg.llm.model_path = _expand(env_model)
         cfg.llm.path_overridden = True
@@ -296,7 +296,7 @@ def _llm_table_span(text: str) -> tuple[int, int]:
 
 
 def dump_llm_env(cfg: Config | None = None) -> str:
-    """Shell assignments for oma-voice-llm. Values are shlex-quoted."""
+    """Shell assignments for agavai-llm. Values are shlex-quoted."""
     cfg = cfg or load_config()
     pairs = {
         "BIN": str(cfg.llm.llama_bin),

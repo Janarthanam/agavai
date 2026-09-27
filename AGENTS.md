@@ -1,4 +1,4 @@
-# oma-voice agent instructions
+# agavai agent instructions
 
 ## Tests: Behave BDD only
 

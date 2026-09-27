@@ -5,15 +5,15 @@ from unittest.mock import MagicMock, patch
 
 from behave import then, when
 
-from oma_voice.feedback import osd_show
+from agavai.feedback import osd_show
 
 
 @when("I show the listening OSD")
 def step_show(context):
     run = MagicMock()
     run.returncode = 0
-    which = patch("oma_voice.feedback.shutil.which", return_value="/usr/bin/omarchy")
-    run_p = patch("oma_voice.feedback.subprocess.run", return_value=run)
+    which = patch("agavai.feedback.shutil.which", return_value="/usr/bin/omarchy")
+    run_p = patch("agavai.feedback.subprocess.run", return_value=run)
     context.run_mock = run_p.start()
     which.start()
     context.add_cleanup(which.stop)

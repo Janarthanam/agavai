@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from oma_voice.config import Config
-from oma_voice.llm import LlmError, chat, health, parse_tool_calls
-from oma_voice.tools import call_tool
-from oma_voice.ui import ChatUi
+from agavai.config import Config
+from agavai.llm import LlmError, chat, health, parse_tool_calls
+from agavai.tools import call_tool
+from agavai.ui import ChatUi
 
 SYSTEM = """You are a local Omarchy Linux voice assistant running on this machine.
 You can only act through the provided tools. Never invent that you launched an app, changed a theme, or clicked something unless a tool result says so.
@@ -26,7 +26,7 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
     if not health(cfg.llm):
         msg = (
             "The local model is not running. Start it with: "
-            "systemctl --user start oma-voice-llm"
+            "systemctl --user start agavai-llm"
         )
         if ui:
             ui.error(msg)

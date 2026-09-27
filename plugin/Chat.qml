@@ -17,7 +17,7 @@ Item {
   property string modelId: ""
   property var turns: []
   property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ("/run/user/" + Quickshell.env("UID"))
-  property string uiPath: root.runtimeDir + "/oma-voice/ui.json"
+  property string uiPath: root.runtimeDir + "/agavai/ui.json"
 
   readonly property color background: Color.menu.background
   readonly property color foreground: Color.menu.text
@@ -41,7 +41,7 @@ Item {
   function dismiss() {
     root.opened = false
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "janar.oma-voice")
+      root.shell.hide((root.manifest && root.manifest.id) || "janar.agavai")
   }
 
   function applySnapshot(raw) {
@@ -74,7 +74,7 @@ Item {
   }
 
   IpcHandler {
-    target: "janar.oma-voice"
+    target: "janar.agavai"
     function open(payloadJson: string): string {
       root.open(payloadJson || "{}")
       return "ok"
@@ -91,7 +91,7 @@ Item {
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.namespace: "oma-voice-chat"
+    WlrLayershell.namespace: "agavai-chat"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore

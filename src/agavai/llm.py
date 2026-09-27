@@ -5,8 +5,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from oma_voice.config import LlmConfig
-from oma_voice.tools import OPENAPI_TOOLS
+from agavai.config import LlmConfig
+from agavai.tools import OPENAPI_TOOLS
 
 
 class LlmError(RuntimeError):

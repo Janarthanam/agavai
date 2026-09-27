@@ -4,8 +4,8 @@ Feature: Launchable desktop app
   Scenario: The desktop entry is named Agavai
     Then the desktop file should exist
     And the desktop file should contain "Name=Agavai"
-    And the desktop file should contain "oma-voice app"
+    And the desktop file should contain "agavai app"
 
-  Scenario: oma-voice app is a CLI command
-    When I run "python3 -m oma_voice app --help"
+  Scenario: agavai app is a CLI command
+    When I run "python3 -m agavai app --help"
     Then the command output should contain "Open the Agavai window"

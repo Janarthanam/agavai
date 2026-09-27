@@ -9,7 +9,7 @@ import subprocess
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 ToolFn = Callable[[dict[str, Any], Config], str]
 
@@ -258,7 +258,7 @@ def list_agents(_args: dict[str, Any], cfg: Config) -> str:
     return json.dumps(
         {
             "voxtype": unit_active("voxtype.service"),
-            "oma_voice_llm": unit_active("oma-voice-llm.service"),
+            "agavai_llm": unit_active("agavai-llm.service"),
             "default_agent_name": default_agent,
             "note": "v1 lists local units only; it does not call remote agents",
             "plugins": plugins.stdout.strip().splitlines()[:40],

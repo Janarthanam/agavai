@@ -4,7 +4,7 @@ import json
 
 from behave import then, when
 
-from oma_voice.llm import parse_tool_calls
+from agavai.llm import parse_tool_calls
 
 
 @when('I parse an OpenAI tool call named "{name}"')

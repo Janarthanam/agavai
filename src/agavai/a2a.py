@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 
 CARD = {
-    "name": "oma-voice",
+    "name": "agavai",
     "description": "Local Omarchy voice assistant. Voxtype ears, Qwen3-4B brain, MCP desktop tools.",
-    "url": "stdio://oma-voice",
+    "url": "stdio://agavai",
     "version": "0.1.0",
     "capabilities": {"streaming": False},
     "skills": [
@@ -23,5 +23,5 @@ CARD = {
 
 def write_card(cfg: Config) -> None:
     cfg.a2a_dir.mkdir(parents=True, exist_ok=True)
-    path = cfg.a2a_dir / "oma-voice.json"
+    path = cfg.a2a_dir / "agavai.json"
     path.write_text(json.dumps(CARD, indent=2) + "\n", encoding="utf-8")

@@ -4,7 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 
 def record_start(cfg: Config) -> None:

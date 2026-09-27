@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 VALID = {"idle", "listening", "transcribing", "thinking", "speaking", "error"}
 

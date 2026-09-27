@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 UNMUTE_FLAG = "unmuted-by-us"
 
@@ -77,7 +77,7 @@ def prepare_listen(cfg: Config) -> None:
         _keyboard_mute(False)
     else:
         flag.unlink(missing_ok=True)
-    # Visual feedback is the top chat overlay (janar.oma-voice), not this OSD.
+    # Visual feedback is the top chat overlay (janar.agavai), not this OSD.
 
 
 def hide_listen(cfg: Config) -> None:

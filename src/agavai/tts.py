@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from oma_voice.config import Config
+from agavai.config import Config
 
 
 def speak(text: str, cfg: Config) -> None:

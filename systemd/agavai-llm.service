@@ -1,11 +1,11 @@
 [Unit]
-Description=Oma voice on-device llama-server (model from ~/.config/oma-voice/config.toml)
+Description=Agavai on-device llama-server (model from ~/.config/agavai/config.toml)
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/oma-voice-llm
+ExecStart=%h/.local/bin/agavai-llm
 Restart=on-failure
 RestartSec=3
 # Keep this process out of the voxtype cgroup. A leftover llama-server there

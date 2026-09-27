@@ -4,13 +4,13 @@ from unittest.mock import patch
 
 from behave import given, then, when
 
-from oma_voice.config import Config
-from oma_voice.orchestrator import _strip_think, run_turn
+from agavai.config import Config
+from agavai.orchestrator import _strip_think, run_turn
 
 
 @given("llama-server is down")
 def step_down(context):
-    context.health_patch = patch("oma_voice.orchestrator.health", return_value=False)
+    context.health_patch = patch("agavai.orchestrator.health", return_value=False)
     context.health_patch.start()
     context.add_cleanup(context.health_patch.stop)
 
@@ -33,10 +33,10 @@ def step_script(context, tool, reply):
     def fake_chat(_cfg, _messages, tools=None):
         return calls.pop(0)
 
-    context.health_patch = patch("oma_voice.orchestrator.health", return_value=True)
-    context.chat_patch = patch("oma_voice.orchestrator.chat", side_effect=fake_chat)
+    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
+    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
     context.tool_patch = patch(
-        "oma_voice.orchestrator.call_tool", return_value="launched browser"
+        "agavai.orchestrator.call_tool", return_value="launched browser"
     )
     context.health_patch.start()
     context.chat_patch.start()

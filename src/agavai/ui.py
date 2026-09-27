@@ -7,9 +7,9 @@ import shutil
 import subprocess
 from typing import Any
 
-from oma_voice.config import Config
+from agavai.config import Config
 
-PLUGIN_ID = "janar.oma-voice"
+PLUGIN_ID = "janar.agavai"
 MAX_TURNS = 5
 RESULT_CHARS = 280
 

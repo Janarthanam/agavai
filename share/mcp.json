@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "oma-voice": {
-      "command": "oma-voice",
+    "agavai": {
+      "command": "agavai",
       "args": ["mcp"]
     }
   }

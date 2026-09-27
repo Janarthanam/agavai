@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from behave import given, then, when
 
-from oma_voice.config import Config
-from oma_voice.tools import call_tool, launch, play_url, to_workspace
+from agavai.config import Config
+from agavai.tools import call_tool, launch, play_url, to_workspace
 
 
 @when('I call the tool "{name}" with empty arguments')
@@ -30,8 +30,8 @@ def step_launch_on_path(context, binary):
     run.returncode = 0
     run.stdout = ""
     run.stderr = ""
-    which = patch("oma_voice.tools.shutil.which", return_value=f"/usr/bin/{binary}")
-    run_p = patch("oma_voice.tools._run", return_value=run)
+    which = patch("agavai.tools.shutil.which", return_value=f"/usr/bin/{binary}")
+    run_p = patch("agavai.tools._run", return_value=run)
     context.which_cm = which
     context.run_cm = run_p
     context.run_mock = run_p.start()

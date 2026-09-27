@@ -1,4 +1,4 @@
-# oma-voice architecture
+# agavai architecture
 
 Local voice control for Omarchy. Voxtype is the microphone. A **configurable on-device GGUF** (default: Qwen3-4B Instruct, ~2.5 GB) is the brain. Allowlisted tools are the hands. Nothing in v1 leaves the machine.
 
@@ -19,11 +19,11 @@ They must not run at the same time. They share the mic and the Voxtype state mac
                     Super+Ctrl+M
                           │
                           ▼
-                   oma-voice toggle
+                   agavai toggle
                           │
           ┌───────────────┴────────────────┐
           │  voxtype record start --file=  │
-          │  $XDG_RUNTIME_DIR/oma-voice/   │
+          │  $XDG_RUNTIME_DIR/agavai/   │
           │  prompt.txt                    │
           └───────────────┬────────────────┘
                           │ WAV (local Whisper)
@@ -36,7 +36,7 @@ They must not run at the same time. They share the mic and the Voxtype state mac
                           │
                           ▼
                     orchestrator
-                    (oma-voice, one shot)
+                    (agavai, one shot)
                           │
           ┌───────────────┼────────────────┐
           ▼               ▼                ▼
@@ -46,7 +46,7 @@ They must not run at the same time. They share the mic and the Voxtype state mac
    from config.toml fd / grim / tesseract
 ```
 
-Typed path skips Voxtype: `oma-voice ask "open the browser"`.
+Typed path skips Voxtype: `agavai ask "open the browser"`.
 
 ---
 
@@ -56,43 +56,43 @@ Keep **two** `llama-server` processes. They are different models and different j
 
 | Port | Unit / starter | Config | Job |
 |---|---|---|---|
-| **18765** | Voxtype `sanitize.sh` | Voxtype, not oma-voice | Dictation cleanup. Qwen2.5-1.5B. Do not reuse. |
-| **18766** | `oma-voice-llm.service` → `oma-voice-llm` | `~/.config/oma-voice/config.toml` `[llm]` | Tool loop. Active on-device GGUF. |
+| **18765** | Voxtype `sanitize.sh` | Voxtype, not agavai | Dictation cleanup. Qwen2.5-1.5B. Do not reuse. |
+| **18766** | `agavai-llm.service` → `agavai-llm` | `~/.config/agavai/config.toml` `[llm]` | Tool loop. Active on-device GGUF. |
 
-`oma-voice-llm.service` is a user unit under `graphical-session.target`, in its **own cgroup**. A leftover llama-server inside the Voxtype cgroup hangs `systemctl --user restart voxtype`.
+`agavai-llm.service` is a user unit under `graphical-session.target`, in its **own cgroup**. A leftover llama-server inside the Voxtype cgroup hangs `systemctl --user restart voxtype`.
 
 The orchestrator is **not** a daemon. Each Super+Ctrl+M stop (or `ask`) is one process: read transcript → POST `/v1/chat/completions` with `tools` → run tool results → speak.
 
-MCP stdio (`oma-voice mcp`) exposes the same allowlist for other clients. The voice loop calls tools in-process so the 4B does not need a second MCP stack.
+MCP stdio (`agavai mcp`) exposes the same allowlist for other clients. The voice loop calls tools in-process so the 4B does not need a second MCP stack.
 
 ---
 
 ## On-device model (configurable)
 
-The brain is **never hardcoded in the systemd unit**. `oma-voice-llm` asks Python for the resolved GGUF, then execs llama-server:
+The brain is **never hardcoded in the systemd unit**. `agavai-llm` asks Python for the resolved GGUF, then execs llama-server:
 
 ```
-oma-voice dump-llm   →  MODEL, HOST, PORT, CTX, NGL, BIN, ALIAS, MODEL_ID
-oma-voice-llm        →  llama-server --model $MODEL --jinja --n-gpu-layers $NGL …
+agavai dump-llm   →  MODEL, HOST, PORT, CTX, NGL, BIN, ALIAS, MODEL_ID
+agavai-llm        →  llama-server --model $MODEL --jinja --n-gpu-layers $NGL …
 ```
 
 ### Resolution order (last wins)
 
-1. Builtin catalog (`qwen3-4b-instruct` → the 2.5 GB Instruct Q4_K_M under `~/.local/share/oma-voice/models/`).
+1. Builtin catalog (`qwen3-4b-instruct` → the 2.5 GB Instruct Q4_K_M under `~/.local/share/agavai/models/`).
 2. `[llm.models.<id>]` in config (path, ctx, GPU layers, download URL).
 3. `[llm] model = "<id>"` selects from that catalog.
 4. `[llm] model_path = "/path/to.gguf"` overrides the id’s path (escape hatch).
-5. Environment `OMA_VOICE_MODEL` overrides the path for one process.
-6. `OMA_VOICE_LLAMA_SERVER` overrides the llama-server binary.
-7. `OMA_VOICE_CONFIG` overrides which TOML file is read.
+5. Environment `AGAVAI_MODEL` overrides the path for one process.
+6. `AGAVAI_LLAMA_SERVER` overrides the llama-server binary.
+7. `AGAVAI_CONFIG` overrides which TOML file is read.
 
 After changing the active id, **restart** the runner so llama-server reloads weights:
 
 ```bash
-oma-voice model list
-oma-voice model set qwen3-4b-instruct
-systemctl --user restart oma-voice-llm
-oma-voice status
+agavai model list
+agavai model set qwen3-4b-instruct
+systemctl --user restart agavai-llm
+agavai status
 ```
 
 ### Add another local GGUF
@@ -104,7 +104,7 @@ Put the file anywhere, then name it in config:
 model = "my-3b"
 
 [llm.models.my-3b]
-path = "~/.local/share/oma-voice/models/My-3B-Instruct-Q4_K_M.gguf"
+path = "~/.local/share/agavai/models/My-3B-Instruct-Q4_K_M.gguf"
 description = "Smaller experimental tool model"
 ctx_size = 4096
 n_gpu_layers = 0
@@ -122,16 +122,16 @@ v1 does not call Grok, OpenRouter, or neuralwings. A future “think hard” id 
 Download the default id:
 
 ```bash
-~/Projects/oma-voice/scripts/download-model.sh
+~/Projects/agavai/scripts/download-model.sh
 # or a named id from the catalog:
-~/Projects/oma-voice/scripts/download-model.sh qwen3-4b-instruct
+~/Projects/agavai/scripts/download-model.sh qwen3-4b-instruct
 ```
 
 ---
 
 ## Config file
 
-Path: `~/.config/oma-voice/config.toml` (example: `share/config.example.toml`).
+Path: `~/.config/agavai/config.toml` (example: `share/config.example.toml`).
 
 ```toml
 [llm]
@@ -146,7 +146,7 @@ max_tool_rounds = 6
 timeout_secs = 120
 
 [llm.models.qwen3-4b-instruct]
-path = "~/.local/share/oma-voice/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
 ctx_size = 8192
 n_gpu_layers = 0
 
@@ -158,7 +158,7 @@ max_results = 20
 prefer = "espeak"   # piper | espeak | notify
 ```
 
-`oma-voice status` prints the resolved `model_id` and `model_path`.
+`agavai status` prints the resolved `model_id` and `model_path`.
 
 ---
 
@@ -192,11 +192,11 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 ## Voice I/O
 
-**In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **top chat overlay** (`janar.oma-voice`). Second press stops recording, remutes if we unmuted, and streams the turn into that overlay.
+**In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **top chat overlay** (`janar.agavai`). Second press stops recording, remutes if we unmuted, and streams the turn into that overlay.
 
-**Chat overlay:** a keep-loaded Omarchy overlay at the top of the screen. The orchestrator writes `$XDG_RUNTIME_DIR/oma-voice/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay auto-hides ~12s after idle.
+**Chat overlay:** a keep-loaded Omarchy overlay at the top of the screen. The orchestrator writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay auto-hides ~12s after idle.
 
-**Desktop app:** `oma-voice app` / launcher entry **Agavai**. GTK4 + libadwaita window that reads the same `ui.json`, with Listen, Send, Cancel, and a typed Ask box. Prefer this if the overlay does not appear. `~/.local/share/applications/agavai.desktop`.
+**Desktop app:** `agavai app` / launcher entry **Agavai**. GTK4 + libadwaita window that reads the same `ui.json`, with Listen, Send, Cancel, and a typed Ask box. Prefer this if the overlay does not appear. `~/.local/share/applications/agavai.desktop`.
 
 Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 
@@ -218,26 +218,26 @@ Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 
 | Path | Role |
 |---|---|
-| `src/oma_voice/config.py` | TOML + builtin catalog + model id |
-| `src/oma_voice/orchestrator.py` | Tool loop |
-| `src/oma_voice/llm.py` | llama-server HTTP client |
-| `src/oma_voice/tools.py` | Allowlist |
-| `src/oma_voice/voxtype.py` | `--file` record/stop |
-| `src/oma_voice/mcp_server.py` | MCP stdio |
-| `scripts/oma-voice-llm` | Exec llama-server from resolved config |
-| `systemd/oma-voice-llm.service` | User unit |
+| `src/agavai/config.py` | TOML + builtin catalog + model id |
+| `src/agavai/orchestrator.py` | Tool loop |
+| `src/agavai/llm.py` | llama-server HTTP client |
+| `src/agavai/tools.py` | Allowlist |
+| `src/agavai/voxtype.py` | `--file` record/stop |
+| `src/agavai/mcp_server.py` | MCP stdio |
+| `scripts/agavai-llm` | Exec llama-server from resolved config |
+| `systemd/agavai-llm.service` | User unit |
 | `share/mcp.json` | Optional MCP client snippet |
 
 ---
 
 ## Deploy (this machine)
 
-Already installed. After a reboot, `voxtype` and `oma-voice-llm` should follow the graphical session.
+Already installed. After a reboot, `voxtype` and `agavai-llm` should follow the graphical session.
 
 ```bash
-systemctl --user status voxtype oma-voice-llm
-oma-voice status
-oma-voice ask "what is the current theme?"
+systemctl --user status voxtype agavai-llm
+agavai status
+agavai ask "what is the current theme?"
 ```
 
 Voice: Super+Ctrl+M, speak, Super+Ctrl+M again.
@@ -245,7 +245,7 @@ Voice: Super+Ctrl+M, speak, Super+Ctrl+M again.
 Fresh machine:
 
 ```bash
-~/Projects/oma-voice/scripts/download-model.sh
-~/Projects/oma-voice/scripts/install.sh
-systemctl --user enable --now oma-voice-llm
+~/Projects/agavai/scripts/download-model.sh
+~/Projects/agavai/scripts/install.sh
+systemctl --user enable --now agavai-llm
 ```

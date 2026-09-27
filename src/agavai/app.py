@@ -16,18 +16,18 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from oma_voice.config import load_config
-from oma_voice.llm import health
-from oma_voice.state import read_state
+from agavai.config import load_config
+from agavai.llm import health
+from agavai.state import read_state
 
-APP_ID = "app.oma.voice"
+APP_ID = "app.agavai"
 
 
 def _cli() -> list[str]:
-    exe = shutil.which("oma-voice")
+    exe = shutil.which("agavai")
     if exe:
         return [exe]
-    return [sys.executable, "-m", "oma_voice"]
+    return [sys.executable, "-m", "agavai"]
 
 
 def _load_ui(path: Path) -> dict:

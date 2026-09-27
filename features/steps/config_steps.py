@@ -6,7 +6,7 @@ from pathlib import Path
 
 from behave import given, then, when
 
-from oma_voice.config import dump_llm_env, load_config, set_model_id
+from agavai.config import dump_llm_env, load_config, set_model_id
 
 
 def _cfg_dir(context) -> Path:
@@ -21,7 +21,7 @@ def _write(context, text: str) -> None:
     context.config_path.write_text(text)
 
 
-@given("an empty oma-voice config")
+@given("an empty agavai config")
 def step_empty(context):
     _cfg_dir(context)
     # missing file is empty config
@@ -95,19 +95,19 @@ def step_extra(context, mid, filename):
     context.gguf = gguf
 
 
-@given('environment OMA_VOICE_MODEL points at "{filename}"')
+@given('environment AGAVAI_MODEL points at "{filename}"')
 def step_env(context, filename):
     d = _cfg_dir(context)
     gguf = d / filename
     gguf.write_bytes(b"x")
-    old = os.environ.get("OMA_VOICE_MODEL")
-    os.environ["OMA_VOICE_MODEL"] = str(gguf)
+    old = os.environ.get("AGAVAI_MODEL")
+    os.environ["AGAVAI_MODEL"] = str(gguf)
 
     def restore():
         if old is None:
-            os.environ.pop("OMA_VOICE_MODEL", None)
+            os.environ.pop("AGAVAI_MODEL", None)
         else:
-            os.environ["OMA_VOICE_MODEL"] = old
+            os.environ["AGAVAI_MODEL"] = old
 
     context.add_cleanup(restore)
     context.gguf = gguf

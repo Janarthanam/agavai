@@ -4,20 +4,20 @@ import argparse
 import sys
 import traceback
 
-from oma_voice.a2a import write_card
-from oma_voice.config import dump_llm_env, load_config, set_model_id
-from oma_voice.feedback import finish, hide_listen, prepare_listen
-from oma_voice.llm import health
-from oma_voice.mcp_server import serve_stdio
-from oma_voice.orchestrator import run_turn
-from oma_voice.state import read_state, write_state
-from oma_voice.tts import speak
-from oma_voice.ui import ChatUi
-from oma_voice.voxtype import record_cancel, record_start, record_stop, wait_for_prompt
+from agavai.a2a import write_card
+from agavai.config import dump_llm_env, load_config, set_model_id
+from agavai.feedback import finish, hide_listen, prepare_listen
+from agavai.llm import health
+from agavai.mcp_server import serve_stdio
+from agavai.orchestrator import run_turn
+from agavai.state import read_state, write_state
+from agavai.tts import speak
+from agavai.ui import ChatUi
+from agavai.voxtype import record_cancel, record_start, record_stop, wait_for_prompt
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="oma-voice", description="Local Omarchy voice assistant")
+    parser = argparse.ArgumentParser(prog="agavai", description="Local Omarchy voice assistant")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("toggle", help="Start or stop a Voxtype-backed request")
     sub.add_parser("start", help="Start listening")
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(dump_llm_env(cfg))
         return 0
     if args.cmd == "app":
-        from oma_voice.app import run as run_app
+        from agavai.app import run as run_app
 
         return run_app()
     if args.cmd == "model":
@@ -108,7 +108,7 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
         return 0
     if action == "set":
         if not name:
-            print("usage: oma-voice model set <id>", file=sys.stderr)
+            print("usage: agavai model set <id>", file=sys.stderr)
             return 2
         try:
             cfg = set_model_id(name)
@@ -117,7 +117,7 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
             return 1
         print(f"model_id={cfg.llm.model_id}")
         print(f"model_path={cfg.llm.model_path}")
-        print("restart the runner: systemctl --user restart oma-voice-llm")
+        print("restart the runner: systemctl --user restart agavai-llm")
         return 0
     spec = cfg.llm.active_spec()
     print(f"model_id={cfg.llm.model_id}")

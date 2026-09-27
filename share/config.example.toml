@@ -1,16 +1,16 @@
-# ~/.config/oma-voice/config.toml
+# ~/.config/agavai/config.toml
 #
 # The on-device brain is selected here, not in the systemd unit.
-#   oma-voice model list
-#   oma-voice model set <id>
-#   systemctl --user restart oma-voice-llm
+#   agavai model list
+#   agavai model set <id>
+#   systemctl --user restart agavai-llm
 
 [llm]
 # Catalog id. Builtin default is qwen3-4b-instruct (~2.5 GB Q4_K_M).
 model = "qwen3-4b-instruct"
 host = "127.0.0.1"
 port = 18766
-alias = "oma-voice"
+alias = "agavai"
 # llama_bin = "~/.lmstudio/extensions/backends/llama.cpp-linux-x86_64-vulkan-avx2-2.31.2/llama-server"
 # Escape hatch: ignore the id's path and load this GGUF instead.
 # model_path = "/path/to/other.gguf"
@@ -20,15 +20,15 @@ max_tool_rounds = 6
 timeout_secs = 120
 
 [llm.models.qwen3-4b-instruct]
-path = "~/.local/share/oma-voice/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
 description = "Default 4B Instruct. Tool-capable, non-thinking, ~2.5 GB."
 ctx_size = 8192
 # 0 = CPU/RAM. Leave Vulkan for Voxtype Whisper + the 1.5B sanitizer.
 n_gpu_layers = 0
 
-# Example extra local GGUF (uncomment and `oma-voice model set my-3b`):
+# Example extra local GGUF (uncomment and `agavai model set my-3b`):
 # [llm.models.my-3b]
-# path = "~/.local/share/oma-voice/models/My-3B-Instruct-Q4_K_M.gguf"
+# path = "~/.local/share/agavai/models/My-3B-Instruct-Q4_K_M.gguf"
 # description = "Smaller experimental tool model"
 # ctx_size = 4096
 # n_gpu_layers = 0
@@ -46,4 +46,4 @@ max_results = 20
 prefer = "espeak"
 
 [a2a]
-card_dir = "~/.config/oma-voice/a2a"
+card_dir = "~/.config/agavai/a2a"

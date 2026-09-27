@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from behave import given, then, when
 
-from oma_voice.config import Config
-from oma_voice.ui import ChatUi
+from agavai.config import Config
+from agavai.ui import ChatUi
 
 
 @given("a chat UI in a temp runtime dir")
@@ -17,7 +17,7 @@ def step_ui(context):
     cfg = Config()
     cfg.runtime_dir = tmp
     context.runtime_dir = tmp
-    context.summon = patch("oma_voice.ui.summon_overlay")
+    context.summon = patch("agavai.ui.summon_overlay")
     context.summon.start()
     context.add_cleanup(context.summon.stop)
     context.ui = ChatUi(cfg)

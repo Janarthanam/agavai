@@ -2,7 +2,7 @@ Feature: Configurable on-device model
   The GGUF is selected from config, not hardcoded in systemd.
 
   Scenario: Builtin default is qwen3-4b-instruct
-    Given an empty oma-voice config
+    Given an empty agavai config
     When I load the config
     Then the model id should be "qwen3-4b-instruct"
     And the model path should end with "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
@@ -21,9 +21,9 @@ Feature: Configurable on-device model
     Then the model path should end with "override.gguf"
     And the model path should be marked overridden
 
-  Scenario: OMA_VOICE_MODEL overrides the path
+  Scenario: AGAVAI_MODEL overrides the path
     Given a config with model "qwen3-4b-instruct"
-    And environment OMA_VOICE_MODEL points at "env.gguf"
+    And environment AGAVAI_MODEL points at "env.gguf"
     When I load the config
     Then the model path should end with "env.gguf"
 

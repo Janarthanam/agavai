@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from behave import then, when
 
-from oma_voice.mcp_server import handle
+from agavai.mcp_server import handle
 
 
 @when("I send MCP initialize")

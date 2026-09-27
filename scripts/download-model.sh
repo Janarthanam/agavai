@@ -7,7 +7,7 @@ ID="${1:-}"
 
 readarray -t META < <(python3 - "$ID" <<'PY'
 import sys
-from oma_voice.config import load_config
+from agavai.config import load_config
 cfg = load_config()
 mid = sys.argv[1] or cfg.llm.model_id
 spec = cfg.llm.models.get(mid)

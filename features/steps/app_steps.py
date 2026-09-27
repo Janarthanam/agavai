@@ -7,7 +7,7 @@ from pathlib import Path
 from behave import then, when
 
 ROOT = Path(__file__).resolve().parents[2]
-DESKTOP = ROOT / "share" / "oma-voice.desktop"
+DESKTOP = ROOT / "share" / "agavai.desktop"
 
 
 @then("the desktop file should exist")
