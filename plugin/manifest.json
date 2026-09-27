@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "janar.oma-voice",
+  "name": "Agavai",
+  "version": "0.1.0",
+  "author": "janar",
+  "description": "Top-of-screen chat for the local voice assistant, including live tool calls.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Chat.qml"
+  }
+}

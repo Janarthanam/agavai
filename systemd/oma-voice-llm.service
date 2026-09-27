@@ -1,0 +1,16 @@
+[Unit]
+Description=Oma voice on-device llama-server (model from ~/.config/oma-voice/config.toml)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/oma-voice-llm
+Restart=on-failure
+RestartSec=3
+# Keep this process out of the voxtype cgroup. A leftover llama-server there
+# hangs systemctl --user restart voxtype.
+Environment=GGML_VK_VISIBLE_DEVICES=
+
+[Install]
+WantedBy=graphical-session.target

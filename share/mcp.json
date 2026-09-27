@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "oma-voice": {
+      "command": "oma-voice",
+      "args": ["mcp"]
+    }
+  }
+}

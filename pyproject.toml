@@ -1,0 +1,20 @@
+[project]
+name = "oma-voice"
+version = "0.1.0"
+description = "Local voice assistant for Omarchy: Voxtype + llama-server + MCP tools"
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+[project.scripts]
+oma-voice = "oma_voice.__main__:main"
+
+[project.optional-dependencies]
+dev = ["behave>=1.2.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

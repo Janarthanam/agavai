@@ -1,0 +1,13 @@
+{
+  "name": "oma-voice",
+  "description": "Local Omarchy voice assistant. Voxtype ears, Qwen3-4B brain, MCP desktop tools.",
+  "url": "stdio://oma-voice",
+  "version": "0.1.0",
+  "capabilities": { "streaming": false },
+  "skills": [
+    { "id": "desktop", "name": "Omarchy desktop", "description": "Launch apps, themes, workspaces, reminders." },
+    { "id": "files", "name": "Local files", "description": "Search allowed home roots with fd." },
+    { "id": "screen", "name": "Screen context", "description": "Focused window title plus OCR." },
+    { "id": "media", "name": "Web media", "description": "Open https URLs including YouTube." }
+  ]
+}

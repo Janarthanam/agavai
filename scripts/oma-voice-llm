@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Start llama-server for oma-voice. Model, host, port, and GPU layers come from
+# ~/.config/oma-voice/config.toml (see `oma-voice model` / `oma-voice dump-llm`).
+# Does not replace voxtype-sanitize on :18765.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+eval "$(python3 -m oma_voice dump-llm)"
+LOG_DIR="${XDG_RUNTIME_DIR:-/tmp}/oma-voice"
+mkdir -p "$LOG_DIR"
+
+if [[ ! -x "$BIN" ]]; then
+  echo "missing llama-server: $BIN" >&2
+  echo "Set [llm] llama_bin in ~/.config/oma-voice/config.toml" >&2
+  exit 1
+fi
+if [[ ! -f "$MODEL" ]]; then
+  echo "missing model: $MODEL" >&2
+  echo "Active id: ${MODEL_ID:-unknown}. Download with: $ROOT/scripts/download-model.sh ${MODEL_ID:-}" >&2
+  exit 1
+fi
+
+cd "$(dirname "$BIN")"
+exec "$BIN" \
+  --model "$MODEL" \
+  --host "$HOST" \
+  --port "$PORT" \
+  --jinja \
+  --alias "$ALIAS" \
+  --ctx-size "$CTX" \
+  --parallel 1 \
+  --n-gpu-layers "$NGL"
