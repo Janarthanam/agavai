@@ -11,3 +11,14 @@ Feature: Talk-back with Kokoro-82M
     Given a config that prefers kokoro with no assets
     When I speak "hello from agavai"
     Then the speak engine should not be "kokoro"
+
+  Scenario: Listen plays an instant earcon and starts TTS warmup
+    Given a kokoro-ready temp config
+    When I cue listen
+    Then an earcon should be played
+    And the TTS server should be started
+
+  Scenario: Think plays an instant earcon
+    Given a kokoro-ready temp config
+    When I cue think
+    Then an earcon should be played

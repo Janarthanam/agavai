@@ -51,3 +51,40 @@ venv = "~/.local/share/agavai/tts-venv"
 
 [a2a]
 card_dir = "~/.config/agavai/a2a"
+
+[router]
+# jev | keyword | local  (local uses the same contract; plug in a small model later)
+backend = "jev"
+fallback = "keyword"
+timeout_secs = 2
+max_tools = 8
+
+[router.jev]
+base_url = "https://openrouter.ai/api/alpha/decisions"
+model = "typesafe/jev-1.13"
+api_key_env = "OPENROUTER_API_KEY"
+
+[vad]
+# Hands-free listening: meter the mic and auto-send after a pause.
+# backend = "energy" (default, dependency-free dBFS gate) | "silero"
+# (opt-in Silero VAD v5 ONNX; needs scripts/download-vad.sh + a venv with
+# onnxruntime — the TTS venv qualifies. Missing either → energy.)
+enabled = true
+backend = "energy"
+open_threshold_dbfs = -35.0
+close_threshold_dbfs = -42.0
+noise_margin_db = 12.0
+silence_ms = 900
+min_speech_ms = 250
+max_record_ms = 15000
+start_timeout_ms = 5000
+lead_in_ignore_ms = 300
+rate = 16000
+frame_ms = 20
+
+# Silero-only keys (read when backend = "silero"):
+model_path = "~/.local/share/agavai/vad/silero_vad-v5.1.2.onnx"
+threshold = 0.5
+response_timeout_ms = 250
+device = "cpu"
+venv = "~/.local/share/agavai/tts-venv"

@@ -16,6 +16,14 @@ Feature: Local tool loop
     Then the spoken reply should be "Opened the browser."
     And the tool "launch" should have been called once
 
+  Scenario: A head the router skipped is attached when the model asks for it
+    Given the router selects no heads
+    And llama-server calls "wallpaper_next" then "wallpaper_next" then replies "Next wallpaper."
+    When I run a turn with text "next wallpaper"
+    Then the spoken reply should be "Next wallpaper."
+    And the tool "wallpaper_next" should have been called once
+    And the model should have been offered "wallpaper_next" only after the retry
+
   Scenario: Think tags are stripped from model text
     Then stripping think tags from "hello" yields "hello"
     And stripping think tags from "pre<think>secret</think>post" yields "prepost"

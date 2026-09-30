@@ -8,3 +8,4 @@ dist/
 build/
 *.gguf
 models/
+secrets.toml

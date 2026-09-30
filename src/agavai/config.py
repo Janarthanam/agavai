@@ -113,6 +113,40 @@ class TtsConfig:
 
 
 @dataclass
+class RouterConfig:
+    backend: str = "jev"
+    fallback: str = "keyword"
+    timeout_secs: int = 2
+    max_tools: int = 8
+    jev_base_url: str = "https://openrouter.ai/api/alpha/decisions"
+    jev_model: str = "typesafe/jev-1.13"
+    api_key_env: str = "OPENROUTER_API_KEY"
+
+
+@dataclass
+class VadConfig:
+    enabled: bool = True
+    backend: str = "energy"
+    rate: int = 16000
+    frame_ms: int = 20
+    open_threshold_dbfs: float = -35.0
+    close_threshold_dbfs: float = -42.0
+    noise_margin_db: float = 12.0
+    silence_ms: int = 900
+    min_speech_ms: int = 250
+    max_record_ms: int = 15000
+    start_timeout_ms: int = 5000
+    lead_in_ignore_ms: int = 300
+    model_path: Path = field(
+        default_factory=lambda: xdg_data() / "agavai/vad/silero_vad-v5.1.2.onnx"
+    )
+    threshold: float = 0.5
+    response_timeout_ms: int = 250
+    device: str = "cpu"
+    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/tts-venv")
+
+
+@dataclass
 class FilesConfig:
     roots: list[Path] = field(
         default_factory=lambda: [
@@ -130,10 +164,13 @@ class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
     files: FilesConfig = field(default_factory=FilesConfig)
     tts: TtsConfig = field(default_factory=TtsConfig)
+    router: RouterConfig = field(default_factory=RouterConfig)
+    vad: VadConfig = field(default_factory=VadConfig)
 
     @property
     def tts_prefer(self) -> str:
         return self.tts.prefer
+
     runtime_dir: Path = field(default_factory=lambda: xdg_runtime() / "agavai")
     config_dir: Path = field(default_factory=lambda: xdg_config() / "agavai")
     config_path: Path = field(default_factory=lambda: xdg_config() / "agavai" / "config.toml")
@@ -264,6 +301,57 @@ def load_config(path: Path | None = None) -> Config:
     a2a = data.get("a2a") or {}
     if "card_dir" in a2a:
         cfg.a2a_dir = _expand(str(a2a["card_dir"]))
+    router = data.get("router") or {}
+    if "backend" in router:
+        cfg.router.backend = str(router["backend"])
+    if "fallback" in router:
+        cfg.router.fallback = str(router["fallback"])
+    if "timeout_secs" in router:
+        cfg.router.timeout_secs = int(router["timeout_secs"])
+    if "max_tools" in router:
+        cfg.router.max_tools = int(router["max_tools"])
+    jev = router.get("jev") or {}
+    if "base_url" in jev:
+        cfg.router.jev_base_url = str(jev["base_url"])
+    if "model" in jev:
+        cfg.router.jev_model = str(jev["model"])
+    if "api_key_env" in jev:
+        cfg.router.api_key_env = str(jev["api_key_env"])
+    vad = data.get("vad") or {}
+    if "enabled" in vad:
+        cfg.vad.enabled = bool(vad["enabled"])
+    if "backend" in vad:
+        cfg.vad.backend = str(vad["backend"])
+    if "rate" in vad:
+        cfg.vad.rate = int(vad["rate"])
+    if "frame_ms" in vad:
+        cfg.vad.frame_ms = int(vad["frame_ms"])
+    if "open_threshold_dbfs" in vad:
+        cfg.vad.open_threshold_dbfs = float(vad["open_threshold_dbfs"])
+    if "close_threshold_dbfs" in vad:
+        cfg.vad.close_threshold_dbfs = float(vad["close_threshold_dbfs"])
+    if "noise_margin_db" in vad:
+        cfg.vad.noise_margin_db = float(vad["noise_margin_db"])
+    if "silence_ms" in vad:
+        cfg.vad.silence_ms = int(vad["silence_ms"])
+    if "min_speech_ms" in vad:
+        cfg.vad.min_speech_ms = int(vad["min_speech_ms"])
+    if "max_record_ms" in vad:
+        cfg.vad.max_record_ms = int(vad["max_record_ms"])
+    if "start_timeout_ms" in vad:
+        cfg.vad.start_timeout_ms = int(vad["start_timeout_ms"])
+    if "lead_in_ignore_ms" in vad:
+        cfg.vad.lead_in_ignore_ms = int(vad["lead_in_ignore_ms"])
+    if "model_path" in vad:
+        cfg.vad.model_path = _expand(str(vad["model_path"]))
+    if "threshold" in vad:
+        cfg.vad.threshold = float(vad["threshold"])
+    if "response_timeout_ms" in vad:
+        cfg.vad.response_timeout_ms = int(vad["response_timeout_ms"])
+    if "device" in vad:
+        cfg.vad.device = str(vad["device"])
+    if "venv" in vad:
+        cfg.vad.venv = _expand(str(vad["venv"]))
     return cfg
 
 

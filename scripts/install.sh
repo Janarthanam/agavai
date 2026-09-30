@@ -37,10 +37,21 @@ systemctl --user restart agavai-llm.service >/dev/null || true
 
 PLUGIN_DST="$HOME/.config/omarchy/plugins/janar.agavai"
 mkdir -p "$PLUGIN_DST"
-cp -f "$ROOT/plugin/manifest.json" "$ROOT/plugin/Chat.qml" "$PLUGIN_DST/"
+cp -f "$ROOT/plugin/manifest.json" "$ROOT/plugin/Chat.qml" \
+  "$ROOT/plugin/NativeButton.qml" "$ROOT/plugin/ResultBrowser.qml" \
+  "$ROOT/plugin/BarWidget.qml" "$ROOT/plugin/agavai.png" "$PLUGIN_DST/"
 omarchy plugin validate "$PLUGIN_DST"
 omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 omarchy plugin enable janar.agavai >/dev/null 2>&1 || true
+omarchy bar put janar.agavai --section right --after janar.microphone >/dev/null 2>&1 \
+  || omarchy bar put janar.agavai --section right >/dev/null 2>&1 || true
+
+HICOLOR="$HOME/.local/share/icons/hicolor"
+for s in 16 22 24 32 48 64 128 256; do
+  mkdir -p "$HICOLOR/${s}x${s}/apps"
+  install -m 644 "$ROOT/share/icons/agavai-${s}.png" "$HICOLOR/${s}x${s}/apps/agavai.png"
+done
+gtk-update-icon-cache -f "$HICOLOR" >/dev/null 2>&1 || true
 
 APPS="$HOME/.local/share/applications"
 mkdir -p "$APPS"
@@ -50,7 +61,7 @@ update-desktop-database "$APPS" >/dev/null 2>&1 || true
 
 echo "Installed agavai and agavai-llm to $BIN"
 echo "App launcher: Agavai  (agavai app)"
-echo "Chat overlay plugin: janar.agavai (top of screen; live tool calls)"
+echo "Chat overlay plugin: janar.agavai (bottom-centered voice orb; live tool calls)"
 echo "Active model: agavai model   (list/set in ~/.config/agavai/config.toml)"
 echo "Download LLM: $ROOT/scripts/download-model.sh [model-id]"
 echo "Download Kokoro TTS (CPU): $ROOT/scripts/download-tts.sh"

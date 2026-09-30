@@ -142,6 +142,107 @@ def set_theme(args: dict[str, Any], _cfg: Config) -> str:
     return f"theme set to {match}"
 
 
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+
+def _wallpaper_roots() -> list[Path]:
+    roots: list[Path] = []
+    current_theme = Path.home() / ".local/state/omarchy/current/theme/backgrounds"
+    roots.append(current_theme)
+    theme_name = ""
+    name_file = Path.home() / ".local/state/omarchy/current/theme.name"
+    if name_file.is_file():
+        theme_name = name_file.read_text(encoding="utf-8").strip()
+    if theme_name:
+        roots.append(Path.home() / ".config/omarchy/backgrounds" / theme_name)
+    roots.append(Path.home() / "Pictures")
+    roots.append(Path.home() / "Downloads")
+    return roots
+
+
+def _list_wallpaper_files() -> list[Path]:
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for root in _wallpaper_roots():
+        if not root.is_dir():
+            continue
+        try:
+            entries = sorted(root.iterdir())
+        except OSError:
+            continue
+        for path in entries:
+            if not path.is_file() or path.suffix.lower() not in _IMAGE_EXTS:
+                continue
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            found.append(path)
+    return found
+
+
+def wallpaper_current(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "theme", "bg", "current"])
+    link = Path.home() / ".local/state/omarchy/current/background"
+    target = ""
+    if link.exists():
+        try:
+            target = str(link.resolve())
+        except OSError:
+            target = str(link)
+    return json.dumps({"name": proc.stdout.strip(), "path": target})
+
+
+def wallpaper_list(_args: dict[str, Any], _cfg: Config) -> str:
+    rows = []
+    for path in _list_wallpaper_files()[:40]:
+        rows.append({"name": path.stem.replace("-", " ").replace("_", " "), "path": str(path)})
+    return json.dumps(rows)
+
+
+def wallpaper_set(args: dict[str, Any], _cfg: Config) -> str:
+    raw = str(args.get("name") or args.get("path") or "").strip()
+    if not raw:
+        return "need wallpaper name or path"
+    if ".." in raw:
+        return "invalid wallpaper path"
+    files = _list_wallpaper_files()
+    needle = raw.lower()
+    match = None
+    for path in files:
+        hay = f"{path.name} {path.stem} {path.stem.replace('-', ' ')}".lower()
+        if needle in hay or needle in str(path).lower():
+            match = path
+            break
+    if match is None and Path(raw).expanduser().is_file():
+        candidate = Path(raw).expanduser().resolve()
+        allowed = [p.resolve() for p in _wallpaper_roots() if p.exists()]
+        if any(candidate == r or r in candidate.parents for r in allowed) and candidate.suffix.lower() in _IMAGE_EXTS:
+            match = candidate
+    if match is None:
+        names = [p.stem.replace("-", " ") for p in files[:12]]
+        return f"unknown wallpaper {raw!r}. try: {', '.join(names)}"
+    proc = _run(["omarchy", "theme", "bg", "set", str(match.resolve())], timeout=20)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "wallpaper set failed")[:500]
+    return f"wallpaper set to {match.stem.replace('-', ' ')}"
+
+
+def wallpaper_next(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "theme", "bg", "next"], timeout=20)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "wallpaper next failed")[:500]
+    current = _run(["omarchy", "theme", "bg", "current"])
+    return current.stdout.strip() or _ok(proc.stdout) or "next wallpaper"
+
+
+def wallpaper_picker(_args: dict[str, Any], _cfg: Config) -> str:
+    proc = _run(["omarchy", "theme", "bg-switcher"], timeout=20)
+    if proc.returncode != 0:
+        return (proc.stderr or proc.stdout or "wallpaper picker failed")[:500]
+    return "opened wallpaper picker"
+
+
 def toggle_nightlight(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "toggle", "nightlight"])
     if proc.returncode != 0:
@@ -600,6 +701,52 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "wallpaper_current",
+            "description": "Show the current desktop wallpaper name and path.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wallpaper_list",
+            "description": "List available wallpaper images (theme backgrounds and Pictures).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wallpaper_set",
+            "description": "Set the desktop wallpaper by name or filename (e.g. Ship At Sea).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "path": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wallpaper_next",
+            "description": "Cycle to the next wallpaper for the current theme.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wallpaper_picker",
+            "description": "Open the Omarchy wallpaper switcher UI.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "toggle_nightlight",
             "description": "Toggle night light / blue light filter.",
             "parameters": {"type": "object", "properties": {}},
@@ -866,6 +1013,11 @@ DISPATCH: dict[str, ToolFn] = {
     "launch": launch,
     "list_themes": list_themes,
     "set_theme": set_theme,
+    "wallpaper_current": wallpaper_current,
+    "wallpaper_list": wallpaper_list,
+    "wallpaper_set": wallpaper_set,
+    "wallpaper_next": wallpaper_next,
+    "wallpaper_picker": wallpaper_picker,
     "toggle_nightlight": toggle_nightlight,
     "reminder": reminder,
     "search_files": search_files,

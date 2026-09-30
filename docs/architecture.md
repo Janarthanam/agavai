@@ -117,7 +117,7 @@ Requirements for a swap-in model:
 - Stay in **2–4 GB** Q4_K_M for this machine (RX 590 8 GB VRAM). Leave Vulkan for Voxtype Whisper; default `n_gpu_layers = 0` runs the assistant on RAM.
 - Must emit OpenAI-style `tool_calls` or Qwen `<tool_call>` JSON. Heavily quantized (Q2 and below) usually breaks tool calling.
 
-v1 does not call Grok, OpenRouter, or neuralwings. A future “think hard” id can point at a larger local GGUF; it is still selected the same way.
+The on-device GGUF never changes because of the router (below). A future “think hard” id can point at a larger local GGUF; it is still selected the same way.
 
 Download the default id:
 
@@ -166,11 +166,43 @@ prefer = "espeak"   # piper | espeak | notify
 
 1. System prompt: local Omarchy assistant, tools only, short spoken answers, no remote agents.
 2. User text (transcript or `ask`).
-3. Up to `max_tool_rounds` (default 6):
-   - POST llama-server `/v1/chat/completions` with OpenAI `tools`.
+3. **Router**: a small decision model picks tool **heads** for the utterance, and Qwen is given only those heads’ schemas (default Jev; keyword fallback offline). See below.
+4. Up to `max_tool_rounds` (default 6):
+   - POST llama-server `/v1/chat/completions` with OpenAI `tools` (the selected heads).
    - Parse `tool_calls`, or Qwen `<tool_call>{...}</tool_call>` if the template leaks.
    - Dispatch only names in the allowlist. Unknown names return an error string to the model.
-4. Final assistant content → TTS / notification. `<think>` blocks are stripped if a thinking model slips in.
+5. Final assistant content → TTS / notification. ` thinking` blocks are stripped if a thinking model slips in.
+
+### Router (head selection)
+
+All ~30 schemas (~1.7k tokens) do not fit a 4B’s useful budget, so a small decision model picks the relevant pack(s) before each turn and Qwen sees only those (6–8 tools). Jev is **not** the voice model.
+
+```
+utterance → ToolRouter.select() → pack id(s) → pack schemas → Qwen tool loop
+```
+
+| Backend | What it is |
+|---|---|
+| `jev` (default) | TypeSafe **Jev 1.13** (`typesafe/jev-1.13`) on the OpenRouter **Decisions API**. One typed `choice` question (“which pack?”); `chat` means no tools. ~70–500 ms, no prose. |
+| `keyword` | Token-overlap fallback. Used automatically if the key is missing, the request times out, or HTTP fails. |
+| `local` | Stub with the same `select()` contract, for a future on-device decision model. |
+
+Jev answers the pack question directly; the pack choice is the signal (`chat` → no tools). Packs stay the unit so a future local model answers the same question. The key lives in `OPENROUTER_API_KEY` (or gitignored `~/.config/agavai/secrets.toml`), never in git.
+
+If Qwen emits a tool from a pack that was not injected, the orchestrator attaches that pack and calls Qwen once more. Tool results are clipped (~500 chars) before re-entering the context.
+
+```toml
+[router]
+backend = "jev"      # jev | keyword | local
+fallback = "keyword" # used when the key is missing or the call fails
+timeout_secs = 2
+max_tools = 8
+
+[router.jev]
+base_url = "https://openrouter.ai/api/alpha/decisions"
+model = "typesafe/jev-1.13"
+api_key_env = "OPENROUTER_API_KEY"
+```
 
 Allowlist (no generic shell):
 
@@ -198,15 +230,15 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 ## Voice I/O
 
-**In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **top chat overlay** (`janar.agavai`). Second press stops recording, remutes if we unmuted, and streams the turn into that overlay.
+**In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **bottom voice overlay** (`janar.agavai`), then starts a blocking VAD session: a parallel `parec` capture meters the mic (live `level_db`/`vad_state` in `ui.json`) and after **900 ms of silence** (`[vad] silence_ms`) the turn runs automatically — no second press. Second press force-stops and runs the turn now; during `transcribing`/`thinking` a press within 2 s of the phase change is a no-op (grace window). Meter failure falls back to the old manual mode (`vad_state: "manual"`); `[vad] enabled = false` restores push-to-toggle. Opt-in `backend = "silero"` replaces the energy gate with the pinned Silero VAD v5.1.2 model (`scripts/download-vad.sh`; missing model/runtime → energy).
 
-**Chat overlay:** a keep-loaded Omarchy overlay at the top of the screen. The orchestrator writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay auto-hides ~12s after idle.
+**Chat overlay:** a keep-loaded Omarchy overlay. Listening is a borderless orb at the bottom center of the active monitor; results grow upward on that same surface. The orchestrator writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay stays until dismissed or replaced.
 
 **Desktop app:** `agavai app` / launcher entry **Agavai**. GTK4 + libadwaita window that reads the same `ui.json`, with Listen, Send, Cancel, and a typed Ask box. Prefer this if the overlay does not appear. `~/.local/share/applications/agavai.desktop`.
 
 Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 
-**Out:** notification always. Then **Kokoro-82M on CPU** (`kokoro-onnx` + onnxruntime CPU EP in `~/.local/share/agavai/tts-venv`, weights in `~/.local/share/agavai/tts/`). eSpeak-ng is G2P for Kokoro and a robotic fallback. Whisper is never used for speech.
+**Out:** Instant Siri-style earcon on listen, then a second cue while the LLM thinks. A background Kokoro process is started at listen/ask so the model is already loaded when the reply is ready. Final speech is Kokoro-82M on CPU (`kokoro-onnx` + onnxruntime CPU EP). eSpeak-ng is G2P and a robotic fallback. Whisper is never used for speech.
 
 ---
 
@@ -246,7 +278,7 @@ agavai status
 agavai ask "what is the current theme?"
 ```
 
-Voice: Super+Ctrl+M, speak, Super+Ctrl+M again.
+Voice: Super+Ctrl+M, speak, pause — Agavai sends after 900 ms of silence.
 
 Fresh machine:
 

@@ -4,12 +4,21 @@
   "name": "Agavai",
   "version": "0.1.0",
   "author": "janar",
-  "description": "Top-of-screen chat for the local voice assistant, including live tool calls.",
+  "description": "Voice assistant overlay, bar icon, and live tool-call chat.",
   "kinds": [
-    "overlay"
+    "overlay",
+    "bar-widget"
   ],
   "keepLoaded": true,
   "entryPoints": {
-    "overlay": "Chat.qml"
+    "overlay": "Chat.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agavai",
+    "description": "Click to speak; pauses send automatically; right-click cancels",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "right"
   }
 }

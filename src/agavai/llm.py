@@ -6,7 +6,6 @@ import urllib.request
 from typing import Any
 
 from agavai.config import LlmConfig
-from agavai.tools import OPENAPI_TOOLS
 
 
 class LlmError(RuntimeError):
@@ -28,7 +27,7 @@ def chat(
     cfg: LlmConfig,
     messages: list[dict[str, Any]],
     *,
-    tools: list[dict[str, Any]] | None = None,
+    tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": cfg.alias,
@@ -37,8 +36,7 @@ def chat(
         "max_tokens": cfg.max_tokens,
         "stream": False,
     }
-    if tools is None:
-        tools = OPENAPI_TOOLS
+    # The caller routes the tools (see agavai.router).
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"

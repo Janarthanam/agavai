@@ -8,6 +8,7 @@ from behave import then, when
 
 ROOT = Path(__file__).resolve().parents[2]
 DESKTOP = ROOT / "share" / "agavai.desktop"
+PLUGIN = ROOT / "plugin"
 
 
 @then("the desktop file should exist")
@@ -39,3 +40,16 @@ def step_run(context, command):
 @then('the command output should contain "{text}"')
 def step_out(context, text):
     assert text in context.cmd_out, context.cmd_out
+
+
+@then('the plugin manifest should declare kind "{kind}"')
+def step_kind(context, kind):
+    import json
+
+    data = json.loads((PLUGIN / "manifest.json").read_text())
+    assert kind in data.get("kinds", []), data
+
+
+@then('the plugin folder should contain "{name}"')
+def step_plugin_file(context, name):
+    assert (PLUGIN / name).is_file(), PLUGIN / name

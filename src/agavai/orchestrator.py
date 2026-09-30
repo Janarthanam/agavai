@@ -5,16 +5,21 @@ from typing import Any
 
 from agavai.config import Config
 from agavai.llm import LlmError, chat, health, parse_tool_calls
-from agavai.tools import call_tool
+from agavai.heads import head_for_tool, schemas_for_heads
+from agavai.router import select_head_ids
+from agavai.tools import DISPATCH, call_tool
 from agavai.ui import ChatUi
 
-SYSTEM = """You are a local Omarchy Linux voice assistant running on this machine.
-You can only act through the provided tools. Never invent that you launched an app, changed a theme, or clicked something unless a tool result says so.
-Keep the final answer short and speakable (one or two sentences). No markdown, no code fences.
+SYSTEM = """You are Agavai, a local Omarchy Linux voice assistant.
+Your final message is spoken aloud automatically. Always answer in one or two short spoken sentences. No markdown, no code fences, no lists.
+Never say you cannot speak, talk, generate voice, or say a word. If asked to say something, say it.
+Desktop actions exist only through the tools you were given this turn. Never claim you launched an app, changed a setting, or clicked something unless a tool result says so.
 Do not call remote models or coding agents. Do not ask for a shell.
-If the user wants something you cannot do with these tools, say so plainly.
+If a needed desktop action is not among the tools you were given, say you cannot do that action — still in a spoken sentence.
 Current local time: {now}
 """
+
+_RESULT_LIMIT = 500
 
 
 def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
@@ -31,6 +36,9 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
         if ui:
             ui.error(msg)
         return msg
+    head_ids = select_head_ids(text, cfg)
+    selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools)
+    selected_names = {item["function"]["name"] for item in selected}
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
@@ -38,9 +46,12 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
         },
         {"role": "user", "content": text},
     ]
+    retried = False
     try:
         for _ in range(cfg.llm.max_tool_rounds):
-            message = chat(cfg.llm, messages)
+            if ui and ui.cancelled():
+                return ""
+            message = chat(cfg.llm, messages, tools=selected)
             calls = parse_tool_calls(message)
             content = (message.get("content") or "").strip()
             if not calls:
@@ -48,6 +59,19 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
                 if ui:
                     ui.assistant(reply)
                 return reply
+            extra_heads: list[str] = []
+            for call in calls:
+                name = (call.get("function") or {}).get("name") or ""
+                if name in DISPATCH and name not in selected_names:
+                    head = head_for_tool(name)
+                    if head and head not in head_ids:
+                        extra_heads.append(head)
+            if extra_heads and not retried:
+                retried = True
+                head_ids.extend(extra_heads)
+                selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools)
+                selected_names = {item["function"]["name"] for item in selected}
+                continue
             messages.append(
                 {
                     "role": "assistant",
@@ -57,6 +81,8 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
             )
             for call in calls:
                 fn = call.get("function") or {}
+                if ui and ui.cancelled():
+                    return ""
                 name = fn.get("name") or ""
                 raw_args = fn.get("arguments") or "{}"
                 if ui:
@@ -64,6 +90,8 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
                 result = call_tool(name, raw_args, cfg)
                 if ui:
                     ui.tool_done(name, result)
+                if len(result) > _RESULT_LIMIT:
+                    result = result[: _RESULT_LIMIT - 1] + "…"
                 messages.append(
                     {
                         "role": "tool",

@@ -6,13 +6,15 @@ Local Siri-style loop for Omarchy. **v1 talks to no remote model.**
 
 Architecture, process split, tool loop, and **how the on-device GGUF is selected**: [`docs/architecture.md`](docs/architecture.md).
 
+One native overlay provides a bottom-centered voice orb and result browser: the orb follows the microphone level, and the same surface shows the current request, formatted answers, selectable file/folder rows, image previews, and video controls. Results stay open until dismissed. Use arrows to browse and Enter or Open to open a supported item. The [UI design](docs/ui-design.md) and [interactive prototype](docs/ui-prototype/index.html) document the interaction. Live word-by-word transcription awaits a streaming recognizer; Voxtype currently supplies the final words after recording stops.
+
 ```
 hotkey → Voxtype (--file) → on-device GGUF on llama-server :18766 → allowlisted tools → speak
 ```
 
-F9 dictation stays Voxtype. Super+Ctrl+M is push-to-toggle listen.
+F9 dictation stays Voxtype. **Super+M** invokes Agavai: speak, then pause — the command sends after 900 ms of silence. No second shortcut press is needed. Super+Ctrl+M remains an invocation alias. Optional `backend = "silero"` handles noisier rooms. `agavai invoke`, the launcher, and the bar always use automatic listening; `agavai start` still respects the legacy `[vad] enabled` setting.
 
-Open **Agavai** from the app launcher (or `agavai app`) for a window that shows the transcript and every tool call. Use Listen / Send / Ask there if the overlay is not responding.
+Open **Agavai** from the app launcher (or `agavai app` / `agavai invoke`). The launcher, shortcut, and bar share **one overlay**, which starts listening automatically. Left-click the bar icon to speak; right-click cancels. Escape or × dismisses the overlay. “Type instead” provides a text entry on the same surface. Reinvoking while a request is active raises the widget without submitting or restarting the command.
 
 Default brain: **Qwen3-4B-Instruct-2507 Q4_K_M (~2.5 GB)**. Switch it without editing the systemd unit:
 
@@ -49,7 +51,7 @@ If Kokoro is missing, Agavai falls back to eSpeak then a notification.
 
 `agavai mcp` is a stdio MCP server. The voice loop calls the same functions in-process.
 
-Allowlisted: windows/workspaces, launch and open-app-by-name, themes, night light, volume/brightness/mic mute, battery, network, Bluetooth, lock, stay-awake, do-not-disturb, screenshot, reminders, notifications, clock, file search, https URLs, screen OCR, local agent list.
+Tools are grouped into heads. **Jev** (OpenRouter Decisions API, `typesafe/jev-1.13`) picks a head; Qwen3-4B only sees those schemas. Set `OPENROUTER_API_KEY`. If the key is missing, a keyword fallback still routes. Wallpaper: `omarchy theme bg set/next/current`.
 
 No generic shell. No Grok. Pixel click / YOLO is not in v1.
 

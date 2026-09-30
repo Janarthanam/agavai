@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 
 from agavai.config import Config
-from agavai.tts import speak
+from agavai.tts import cue_listen, cue_think, speak
 
 
 def _cfg(tmp: Path) -> Config:
@@ -47,10 +47,19 @@ def step_ready(context):
 
     which = patch("agavai.tts.shutil.which", return_value="/usr/bin/pw-play")
     run = patch("agavai.tts.subprocess.run", side_effect=fake_run)
+    popen = patch("agavai.tts.subprocess.Popen", return_value=MagicMock())
+    ping = patch("agavai.tts._tts_ping", return_value=False)
+    sleep = patch("agavai.tts.time.sleep")
     context.which = which.start()
     context.run = run.start()
+    context.popen = popen.start()
+    ping.start()
+    sleep.start()
     context.add_cleanup(which.stop)
     context.add_cleanup(run.stop)
+    context.add_cleanup(popen.stop)
+    context.add_cleanup(ping.stop)
+    context.add_cleanup(sleep.stop)
     context.wav_written = wav_written
 
 
@@ -76,6 +85,36 @@ def step_engine(context, name):
 @then('the speak engine should not be "{name}"')
 def step_not_engine(context, name):
     assert context.engine != name, context.engine
+
+
+@when("I cue listen")
+def step_cue_listen(context):
+    cue_listen(context.cfg)
+
+
+@when("I cue think")
+def step_cue_think(context):
+    cue_think(context.cfg)
+
+
+@then("an earcon should be played")
+def step_earcon(context):
+    played = False
+    for c in list(context.run.call_args_list) + list(context.popen.call_args_list):
+        argv = [str(x) for x in c.args[0]]
+        if any("pw-play" in p or p.endswith("paplay") for p in argv) and "--media-role" in argv:
+            played = True
+    assert played, context.popen.call_args_list
+
+
+@then("the TTS server should be started")
+def step_server(context):
+    found = False
+    for c in context.popen.call_args_list:
+        argv = [str(x) for x in c.args[0]]
+        if "--serve" in argv:
+            found = True
+    assert found, context.popen.call_args_list
 
 
 @then("the synth command should run the TTS venv python")

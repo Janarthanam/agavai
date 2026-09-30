@@ -43,3 +43,21 @@ Feature: Configurable on-device model
     When I dump llm env
     Then the llm env should contain "MODEL_ID=spaced"
     And the llm env should contain "my model.gguf"
+
+  Scenario: VAD defaults to the energy backend with a 900 ms silence window
+    Given an empty agavai config
+    When I load the config
+    Then vad should be enabled
+    And the vad backend should be "energy"
+    And the vad silence window should be 900 ms
+
+  Scenario: VAD keys are configurable
+    Given a config with vad backend "silero" and silence window 600 ms
+    When I load the config
+    Then the vad backend should be "silero"
+    And the vad silence window should be 600 ms
+
+  Scenario: Unknown vad keys are tolerated
+    Given a config with an unknown vad key
+    When I load the config
+    Then the vad backend should be "energy"
