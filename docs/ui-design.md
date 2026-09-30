@@ -8,6 +8,8 @@ The shortcut opens a compact listening presence at the bottom center of the acti
 
 Partial transcription occupies the primary line under the listening label, above the orb. Replace the current partial utterance as recognition revises it; append only finalized segments. Never turn each partial into a conversation turn. A pause submits the utterance; the same shortcut or Enter submits immediately. Escape cancels capture and pending work before dismissing the surface.
 
+When the spoken reply asks the user to choose — for example which screensaver image to set — that same session returns to listening. The images and the question stay on the surface. The orb draws a listening ring and settles while the room is quiet; speech is what moves it. The next utterance goes to the model with the earlier conversation, so the follow-up can name an image already on screen. Silence ends the follow-up and leaves the results up. A new invocation still starts a blank session.
+
 The surface transitions from Listening → Transcribing (when final recognition is pending) → Working → Results. During tool execution, show a human-readable activity such as “Searching files”, with the tool identifier available in details. Results expand the same surface instead of opening a second window. A brief spoken answer accompanies the richer screen content.
 
 Results persist until dismissed or replaced by a new request. “Keep open” pins the surface against future automatic dismissal; explicit Escape still closes it. Starting a new request resets selection, transcription, tool status, and previous previews. Error states keep the surface visible and offer a retry.

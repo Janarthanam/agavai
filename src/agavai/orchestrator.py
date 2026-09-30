@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -16,18 +17,107 @@ Never say you cannot speak, talk, generate voice, or say a word. If asked to say
 Desktop actions exist only through the tools you were given this turn. Never claim you launched an app, changed a setting, or clicked something unless a tool result says so.
 Do not call remote models or coding agents. Do not ask for a shell.
 If a needed desktop action is not among the tools you were given, say you cannot do that action — still in a spoken sentence.
+When the user asks to see wallpaper, background, or screensaver images, call wallpaper_list before you answer so the pictures appear. Then ask which image they want, in one short question.
+Later messages are the same person continuing. Use the earlier list and call wallpaper_set with the image they name. Do not ask them to pick an image that was not listed.
 Current local time: {now}
 """
+
+_FOLLOWUP = re.compile(r"\b(you want|which|tell me|let me know)\b", re.IGNORECASE)
 
 _RESULT_LIMIT = 500
 
 
-def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
+def wants_followup(reply: str) -> bool:
+    """True when the spoken line is waiting for the user's choice."""
+    text = " ".join(str(reply).split())
+    if text.endswith("?"):
+        return True
+    return len(text) >= 12 and _FOLLOWUP.search(text) is not None
+
+
+def _asking_for_images(text: str) -> bool:
+    blob = " " + re.sub(r"[^a-z0-9]+", " ", text.lower()) + " "
+    showing = any(token in blob for token in (" show ", " see ", " list ", " images ", " image ", " pictures ", " picture "))
+    subject = any(token in blob for token in (" screensaver ", " wallpaper ", " background ", " images ", " image ", " pictures ", " picture "))
+    return showing and subject
+
+
+def _merge_heads(new: list[str], prior: list[str]) -> list[str]:
+    merged: list[str] = []
+    for hid in [*new, *prior]:
+        if hid and hid not in merged:
+            merged.append(hid)
+    return merged[:2]
+
+
+def _asks_for_images(text: str) -> bool:
+    blob = f" {re.sub(r'[^a-z0-9]+', ' ', text.lower())} "
+    compact = blob.replace(" ", "")
+    viewing = any(f" {word} " in blob for word in ("show", "see", "list"))
+    subject = any(
+        f" {word} " in blob or word.replace(" ", "") in compact
+        for word in ("screensaver", "screen saver", "wallpaper", "background")
+    )
+    return viewing and subject
+
+
+def _already_listed(messages: list[dict[str, Any]]) -> bool:
+    for message in messages:
+        if message.get("tool_call_id") == "wallpaper_list":
+            return True
+        for call in message.get("tool_calls") or []:
+            if (call.get("function") or {}).get("name") == "wallpaper_list":
+                return True
+    return False
+
+
+def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]]) -> None:
+    """Show the gallery even when the model only asks which image to set."""
+    if not _asks_for_images(text) or _already_listed(messages):
+        return
+    if ui:
+        ui.tool_start("wallpaper_list", "{}")
+    result = call_tool("wallpaper_list", "{}", cfg)
+    if ui:
+        ui.tool_done("wallpaper_list", result)
+    if len(result) > _RESULT_LIMIT:
+        result = result[: _RESULT_LIMIT - 1] + "…"
+    messages.append(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "wallpaper_list",
+                    "type": "function",
+                    "function": {"name": "wallpaper_list", "arguments": "{}"},
+                }
+            ],
+        }
+    )
+    messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": result})
+
+
+def _remember(ui: ChatUi, messages: list[dict[str, Any]], heads: list[str]) -> None:
+    stored = [message for message in messages if message.get("role") != "system"][-24:]
+    while stored and stored[0].get("role") == "tool":
+        stored.pop(0)
+    ui.model_messages = stored
+    ui.model_heads = list(heads)
+
+
+def run_turn(
+    text: str,
+    cfg: Config,
+    ui: ChatUi | None = None,
+    *,
+    continue_conversation: bool = False,
+) -> str:
     text = text.strip()
     if not text:
         return "I did not hear anything."
     if ui:
-        ui.user(text)
+        ui.user(text, keep_display=continue_conversation)
     if not health(cfg.llm):
         msg = (
             "The local model is not running. Start it with: "
@@ -36,7 +126,9 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
         if ui:
             ui.error(msg)
         return msg
-    head_ids = select_head_ids(text, cfg)
+    prior_messages = list(ui.model_messages) if ui and continue_conversation else []
+    prior_heads = list(ui.model_heads) if ui and continue_conversation else []
+    head_ids = _merge_heads(select_head_ids(text, cfg), prior_heads)
     selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools)
     selected_names = {item["function"]["name"] for item in selected}
     messages: list[dict[str, Any]] = [
@@ -44,8 +136,30 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
             "role": "system",
             "content": SYSTEM.format(now=datetime.now().strftime("%A, %Y-%m-%d %H:%M")),
         },
+        *prior_messages,
         {"role": "user", "content": text},
     ]
+    if "wallpaper_list" in selected_names and _asking_for_images(text):
+        listed = call_tool("wallpaper_list", "{}", cfg)
+        if ui:
+            ui.tool_start("wallpaper_list", "{}")
+            ui.tool_done("wallpaper_list", listed)
+        if len(listed) > _RESULT_LIMIT:
+            listed = listed[: _RESULT_LIMIT - 1] + "…"
+        messages.append(
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "wallpaper_list",
+                        "type": "function",
+                        "function": {"name": "wallpaper_list", "arguments": "{}"},
+                    }
+                ],
+            }
+        )
+        messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": listed})
     retried = False
     try:
         for _ in range(cfg.llm.max_tool_rounds):
@@ -56,7 +170,10 @@ def run_turn(text: str, cfg: Config, ui: ChatUi | None = None) -> str:
             content = (message.get("content") or "").strip()
             if not calls:
                 reply = _strip_think(content) or "Done."
+                _list_images(text, cfg, ui, messages)
+                messages.append({"role": "assistant", "content": reply})
                 if ui:
+                    _remember(ui, messages, head_ids)
                     ui.assistant(reply)
                 return reply
             extra_heads: list[str] = []

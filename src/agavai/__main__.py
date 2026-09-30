@@ -14,7 +14,7 @@ from agavai.config import dump_llm_env, load_config, set_model_id
 from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
-from agavai.orchestrator import run_turn
+from agavai.orchestrator import run_turn, wants_followup
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
@@ -277,7 +277,11 @@ def _ui_snapshot(cfg) -> dict:
 
 
 def listen_session(cfg, ui: ChatUi) -> int:
-    """Blocking VAD listening session: meter → in-process `_stop` body."""
+    """Blocking VAD listening session: meter → in-process `_stop` body.
+
+    A reply that asks the user to choose reopens the mic in the same session.
+    Silence on that follow-up leaves the results up instead of sending noise.
+    """
     _cancel_path(cfg).unlink(missing_ok=True)
     _publish_pid(cfg, os.getpid())
     stop_requested = False
@@ -289,76 +293,48 @@ def listen_session(cfg, ui: ChatUi) -> int:
         cancel_requested = _cancel_path(cfg).exists()
 
     prev_handler = signal.signal(signal.SIGTERM, on_sigterm)
-    reason = "manual"
     reply: str | None = None
+    followups = 0
     try:
-        try:
-            prepare_listen(cfg)
-            ui.listening()
-            cue_listen(cfg)
-            record_start(cfg)
-        except Exception as exc:
-            finish(cfg)
-            ui.error(str(exc))
-            write_state(cfg, "error")
-            print(exc, file=sys.stderr)
-            return 1
-        write_state(cfg, "listening")
-
-        from agavai.meter import Endpointer, ParecSource, rms_dbfs
-
-        source = ParecSource(cfg.vad)
-        ep = Endpointer(cfg.vad)
-        meter_live = True
-        try:
-            for frame in source.frames(should_stop=lambda: stop_requested):
-                if stop_requested:
-                    reason = "cancel" if cancel_requested else "manual"
-                    break
-                out = ep.feed(frame)
-                ui.level(
-                    rms_dbfs(frame) if out is None else None,
-                    "speech" if ep.speaking else "silence",
-                    "energy",
-                )
-                if out:
-                    reason = out
-                    break
-            else:
-                meter_live = False
-        except Exception as exc:  # noqa: BLE001 — degrade, never crash the session
-            print(f"agavai: meter failed: {exc}", file=sys.stderr)
-            meter_live = False
-
-        if not meter_live and not stop_requested:
-            record_cancel()
-            finish(cfg)
-            ui.error("Microphone input is unavailable. Check your input device and try again.")
-            write_state(cfg, "error")
-            return 1
-        if reason in {"start_timeout", "min_speech"} and not stop_requested:
-            record_cancel()
-            finish(cfg)
-            ui.error("I did not hear a command. Try speaking again.")
-            write_state(cfg, "idle")
-            return 0
-        if not stop_requested and reply is None and meter_live:
-            reason = reason or "manual"
-
-        if stop_requested and cancel_requested:
-            record_cancel()
-            finish(cfg)
-            ui.idle()
-            write_state(cfg, "idle")
-            return 0
-
-        reply = _run_stop_body(cfg, ui, lambda: stop_requested and cancel_requested)
-        if reply is None:  # cancelled mid-turn
-            record_cancel()
-            finish(cfg)
-            ui.idle()
-            write_state(cfg, "idle")
-            return 0
+        while True:
+            heard = _await_utterance(
+                cfg,
+                ui,
+                fresh=followups == 0,
+                stop_requested=lambda: stop_requested,
+                cancel_requested=lambda: cancel_requested,
+            )
+            if heard == "error":
+                return 1
+            if heard != "speech":
+                return 0
+            reply = _run_stop_body(
+                cfg,
+                ui,
+                lambda: stop_requested and cancel_requested,
+                continue_conversation=followups > 0,
+            )
+            if reply is None:  # cancelled mid-turn
+                record_cancel()
+                finish(cfg)
+                ui.idle()
+                write_state(cfg, "idle")
+                return 0
+            if (
+                ui.data.get("phase") == "speaking"
+                and wants_followup(reply)
+                and followups < 2
+                and not ui.cancelled()
+            ):
+                followups += 1
+                stop_requested = False
+                cancel_requested = False
+                ui.continue_listening()
+                continue
+            if ui.data.get("phase") == "speaking" and not ui.cancelled():
+                ui.idle()
+                write_state(cfg, "idle")
+            break
     finally:
         from agavai.tts import sweep_playback_wavs
 
@@ -372,7 +348,73 @@ def listen_session(cfg, ui: ChatUi) -> int:
     return 0
 
 
-def _run_stop_body(cfg, ui: ChatUi, stop_requested: bool) -> str | None:
+def _await_utterance(cfg, ui: ChatUi, *, fresh: bool, stop_requested, cancel_requested) -> str:
+    """Capture one utterance. Returns speech, silence, cancel, or error."""
+    reason = "manual"
+    try:
+        prepare_listen(cfg)
+        if fresh:
+            ui.listening()
+        cue_listen(cfg)
+        record_start(cfg)
+    except Exception as exc:
+        finish(cfg)
+        ui.error(str(exc))
+        write_state(cfg, "error")
+        print(exc, file=sys.stderr)
+        return "error"
+    write_state(cfg, "listening")
+
+    from agavai.meter import Endpointer, ParecSource, rms_dbfs
+
+    source = ParecSource(cfg.vad)
+    ep = Endpointer(cfg.vad)
+    meter_live = True
+    try:
+        for frame in source.frames(should_stop=stop_requested):
+            if stop_requested():
+                reason = "cancel" if cancel_requested() else "manual"
+                break
+            out = ep.feed(frame)
+            ui.level(
+                rms_dbfs(frame) if out is None else None,
+                "speech" if ep.speaking else "silence",
+                "energy",
+            )
+            if out:
+                reason = out
+                break
+        else:
+            meter_live = False
+    except Exception as exc:  # noqa: BLE001 — degrade, never crash the session
+        print(f"agavai: meter failed: {exc}", file=sys.stderr)
+        meter_live = False
+
+    if not meter_live and not stop_requested():
+        record_cancel()
+        finish(cfg)
+        ui.error("Microphone input is unavailable. Check your input device and try again.")
+        write_state(cfg, "error")
+        return "error"
+    if reason in {"start_timeout", "min_speech"} and not stop_requested():
+        record_cancel()
+        finish(cfg)
+        if fresh:
+            ui.error("I did not hear a command. Try speaking again.")
+        else:
+            ui.idle()
+        write_state(cfg, "idle")
+        return "silence"
+    if stop_requested() and cancel_requested():
+        record_cancel()
+        finish(cfg)
+        ui.idle()
+        write_state(cfg, "idle")
+        return "cancel"
+    return "speech"
+
+
+def _run_stop_body(cfg, ui: ChatUi, stop_requested: bool, *, continue_conversation: bool = False) -> str | None:
     """Existing `_stop` body with `_stop_requested` checkpoints (B.1)."""
 
     def aborted() -> bool:
@@ -411,7 +453,7 @@ def _run_stop_body(cfg, ui: ChatUi, stop_requested: bool) -> str | None:
         return None
     write_state(cfg, "thinking")
     try:
-        reply = run_turn(text, cfg, ui)
+        reply = run_turn(text, cfg, ui, continue_conversation=continue_conversation)
     except Exception:
         traceback.print_exc()
         reply = "The local agent hit an error."

@@ -30,6 +30,8 @@ class ChatUi:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.path = cfg.runtime_dir / "ui.json"
+        self.model_messages: list[dict[str, Any]] = []
+        self.model_heads: list[str] = []
         self.data: dict[str, Any] = {
             "phase": "idle",
             "phase_label": "Idle",
@@ -61,9 +63,18 @@ class ChatUi:
         self.data["vad_backend"] = "off"
         self.data.pop("display", None)
         self.data["session_id"] = uuid.uuid4().hex
+        self.model_messages = []
+        self.model_heads = []
 
     def listening(self) -> None:
         self.begin_session()
+        self._set_phase("listening", "Listening")
+        self._write(summon=True)
+
+    def continue_listening(self) -> None:
+        """Wait for the next utterance without dropping results or the question."""
+        self.data["transcript"] = {"text": "", "final": False}
+        self.data.pop("error", None)
         self._set_phase("listening", "Listening")
         self._write(summon=True)
 
@@ -101,8 +112,9 @@ class ChatUi:
         self._set_phase("transcribing", "Transcribing")
         self._write()
 
-    def user(self, text: str) -> None:
-        self.data.pop("display", None)
+    def user(self, text: str, *, keep_display: bool = False) -> None:
+        if not keep_display:
+            self.data.pop("display", None)
         self.data.pop("error", None)
         self.data.pop("answer_html", None)
         self.data["transcript"] = {"text": text.strip(), "final": True}

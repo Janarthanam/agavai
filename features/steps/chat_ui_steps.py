@@ -29,6 +29,11 @@ def step_listen(context):
     context.ui.listening()
 
 
+@when("the UI listens for a follow-up")
+def step_follow(context):
+    context.ui.continue_listening()
+
+
 @when('the user says "{text}"')
 def step_user(context, text):
     context.ui.user(text)

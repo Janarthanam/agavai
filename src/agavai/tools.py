@@ -710,7 +710,7 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "wallpaper_list",
-            "description": "List available wallpaper images (theme backgrounds and Pictures).",
+            "description": "List wallpaper and screensaver images (theme backgrounds and Pictures) so the user can see them and pick one.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -718,7 +718,7 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "wallpaper_set",
-            "description": "Set the desktop wallpaper by name or filename (e.g. Ship At Sea).",
+            "description": "Set the desktop background by image name or filename (e.g. Ship At Sea). Use this when the user picks a wallpaper or screensaver image from the list.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -30,7 +30,8 @@ Item {
     readonly property var tools: turn.tools || []
     readonly property var latestTool: tools.length ? tools[tools.length - 1] : null
     readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing
-    readonly property string transcript: (snapshot.transcript || {}).text || turn.user || ""
+    readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
+    readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
     readonly property real strength: listening && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
     readonly property color ink: Color.foreground
     readonly property color inkMuted: Util.alpha(Color.foreground, 0.62)
@@ -136,7 +137,8 @@ Item {
         running: root.opened
         onTriggered: {
             var working = root.phase === "thinking" || root.phase === "speaking" || root.phase === "transcribing";
-            var step = root.listening ? 0.045 + root.strength * 0.05 : working ? 0.03 : 0.012;
+            // Silence settles the orb. Speech is what speeds it up.
+            var step = root.listening ? 0.006 + root.strength * 0.1 : working ? 0.022 : 0.004;
             orb.spin = (orb.spin + step) % (Math.PI * 2);
         }
     }
@@ -376,7 +378,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.transcript || "What can I help you find?"
+                        text: root.transcript || (root.listening ? "Listening…" : "What can I help you find?")
                         textFormat: Text.PlainText
                         color: root.transcript ? root.ink : root.inkMuted
                         font.family: Style.font.family
@@ -386,10 +388,10 @@ Item {
                         elide: Text.ElideRight
                     }
                     Text {
-                        visible: !(root.turn.assistant || root.snapshot.error)
+                        visible: root.listening || !(root.turn.assistant || root.snapshot.error)
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.listening ? "Speak naturally. Pause or press Enter to send." : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                        text: root.listening ? (root.expanded ? "Listening for your answer. Pause or press Enter to send." : "Speak naturally. Pause or press Enter to send.") : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                         textFormat: Text.PlainText
                         color: root.inkMuted
                         font.family: Style.font.family
@@ -431,8 +433,8 @@ Item {
                     Item {
                         id: orbBox
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Style.space(132)
-                        Layout.preferredHeight: Style.space(132)
+                        Layout.preferredWidth: root.listening && root.expanded ? Style.space(96) : Style.space(132)
+                        Layout.preferredHeight: root.listening && root.expanded ? Style.space(96) : Style.space(132)
                         Canvas {
                             id: orb
                             anchors.fill: parent
@@ -453,6 +455,14 @@ Item {
                                 var cy = height / 2;
                                 var pulse = 0.78 + root.strength * 0.34;
                                 var radius = Math.min(width, height) * 0.31 * pulse;
+                                // A ring only while the mic is open, so listening is distinct from results.
+                                if (root.listening) {
+                                    ctx.beginPath();
+                                    ctx.lineWidth = Math.max(2, width * 0.02) + root.strength * 3;
+                                    ctx.strokeStyle = Qt.rgba(0.55, 0.78, 1, 0.38 + root.strength * 0.5);
+                                    ctx.arc(cx, cy, radius * (1.22 + root.strength * 0.38), 0, Math.PI * 2);
+                                    ctx.stroke();
+                                }
                                 var glow = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius * 1.85);
                                 glow.addColorStop(0, Qt.rgba(0.62, 0.45, 1, 0.34 + root.strength * 0.28));
                                 glow.addColorStop(1, Qt.rgba(0.62, 0.45, 1, 0));
