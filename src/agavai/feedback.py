@@ -77,7 +77,7 @@ def prepare_listen(cfg: Config) -> None:
         _keyboard_mute(False)
     else:
         flag.unlink(missing_ok=True)
-    # Visual feedback is the top chat overlay (janar.agavai), not this OSD.
+    # Visual feedback is the bottom voice overlay (janar.agavai), not this OSD.
 
 
 def hide_listen(cfg: Config) -> None:
