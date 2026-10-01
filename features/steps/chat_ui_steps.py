@@ -91,6 +91,19 @@ def step_tool_n(context, n, name, status):
     assert tool["status"] == status, tool
 
 
+@then('the completion is "{title}" with "{detail}"')
+def step_completion(context, title, detail):
+    data = json.loads((context.runtime_dir / "ui.json").read_text())
+    assert data["completion"]["title"] == title, data.get("completion")
+    assert detail in data["completion"]["detail"], data.get("completion")
+
+
+@then("there is no completion")
+def step_no_completion(context):
+    data = json.loads((context.runtime_dir / "ui.json").read_text())
+    assert "completion" not in data, data.get("completion")
+
+
 @then('the last assistant line should contain "{text}"')
 def step_asst_line(context, text):
     data = json.loads((context.runtime_dir / "ui.json").read_text())

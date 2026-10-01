@@ -14,7 +14,7 @@ from agavai.config import dump_llm_env, load_config, set_model_id
 from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
-from agavai.orchestrator import run_turn, wants_followup
+from agavai.orchestrator import run_turn
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
@@ -277,10 +277,10 @@ def _ui_snapshot(cfg) -> dict:
 
 
 def listen_session(cfg, ui: ChatUi) -> int:
-    """Blocking VAD listening session: meter → in-process `_stop` body.
+    """Blocking VAD session. The mic stays open until the user dismisses it.
 
-    A reply that asks the user to choose reopens the mic in the same session.
-    Silence on that follow-up leaves the results up instead of sending noise.
+    Silence does not end the session or get sent to the model. A finished
+    action returns to listening with the results still on screen.
     """
     _cancel_path(cfg).unlink(missing_ok=True)
     _publish_pid(cfg, os.getpid())
@@ -306,7 +306,11 @@ def listen_session(cfg, ui: ChatUi) -> int:
             )
             if heard == "error":
                 return 1
+            if heard == "cancel" or ui.cancelled():
+                return 0
             if heard != "speech":
+                if ui.data.get("phase") != "listening" and not ui.cancelled():
+                    ui.continue_listening()
                 return 0
             reply = _run_stop_body(
                 cfg,
@@ -320,21 +324,12 @@ def listen_session(cfg, ui: ChatUi) -> int:
                 ui.idle()
                 write_state(cfg, "idle")
                 return 0
-            if (
-                ui.data.get("phase") == "speaking"
-                and wants_followup(reply)
-                and followups < 2
-                and not ui.cancelled()
-            ):
-                followups += 1
-                stop_requested = False
-                cancel_requested = False
-                ui.continue_listening()
-                continue
-            if ui.data.get("phase") == "speaking" and not ui.cancelled():
-                ui.idle()
-                write_state(cfg, "idle")
-            break
+            if ui.cancelled():
+                return 0
+            followups += 1
+            stop_requested = False
+            cancel_requested = False
+            ui.continue_listening()
     finally:
         from agavai.tts import sweep_playback_wavs
 
@@ -370,12 +365,19 @@ def _await_utterance(cfg, ui: ChatUi, *, fresh: bool, stop_requested, cancel_req
     source = ParecSource(cfg.vad)
     ep = Endpointer(cfg.vad)
     meter_live = True
+    got_frame = False
     try:
         for frame in source.frames(should_stop=stop_requested):
+            got_frame = True
             if stop_requested():
                 reason = "cancel" if cancel_requested() else "manual"
                 break
             out = ep.feed(frame)
+            # Quiet and brief noise keep the mic open. Only a real utterance ends capture.
+            if out in {"start_timeout", "min_speech"}:
+                ep.reset()
+                ui.level(rms_dbfs(frame), "silence", "energy")
+                continue
             ui.level(
                 rms_dbfs(frame) if out is None else None,
                 "speech" if ep.speaking else "silence",
@@ -385,7 +387,7 @@ def _await_utterance(cfg, ui: ChatUi, *, fresh: bool, stop_requested, cancel_req
                 reason = out
                 break
         else:
-            meter_live = False
+            meter_live = got_frame
     except Exception as exc:  # noqa: BLE001 — degrade, never crash the session
         print(f"agavai: meter failed: {exc}", file=sys.stderr)
         meter_live = False
@@ -396,15 +398,8 @@ def _await_utterance(cfg, ui: ChatUi, *, fresh: bool, stop_requested, cancel_req
         ui.error("Microphone input is unavailable. Check your input device and try again.")
         write_state(cfg, "error")
         return "error"
-    if reason in {"start_timeout", "min_speech"} and not stop_requested():
-        record_cancel()
-        finish(cfg)
-        if fresh:
-            ui.error("I did not hear a command. Try speaking again.")
-        else:
-            ui.idle()
-        write_state(cfg, "idle")
-        return "silence"
+    if not stop_requested() and reason == "manual" and got_frame:
+        return "ended"
     if stop_requested() and cancel_requested():
         record_cancel()
         finish(cfg)

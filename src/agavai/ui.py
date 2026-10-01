@@ -17,6 +17,27 @@ from agavai.richtext import rich_text
 PLUGIN_ID = "janar.agavai"
 MAX_TURNS = 5
 RESULT_CHARS = 280
+# Looking something up is not a finished desktop action.
+_QUIET_TOOLS = {
+    "wallpaper_list",
+    "wallpaper_current",
+    "list_themes",
+    "list_windows",
+    "search_files",
+    "list_reminders",
+    "battery_status",
+    "network_status",
+    "screen_context",
+    "list_agents",
+    "clock_now",
+}
+
+
+def _action_failed(result: str) -> bool:
+    text = " ".join(str(result).lower().split())
+    if not text:
+        return True
+    return any(marker in text for marker in ("unknown ", "invalid ", "need ", "failed", "timed out", " error", "error:"))
 
 
 def _clip(text: str, limit: int = RESULT_CHARS) -> str:
@@ -62,6 +83,7 @@ class ChatUi:
         self.data["vad_state"] = "off"
         self.data["vad_backend"] = "off"
         self.data.pop("display", None)
+        self.data.pop("completion", None)
         self.data["session_id"] = uuid.uuid4().hex
         self.model_messages = []
         self.model_heads = []
@@ -117,6 +139,7 @@ class ChatUi:
             self.data.pop("display", None)
         self.data.pop("error", None)
         self.data.pop("answer_html", None)
+        self.data.pop("completion", None)
         self.data["transcript"] = {"text": text.strip(), "final": True}
         if not self.data.get("session_id"):
             self.data["session_id"] = uuid.uuid4().hex
@@ -141,15 +164,26 @@ class ChatUi:
         self._write()
 
     def tool_done(self, name: str, result: str) -> None:
+        failed = _action_failed(result)
         turn = self._current_turn()
         for tool in reversed(turn["tools"]):
             if tool.get("name") == name and tool.get("status") == "running":
                 tool["result"] = _clip(result)
-                tool["status"] = "ok"
+                tool["status"] = "error" if failed else "ok"
                 break
         block = display_for(name, result)
         if block is not None:
             self.data["display"] = block
+        if name not in _QUIET_TOOLS:
+            detail = _clip(result, 140)
+            if detail[:1] in "{[":
+                detail = name.replace("_", " ")
+            self.data["completion"] = {
+                "ok": not failed,
+                "title": "Done" if not failed else "Not completed",
+                "detail": detail,
+                "tool": name,
+            }
         self._write()
 
     def assistant(self, text: str) -> None:

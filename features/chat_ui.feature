@@ -18,6 +18,24 @@ Feature: Top chat overlay snapshot
     And tool 2 should be "list_windows" with status "ok"
     And the last assistant line should contain "Matte Black"
 
+  Scenario: Setting the wallpaper is marked done and listening continues
+    Given a chat UI in a temp runtime dir
+    When the user says "set the wallpaper to ship"
+    And the UI finishes tool "wallpaper_set" with "wallpaper set to ship at sea"
+    And the UI listens for a follow-up
+    Then the snapshot phase should be "listening"
+    And the completion is "Done" with "wallpaper set to ship at sea"
+
+  Scenario: A failed wallpaper change is marked not completed
+    Given a chat UI in a temp runtime dir
+    When the UI finishes tool "wallpaper_set" with "unknown wallpaper 'nope'"
+    Then the completion is "Not completed" with "unknown wallpaper"
+
+  Scenario: Listing images is not announced as a finished action
+    Given a chat UI in a temp runtime dir
+    When the UI finishes tool "wallpaper_list" with "[]"
+    Then there is no completion
+
   Scenario: A new process reloads prior turns from ui.json
     Given a chat UI in a temp runtime dir
     When the user says "hello"

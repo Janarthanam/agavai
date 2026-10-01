@@ -31,6 +31,7 @@ Item {
     readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
+    readonly property var completion: snapshot.completion || null
     readonly property real strength: listening && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
     readonly property color ink: Color.foreground
     readonly property color inkMuted: Util.alpha(Color.foreground, 0.62)
@@ -384,12 +385,23 @@ Item {
                         visible: root.listening || !(root.turn.assistant || root.snapshot.error)
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.listening ? (root.expanded ? "Listening for your answer. Pause or press Enter to send." : "Speak naturally. Pause or press Enter to send.") : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                        text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. Pause or press Enter to send." : "Speak naturally. Pause or press Enter to send.")) : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                         textFormat: Text.PlainText
                         color: root.inkMuted
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         wrapMode: Text.Wrap
+                    }
+                    Text {
+                        visible: !!root.completion
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: root.completion ? ((root.completion.ok ? "✓ " : "") + root.completion.title + (root.completion.detail ? " · " + root.completion.detail : "")) : ""
+                        textFormat: Text.PlainText
+                        color: root.statusColor
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.heading
                     }
                     Text {
                         id: answer

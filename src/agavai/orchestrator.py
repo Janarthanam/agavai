@@ -8,6 +8,7 @@ from agavai.config import Config
 from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import select_head_ids
+from agavai.canvas import model_view, read_aloud
 from agavai.tools import DISPATCH, call_tool
 from agavai.ui import ChatUi
 
@@ -19,12 +20,21 @@ Do not call remote models or coding agents. Do not ask for a shell.
 If a needed desktop action is not among the tools you were given, say you cannot do that action — still in a spoken sentence.
 When the user asks to see wallpaper, background, or screensaver images, call wallpaper_list before you answer so the pictures appear. Then ask which image they want, in one short question.
 Later messages are the same person continuing. Use the earlier list and call wallpaper_set with the image they name. Do not ask them to pick an image that was not listed.
+When a tool succeeds, say exactly what finished in one sentence, naming the wallpaper, reminder, or other change.
+File, folder, image, and video results give you a kind and a name. Speak those names. Never speak a filesystem path.
 Current local time: {now}
 """
 
 _FOLLOWUP = re.compile(r"\b(you want|which|tell me|let me know)\b", re.IGNORECASE)
 
 _RESULT_LIMIT = 500
+
+
+def _model_tool_text(name: str, result: str) -> str:
+    text = model_view(name, result)
+    if len(text) > _RESULT_LIMIT:
+        text = text[: _RESULT_LIMIT - 1] + "…"
+    return text
 
 
 def wants_followup(reply: str) -> bool:
@@ -80,8 +90,6 @@ def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[
     result = call_tool("wallpaper_list", "{}", cfg)
     if ui:
         ui.tool_done("wallpaper_list", result)
-    if len(result) > _RESULT_LIMIT:
-        result = result[: _RESULT_LIMIT - 1] + "…"
     messages.append(
         {
             "role": "assistant",
@@ -95,7 +103,7 @@ def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[
             ],
         }
     )
-    messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": result})
+    messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": _model_tool_text("wallpaper_list", result)})
 
 
 def _remember(ui: ChatUi, messages: list[dict[str, Any]], heads: list[str]) -> None:
@@ -144,8 +152,6 @@ def run_turn(
         if ui:
             ui.tool_start("wallpaper_list", "{}")
             ui.tool_done("wallpaper_list", listed)
-        if len(listed) > _RESULT_LIMIT:
-            listed = listed[: _RESULT_LIMIT - 1] + "…"
         messages.append(
             {
                 "role": "assistant",
@@ -159,7 +165,7 @@ def run_turn(
                 ],
             }
         )
-        messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": listed})
+        messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": _model_tool_text("wallpaper_list", listed)})
     retried = False
     try:
         for _ in range(cfg.llm.max_tool_rounds):
@@ -169,7 +175,7 @@ def run_turn(
             calls = parse_tool_calls(message)
             content = (message.get("content") or "").strip()
             if not calls:
-                reply = _strip_think(content) or "Done."
+                reply = read_aloud(_strip_think(content) or "Done.", ui.data.get("display") if ui else None)
                 _list_images(text, cfg, ui, messages)
                 messages.append({"role": "assistant", "content": reply})
                 if ui:
@@ -207,13 +213,11 @@ def run_turn(
                 result = call_tool(name, raw_args, cfg)
                 if ui:
                     ui.tool_done(name, result)
-                if len(result) > _RESULT_LIMIT:
-                    result = result[: _RESULT_LIMIT - 1] + "…"
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call.get("id") or name,
-                        "content": result,
+                        "content": _model_tool_text(name, result),
                     }
                 )
         msg = "I ran out of tool steps before finishing."
