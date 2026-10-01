@@ -20,7 +20,6 @@ Item {
     property var snapshot: ({})
     property int selected: 0
     property string actionError: ""
-    property bool focusPrimed: false
     property bool typing: false
     readonly property bool listening: phase === "listening"
     readonly property var display: snapshot.display || null
@@ -118,19 +117,12 @@ Item {
     function acquireFocus() {
         if (!opened)
             return;
-        focusPrimed = false;
-        focusTimer.restart();
         Qt.callLater(function () {
             keyTarget.forceActiveFocus();
         });
     }
     onExpandedChanged: acquireFocus()
     onOpenedChanged: acquireFocus()
-    Timer {
-        id: focusTimer
-        interval: 100
-        onTriggered: root.focusPrimed = true
-    }
     Timer {
         interval: 32
         repeat: true
@@ -191,7 +183,7 @@ Item {
         color: "transparent"
         WlrLayershell.namespace: "agavai-chat"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.opened ? (root.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive) : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         exclusionMode: ExclusionMode.Ignore
         mask: Region {
             item: stage
@@ -218,6 +210,7 @@ Item {
             FocusScope {
                 id: keyTarget
                 anchors.fill: parent
+                focus: true
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
                         root.dismiss();
