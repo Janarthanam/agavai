@@ -64,8 +64,16 @@ base_url = "https://openrouter.ai/api/alpha/decisions"
 model = "typesafe/jev-1.13"
 api_key_env = "OPENROUTER_API_KEY"
 
+[asr]
+# Assistant listen path. cpu is the default. gpu is used only when this is gpu
+# and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.
+device = "cpu"
+# model_dir = "~/.local/share/agavai/models/parakeet-realtime-eou-120m"
+# venv = "~/.local/share/agavai/tts-venv"
+
 [vad]
-# Hands-free listening: meter the mic and auto-send after a pause.
+# Not the assistant turn. The energy window remains for the legacy manual
+# path and the Silero experiment. The assistant commits on end of utterance.
 # backend = "energy" (default, dependency-free dBFS gate) | "silero"
 # (opt-in Silero VAD v5 ONNX; needs scripts/download-vad.sh + a venv with
 # onnxruntime — the TTS venv qualifies. Missing either → energy.)

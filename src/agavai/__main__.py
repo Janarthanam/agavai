@@ -10,6 +10,7 @@ import traceback
 from pathlib import Path
 
 from agavai.a2a import write_card
+from agavai.asr import AsrError, open_stream
 from agavai.config import dump_llm_env, load_config, set_model_id
 from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
@@ -26,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("toggle", help="Start or stop a Voxtype-backed request")
     sub.add_parser("start", help="Start listening")
-    sub.add_parser("listen", help="Listen and automatically submit after a pause")
+    sub.add_parser("listen", help="Listen and submit when the utterance ends")
     sub.add_parser("invoke", help="Open the single voice widget and start automatic listening")
     sub.add_parser("stop", help="Stop listening and run the agent")
     sub.add_parser("cancel", help="Abort listening")
@@ -277,10 +278,11 @@ def _ui_snapshot(cfg) -> dict:
 
 
 def listen_session(cfg, ui: ChatUi) -> int:
-    """Blocking VAD session. The mic stays open until the user dismisses it.
+    """One listen process. Partials update the overlay; end of utterance runs the turn.
 
-    Silence does not end the session or get sent to the model. A finished
-    action returns to listening with the results still on screen.
+    The mic stays open until the user dismisses it or the capture ends.
+    A finished action returns to listening with the results still on screen.
+    The recognizer, not a silence timer, decides when the line is finished.
     """
     _cancel_path(cfg).unlink(missing_ok=True)
     _publish_pid(cfg, os.getpid())
@@ -295,11 +297,20 @@ def listen_session(cfg, ui: ChatUi) -> int:
     prev_handler = signal.signal(signal.SIGTERM, on_sigterm)
     reply: str | None = None
     followups = 0
+    stream = None
     try:
+        try:
+            stream = open_stream(cfg)
+        except AsrError as exc:
+            ui.error(str(exc))
+            write_state(cfg, "error")
+            print(exc, file=sys.stderr)
+            return 1
         while True:
-            heard = _await_utterance(
+            heard, text = _await_utterance(
                 cfg,
                 ui,
+                stream,
                 fresh=followups == 0,
                 stop_requested=lambda: stop_requested,
                 cancel_requested=lambda: cancel_requested,
@@ -308,18 +319,30 @@ def listen_session(cfg, ui: ChatUi) -> int:
                 return 1
             if heard == "cancel" or ui.cancelled():
                 return 0
+            if heard == "ignore":
+                stop_requested = False
+                cancel_requested = False
+                continue
             if heard != "speech":
                 if ui.data.get("phase") != "listening" and not ui.cancelled():
                     ui.continue_listening()
                 return 0
+            if not text.strip():
+                speak("I did not hear anything.", cfg)
+                if ui.cancelled():
+                    return 0
+                stop_requested = False
+                cancel_requested = False
+                ui.continue_listening()
+                continue
             reply = _run_stop_body(
                 cfg,
                 ui,
                 lambda: stop_requested and cancel_requested,
                 continue_conversation=followups > 0,
+                text=text,
             )
             if reply is None:  # cancelled mid-turn
-                record_cancel()
                 finish(cfg)
                 ui.idle()
                 write_state(cfg, "idle")
@@ -331,6 +354,8 @@ def listen_session(cfg, ui: ChatUi) -> int:
             cancel_requested = False
             ui.continue_listening()
     finally:
+        if stream is not None:
+            stream.close()
         from agavai.tts import sweep_playback_wavs
 
         sweep_playback_wavs()
@@ -343,109 +368,76 @@ def listen_session(cfg, ui: ChatUi) -> int:
     return 0
 
 
-def _await_utterance(cfg, ui: ChatUi, *, fresh: bool, stop_requested, cancel_requested) -> str:
-    """Capture one utterance. Returns speech, silence, cancel, or error."""
-    reason = "manual"
+def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, cancel_requested) -> tuple[str, str]:
+    """Capture one utterance. Returns (speech|cancel|error|ended, text)."""
     try:
         prepare_listen(cfg)
         if fresh:
             ui.listening()
         cue_listen(cfg)
-        record_start(cfg)
     except Exception as exc:
         finish(cfg)
         ui.error(str(exc))
         write_state(cfg, "error")
         print(exc, file=sys.stderr)
-        return "error"
+        return "error", ""
     write_state(cfg, "listening")
-
-    from agavai.meter import Endpointer, ParecSource, rms_dbfs
-
-    source = ParecSource(cfg.vad)
-    ep = Endpointer(cfg.vad)
-    meter_live = True
-    got_frame = False
+    hypothesis = ""
     try:
-        for frame in source.frames(should_stop=stop_requested):
-            got_frame = True
+        for kind, text in stream.events(should_stop=stop_requested):
+            if kind == "interim" and text:
+                hypothesis = text
+                ui.partial(text)
+            elif kind == "eob" and text:
+                hypothesis = text
+                ui.partial(text)
+            elif kind == "eou":
+                line = (text or hypothesis).strip()
+                if not line:
+                    return "ignore", ""
+                ui.partial(line)
+                return "speech", line
             if stop_requested():
-                reason = "cancel" if cancel_requested() else "manual"
                 break
-            out = ep.feed(frame)
-            # Quiet and brief noise keep the mic open. Only a real utterance ends capture.
-            if out in {"start_timeout", "min_speech"}:
-                ep.reset()
-                ui.level(rms_dbfs(frame), "silence", "energy")
-                continue
-            ui.level(
-                rms_dbfs(frame) if out is None else None,
-                "speech" if ep.speaking else "silence",
-                "energy",
-            )
-            if out:
-                reason = out
-                break
-        else:
-            meter_live = got_frame
-    except Exception as exc:  # noqa: BLE001 — degrade, never crash the session
-        print(f"agavai: meter failed: {exc}", file=sys.stderr)
-        meter_live = False
-
-    if not meter_live and not stop_requested():
-        record_cancel()
+    except AsrError as exc:
         finish(cfg)
-        ui.error("Microphone input is unavailable. Check your input device and try again.")
+        ui.error(str(exc))
         write_state(cfg, "error")
-        return "error"
-    if not stop_requested() and reason == "manual" and got_frame:
-        return "ended"
+        print(exc, file=sys.stderr)
+        return "error", ""
     if stop_requested() and cancel_requested():
-        record_cancel()
+        ui.partial("")
         finish(cfg)
         ui.idle()
         write_state(cfg, "idle")
-        return "cancel"
-    return "speech"
+        return "cancel", ""
+    if stop_requested():
+        return "speech", hypothesis.strip()
+    return "ended", ""
 
 
-def _run_stop_body(cfg, ui: ChatUi, stop_requested: bool, *, continue_conversation: bool = False) -> str | None:
-    """Existing `_stop` body with `_stop_requested` checkpoints (B.1)."""
+def _run_stop_body(
+    cfg,
+    ui: ChatUi,
+    stop_requested: bool,
+    *,
+    continue_conversation: bool = False,
+    text: str = "",
+) -> str | None:
+    """Run one committed line. The text is already final; there is no transcribing wait."""
 
     def aborted() -> bool:
         return stop_requested() if callable(stop_requested) else stop_requested
 
-    try:
-        record_stop()
-    except Exception as exc:
-        finish(cfg)
-        ui.error(str(exc))
-        write_state(cfg, "error")
-        print(exc, file=sys.stderr)
-        return ""
     if aborted():
         return None
     hide_listen(cfg)
     cue_think(cfg)
-    write_state(cfg, "transcribing")
-    ui.transcribing()
-    text = ""
-    deadline = time.monotonic() + 25
-    while time.monotonic() < deadline:
-        text = wait_for_prompt(cfg.prompt_file, timeout_s=0.1) or ""
-        if text or aborted():
-            break
     if aborted():
         return None
-    if not text:
-        finish(cfg)
-        ui.error("I did not hear anything.")
-        ui.idle()
-        write_state(cfg, "idle")
+    if not text.strip():
         speak("I did not hear anything.", cfg)
         return ""
-    if aborted():
-        return None
     write_state(cfg, "thinking")
     try:
         reply = run_turn(text, cfg, ui, continue_conversation=continue_conversation)

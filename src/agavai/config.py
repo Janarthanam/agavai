@@ -147,6 +147,17 @@ class VadConfig:
 
 
 @dataclass
+class AsrConfig:
+    """Streaming recognizer. device is cpu, or gpu when an NVIDIA GPU is present."""
+
+    device: str = "cpu"
+    model_dir: Path = field(
+        default_factory=lambda: xdg_data() / "agavai/models/parakeet-realtime-eou-120m"
+    )
+    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/tts-venv")
+
+
+@dataclass
 class FilesConfig:
     roots: list[Path] = field(
         default_factory=lambda: [
@@ -166,6 +177,7 @@ class Config:
     tts: TtsConfig = field(default_factory=TtsConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
     vad: VadConfig = field(default_factory=VadConfig)
+    asr: AsrConfig = field(default_factory=AsrConfig)
 
     @property
     def tts_prefer(self) -> str:
@@ -352,6 +364,13 @@ def load_config(path: Path | None = None) -> Config:
         cfg.vad.device = str(vad["device"])
     if "venv" in vad:
         cfg.vad.venv = _expand(str(vad["venv"]))
+    asr = data.get("asr") or {}
+    if "device" in asr:
+        cfg.asr.device = str(asr["device"])
+    if "model_dir" in asr:
+        cfg.asr.model_dir = _expand(str(asr["model_dir"]))
+    if "venv" in asr:
+        cfg.asr.venv = _expand(str(asr["venv"]))
     return cfg
 
 

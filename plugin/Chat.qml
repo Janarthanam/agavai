@@ -385,7 +385,7 @@ Item {
                         visible: root.listening || !(root.turn.assistant || root.snapshot.error)
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. Pause or press Enter to send." : "Speak naturally. Pause or press Enter to send.")) : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                        text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                         textFormat: Text.PlainText
                         color: root.inkMuted
                         font.family: Style.font.family

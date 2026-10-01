@@ -44,6 +44,16 @@ Feature: Configurable on-device model
     Then the llm env should contain "MODEL_ID=spaced"
     And the llm env should contain "my model.gguf"
 
+  Scenario: Streaming ASR defaults to CPU
+    Given an empty agavai config
+    When I load the config
+    Then the asr device should be "cpu"
+
+  Scenario: Streaming ASR device is configurable
+    Given a config with asr device "gpu"
+    When I load the config
+    Then the asr device should be "gpu"
+
   Scenario: VAD defaults to the energy backend with a 900 ms silence window
     Given an empty agavai config
     When I load the config

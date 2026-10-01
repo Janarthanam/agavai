@@ -1,5 +1,7 @@
 # Agavai voice and results interface
 
+How a session moves from shortcut to spoken reply is specified in [`flow.md`](flow.md). This file is the interaction and presentation spec for the overlay.
+
 Open [the interactive prototype](ui-prototype/index.html) in a browser. It uses simulated microphone levels, partial transcription, and tool results. No microphone, model, desktop tool, or external network is accessed. Video playback accepts a local file. Use Alt+M in the prototype; Super+Ctrl+M remains the native shortcut.
 
 ## Interaction
@@ -54,6 +56,6 @@ The single native Quickshell overlay implements this design. Super+M, the deskto
 
 Native results persist until dismissal or a new request; no separate pin control is needed. While the surface is open it keeps exclusive keyboard focus, so Escape dismisses it without a click. Dismissing releases that focus. Pointer input is bounded to the orb and the results sheet. The listening surface is the bottom-centered orb, not a menu card. Native motion is not yet connected to a system reduced-motion preference, and videos depend on locally available media codecs. PDF and office files can open in their associated app; previews currently show their names and paths rather than rendering pages.
 
-Automatic listening sends after 900 ms of silence following speech. No speech, a missing microphone, or a stalled audio source ends with a visible retry message rather than waiting for a second shortcut. Capture readers observe cancellation while waiting for frames. All automatic entry points select `agavai listen`, even if the legacy manual capture option is disabled in config.
+Automatic listening sends when streaming ASR emits end of utterance. Enter sends the current line. Escape dismisses. A missing microphone ends with a visible error. Silence that never becomes an utterance is not sent. All automatic entry points select `agavai listen`, even if the legacy manual capture option is disabled in config.
 
 The interaction model is covered by `features/ui_design.feature` using Behave and Node.js. Run `PYTHONPATH=src .venv/bin/behave`. In a restricted environment where the current runtime directory is read-only, set `XDG_RUNTIME_DIR` to a fresh temporary directory for the suite; the existing mocked TTS scenarios write runtime logs there. Browser layout and native layer-shell behavior require visual/manual verification separately.

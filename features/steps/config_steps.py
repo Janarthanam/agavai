@@ -192,6 +192,16 @@ def step_env_has(context, text):
     assert text in context.llm_env, context.llm_env
 
 
+@given('a config with asr device "{device}"')
+def step_asr(context, device):
+    _write(context, f'[asr]\ndevice = "{device}"\n')
+
+
+@then('the asr device should be "{device}"')
+def step_asr_device(context, device):
+    assert context.cfg.asr.device == device, context.cfg.asr.device
+
+
 @then("vad should be enabled")
 def step_vad_enabled(context):
     assert context.cfg.vad.enabled is True, context.cfg.vad

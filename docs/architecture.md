@@ -1,5 +1,7 @@
 # agavai architecture
 
+Runtime behavior of a voice session — invoke, pause detection, follow-up turns, cancel, and the overlay contract — is specified in [`flow.md`](flow.md). This file covers process split, model selection, and the tool allowlist.
+
 Local voice control for Omarchy. Voxtype is the microphone. A **configurable on-device GGUF** (default: Qwen3-4B Instruct, ~2.5 GB) is the brain. Allowlisted tools are the hands. Nothing in v1 leaves the machine.
 
 Two voice products share one Voxtype daemon:
@@ -230,6 +232,8 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 ## Voice I/O
 
+The assistant microphone path is [audio.md](audio.md). What follows is the earlier silence-timer capture, which the listen path no longer uses.
+
 **In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **bottom voice overlay** (`janar.agavai`), then starts a blocking VAD session: a parallel `parec` capture meters the mic (live `level_db`/`vad_state` in `ui.json`) and after **900 ms of silence** (`[vad] silence_ms`) the turn runs automatically — no second press. Second press force-stops and runs the turn now; during `transcribing`/`thinking` a press within 2 s of the phase change is a no-op (grace window). Meter failure falls back to the old manual mode (`vad_state: "manual"`); `[vad] enabled = false` restores push-to-toggle. Opt-in `backend = "silero"` replaces the energy gate with the pinned Silero VAD v5.1.2 model (`scripts/download-vad.sh`; missing model/runtime → energy).
 
 **Chat overlay:** a keep-loaded Omarchy overlay. Listening is a borderless orb at the bottom center of the active monitor; results grow upward on that same surface. The orchestrator writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay stays until dismissed or replaced.
@@ -278,7 +282,7 @@ agavai status
 agavai ask "what is the current theme?"
 ```
 
-Voice: Super+Ctrl+M, speak, pause — Agavai sends after 900 ms of silence.
+Voice: Super+M, speak — Agavai sends when the recognizer emits end of utterance. Enter sends the current line.
 
 Fresh machine:
 
