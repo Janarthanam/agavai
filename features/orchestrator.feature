@@ -51,6 +51,13 @@ Feature: Local tool loop
     And the model messages included "show me all the images of screensaver"
     And the follow-up model was offered "wallpaper_set"
 
+  Scenario: A file listing is spoken by name, not full path
+    Given a chat UI in a temp runtime dir
+    And llama-server calls "search_files" with a notes folder, image, and file, then reads their paths
+    When I run a turn with text "show me the files" on the chat UI
+    Then the spoken reply should be "Here are Notes, ship at sea, and notes.md."
+    And the model tool text should not contain the notes path
+
   Scenario: Think tags are stripped from model text
     Then stripping think tags from "hello" yields "hello"
     And stripping think tags from "pre<think>secret</think>post" yields "prepost"

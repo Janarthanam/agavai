@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from behave import given, then, when
@@ -79,6 +80,44 @@ def step_script_retry(context, first, second, reply):
     context.chat_patch.start()
     context.tool_mock = context.tool_patch.start()
     context.add_cleanup(context.health_patch.stop)
+    context.add_cleanup(context.chat_patch.stop)
+    context.add_cleanup(context.tool_patch.stop)
+
+
+@given('llama-server calls "{tool}" with a notes folder, image, and file, then reads their paths')
+def step_named_listing(context, tool):
+    folder = context.runtime_dir / "Notes"
+    folder.mkdir()
+    image = context.runtime_dir / "ship-at-sea.jpg"
+    image.write_bytes(b"")
+    notes = context.runtime_dir / "notes.md"
+    notes.write_text("hello", encoding="utf-8")
+    context.notes_path = str(notes)
+    payload = json.dumps([
+        {"path": str(folder)},
+        {"name": "ship at sea", "path": str(image)},
+        str(notes),
+    ])
+    reply = f"Here are {folder}/, {image}, and {notes}."
+    scripted = [
+        {"tool_calls": [{"id": "c1", "function": {"name": tool, "arguments": "{}"}}], "content": ""},
+        {"content": reply, "tool_calls": []},
+    ]
+
+    def fake_chat(_cfg, messages, tools=None):
+        context.seen_messages = messages
+        return scripted.pop(0)
+
+    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
+    context.router_patch = patch("agavai.orchestrator.select_head_ids", return_value=["files"])
+    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
+    context.tool_patch = patch("agavai.orchestrator.call_tool", return_value=payload)
+    context.health_patch.start()
+    context.router_patch.start()
+    context.chat_patch.start()
+    context.tool_mock = context.tool_patch.start()
+    context.add_cleanup(context.health_patch.stop)
+    context.add_cleanup(context.router_patch.stop)
     context.add_cleanup(context.chat_patch.stop)
     context.add_cleanup(context.tool_patch.stop)
 
@@ -168,6 +207,19 @@ def step_follow_yes(context, text):
 @then('a follow-up is not expected for "{text}"')
 def step_follow_no(context, text):
     assert not wants_followup(text), text
+
+
+@then("the model tool text should not contain the notes path")
+def step_no_path(context):
+    tool_text = " ".join(
+        str(message.get("content") or "")
+        for message in context.seen_messages
+        if message.get("role") == "tool"
+    )
+    assert context.notes_path not in tool_text, tool_text
+    assert '"kind": "folder"' in tool_text, tool_text
+    assert "ship at sea" in tool_text, tool_text
+    assert "notes.md" in tool_text, tool_text
 
 
 @then('the model messages included "{text}"')

@@ -175,8 +175,8 @@ def run_turn(
             calls = parse_tool_calls(message)
             content = (message.get("content") or "").strip()
             if not calls:
-                reply = read_aloud(_strip_think(content) or "Done.", ui.data.get("display") if ui else None)
                 _list_images(text, cfg, ui, messages)
+                reply = read_aloud(_strip_think(content) or "Done.", ui.data.get("display") if ui else None)
                 messages.append({"role": "assistant", "content": reply})
                 if ui:
                     _remember(ui, messages, head_ids)
