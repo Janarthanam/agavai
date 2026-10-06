@@ -107,6 +107,13 @@ def step_earcon(context):
     assert played, context.popen.call_args_list
 
 
+@then("no audio should be played")
+def step_no_audio(context):
+    for call in list(context.run.call_args_list) + list(context.popen.call_args_list):
+        argv = [str(arg) for arg in call.args[0]]
+        assert not any("pw-play" in arg or arg.endswith("paplay") for arg in argv), argv
+
+
 @then("the TTS server should be started")
 def step_server(context):
     found = False

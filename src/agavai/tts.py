@@ -56,8 +56,7 @@ def notify(text: str) -> None:
 
 
 def cue_listen(cfg: Config) -> None:
-    """Instant Siri-style chime, then start warming Kokoro in the background."""
-    _play_tones(((880, 0.07), (1320, 0.11)))
+    """Warm Kokoro silently; the overlay indicates that the microphone is open."""
     ensure_tts_server(cfg)
 
 

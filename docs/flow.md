@@ -225,8 +225,8 @@ Heads:
 [src/agavai/tts.py](../src/agavai/tts.py).
 
 - **Deploy.** A Kokoro process started by ListenSession on the first listen or think cue, if the socket is down. Weights come from `scripts/download-tts.sh`. eSpeak-ng is a system package. The notification sender is Omarchy’s.
-- **Lifecycle.** Listen cue: two tones, then warm the socket. Think cue: `ack-on-it.wav` if Kokoro has written it, otherwise two tones. Final speech tries `[tts] prefer`, then Kokoro, then eSpeak, then a notification. Kokoro playback in ListenSession is polled; cancel kills the process group. eSpeak plays to completion inside the engine call. `agavai ask` uses a blocking speak and does not poll cancel during playback.
-- **Latency.** No time-to-first-audio measurement. Assumption: warming at the start of listening hides model load, so the reply plays when the sentence is ready. A cold socket on a short turn would break that. The listen chime itself is immediate because it is generated tones, not Kokoro.
+- **Lifecycle.** Listen cue: warm the socket silently; the overlay indicates listening. Think cue: `ack-on-it.wav` if Kokoro has written it, otherwise two tones. Final speech tries `[tts] prefer`, then Kokoro, then eSpeak, then a notification. Kokoro playback in ListenSession is polled; cancel kills the process group. eSpeak plays to completion inside the engine call. `agavai ask` uses a blocking speak and does not poll cancel during playback.
+- **Latency.** No time-to-first-audio measurement. Assumption: warming at the start of listening hides model load, so the reply plays when the sentence is ready. A cold socket on a short turn would break that. Listening starts without an audible cue, including when the microphone reopens between turns.
 - **Throughput.** One playback at a time. A new session starts another server only if the socket does not answer.
 - **Configuration.** `[tts] prefer`, `voice` (`af_bella`), `model_path`, `voices_path`, `venv`.
 - **Observability.** Stderr prints the engine name, or that playback fell through to a notification. The server appends to `kokoro-serve.log` in the runtime directory.
@@ -296,7 +296,7 @@ What crosses each boundary:
 1. Bar receives a left click and leaves with the command `agavai invoke`. No transcript yet.
 2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and does not start capture.
 3. Snapshot receives `begin_session`: empty turns, a new `session_id`, phase `listening`. Overlay receives that file and shows the orb.
-4. Speech receives the listen cue and leaves tones plus a Kokoro socket if one was not already up.
+4. Speech receives the listen cue and warms the Kokoro socket silently if one was not already up.
 5. Streaming ASR receives microphone audio. It leaves interim hypotheses while the person is still talking. Turn taking writes each one to user context with `final` false. The router is not called.
 6. End of utterance leaves the finished line. An end-of-boundary marker leaves another partial and does not commit. Enter commits whatever the hypothesis is now.
 7. Orchestrator receives the finished text and an empty history. It leaves a health check. If LlamaServer is down, it leaves the hint sentence and does not call Router.
