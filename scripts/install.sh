@@ -38,6 +38,7 @@ systemctl --user restart agavai-llm.service >/dev/null || true
 PLUGIN_DST="$HOME/.config/omarchy/plugins/janar.agavai"
 mkdir -p "$PLUGIN_DST"
 cp -f "$ROOT/plugin/manifest.json" "$ROOT/plugin/Chat.qml" \
+  "$ROOT/plugin/VoiceOrb.qml" \
   "$ROOT/plugin/NativeButton.qml" "$ROOT/plugin/ResultBrowser.qml" \
   "$ROOT/plugin/BarWidget.qml" "$ROOT/plugin/agavai.png" "$PLUGIN_DST/"
 omarchy plugin validate "$PLUGIN_DST"
@@ -61,7 +62,7 @@ update-desktop-database "$APPS" >/dev/null 2>&1 || true
 
 echo "Installed agavai and agavai-llm to $BIN"
 echo "App launcher: Agavai  (agavai app)"
-echo "Chat overlay plugin: janar.agavai (bottom-centered voice orb; live tool calls)"
+echo "Chat overlay plugin: janar.agavai (compact corner orb; expandable results)"
 echo "Active model: agavai model   (list/set in ~/.config/agavai/config.toml)"
 echo "Download LLM: $ROOT/scripts/download-model.sh [model-id]"
 echo "Download Kokoro TTS (CPU): $ROOT/scripts/download-tts.sh"

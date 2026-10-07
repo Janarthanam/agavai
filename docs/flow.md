@@ -9,11 +9,12 @@ This file wins on runtime behavior where those documents disagree. [architecture
 Agavai is a local Omarchy assistant for one person at the machine.
 
 - One overlay. The launcher, Super+M, Super+Ctrl+M, and the bar icon open `janar.agavai`. Invoking again while a request is active raises that overlay and does not restart capture.
-- Speak, and the words appear while you are still talking. The utterance is sent when streaming ASR emits end of utterance. A second shortcut press is not required. Enter sends the current line immediately. Escape dismisses.
-- The overlay stays up after a turn, with the results still visible, and listens for the next utterance. A new session, after the previous process has exited, starts blank.
+- Speak, and the words appear while you are still talking. The utterance is sent when streaming ASR emits end of utterance. A second shortcut press is not required. In the expanded view, Enter sends the current line immediately and Escape dismisses.
+- The overlay starts as an orb at the bottom right without keyboard focus. Clicking expands transcripts and results; minimizing releases focus without changing capture. Incoming snapshots never expand it automatically.
+- The overlay stays up after a turn, with results retained for the expanded view, and listens for the next utterance. A new session, after the previous process has exited, starts blank.
 - The reply is one or two short spoken sentences. Richer content (files, images, lists) is on screen. Spoken lines use names, not filesystem paths.
 - Desktop actions go through an allowlist. There is no generic shell. The model may claim a change only after a tool result says it happened.
-- Interim text from streaming ASR is shown on the overlay and is not a turn. The finished line, after end of utterance or Enter, is the only user text the LLM sees. Partials are replaced when the hypothesis changes. [ui-design.md](ui-design.md) already states that rule.
+- Interim text from streaming ASR is shown in the expanded overlay and is not a turn. The finished line, after end of utterance or Enter, is the only user text the LLM sees. Partials are replaced when the hypothesis changes. [ui-design.md](ui-design.md) already states that rule.
 - F9 dictation stays on Voxtype. The assistant does not start, stop, or cancel a Voxtype recording. The two still must not use the microphone at the same time. Agavai does not enforce that lock.
 - The brain is an on-device GGUF. Tool execution stays on the machine. The exception is the default router, which may send the utterance to OpenRouter Jev.
 

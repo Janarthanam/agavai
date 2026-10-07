@@ -12,6 +12,8 @@ Item {
     property var shell: null
     property var manifest: null
     property bool opened: false
+    property bool compact: true
+    readonly property bool wantsKeyboardFocus: opened && !compact
     property string phase: "idle"
     property string phaseLabel: "Ready"
     property string sessionId: ""
@@ -62,6 +64,7 @@ Item {
             return;
         dismissedSession = sessionId;
         opened = false;
+        compact = true;
         if (phase === "listening" || phase === "transcribing" || phase === "thinking" || phase === "speaking")
             Quickshell.execDetached(["agavai", "cancel"]);
         if (shell && typeof shell.hide === "function")
@@ -116,25 +119,15 @@ Item {
             opened = true;
     }
     function acquireFocus() {
-        if (!opened)
+        if (!wantsKeyboardFocus)
             return;
         Qt.callLater(function () {
-            keyTarget.forceActiveFocus();
+            if (root.wantsKeyboardFocus)
+                keyTarget.forceActiveFocus();
         });
     }
     onExpandedChanged: acquireFocus()
-    onOpenedChanged: acquireFocus()
-    Timer {
-        interval: 32
-        repeat: true
-        running: root.opened
-        onTriggered: {
-            var working = root.phase === "thinking" || root.phase === "speaking" || root.phase === "transcribing";
-            // Silence settles the orb. Speech is what speeds it up.
-            var step = root.listening ? 0.006 + root.strength * 0.1 : working ? 0.022 : 0.004;
-            orb.spin = (orb.spin + step) % (Math.PI * 2);
-        }
-    }
+    onWantsKeyboardFocusChanged: acquireFocus()
 
     FileView {
         id: uiFile
@@ -173,6 +166,7 @@ Item {
     // stays an unbordered orb; results grow a sheet from that same orb.
     PanelWindow {
         id: panel
+        objectName: "agavaiPanel"
         screen: root.targetScreen
         visible: root.opened
         anchors {
@@ -184,7 +178,7 @@ Item {
         color: "transparent"
         WlrLayershell.namespace: "agavai-chat"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.wantsKeyboardFocus ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         exclusionMode: ExclusionMode.Ignore
         mask: Region {
             item: stage
@@ -192,17 +186,19 @@ Item {
 
         Item {
             id: stage
+            objectName: "agavaiStage"
             readonly property int sheetWidth: Math.max(1, Math.min(Style.space(680), panel.width - Style.gapsOut * 2))
             readonly property int voiceWidth: Math.max(1, Math.min(Style.space(440), panel.width - Style.gapsOut * 2))
-            width: root.expanded ? sheetWidth : voiceWidth
+            width: root.compact ? Style.space(80) : root.expanded ? sheetWidth : voiceWidth
             readonly property int inset: Style.space(18)
-            height: Math.min(Math.max(col.implicitHeight + inset * 2, Style.space(220)), Math.max(Style.space(280), panel.height - Style.space(40)))
+            height: root.compact ? Style.space(80) : Math.min(Math.max(col.implicitHeight + inset * 2, Style.space(220)), Math.max(Style.space(280), panel.height - Style.space(40)))
             clip: true
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: root.compact ? parent.width - width - Style.space(28) : (parent.width - width) / 2
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Style.space(28)
 
             Rectangle {
+                visible: !root.compact
                 anchors.fill: parent
                 radius: Style.space(28)
                 color: Util.alpha(Color.background, 0.94)
@@ -210,8 +206,10 @@ Item {
 
             FocusScope {
                 id: keyTarget
+                objectName: "agavaiDetails"
+                visible: !root.compact
                 anchors.fill: parent
-                focus: true
+                focus: root.wantsKeyboardFocus
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
                         root.dismiss();
@@ -236,11 +234,11 @@ Item {
 
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(dismissMark.implicitHeight, phaseText.implicitHeight)
+                        Layout.preferredHeight: Math.max(headerActions.implicitHeight, phaseText.implicitHeight)
                         Text {
                             id: phaseText
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: Math.max(1, parent.width - dismissMark.width - Style.space(12))
+                            width: Math.max(1, parent.width - headerActions.width * 2 - Style.space(12))
                             horizontalAlignment: Text.AlignHCenter
                             text: root.snapshot.error ? "Something went wrong" : root.phase === "idle" && root.expanded ? "Here’s what I found" : root.phaseLabel
                             textFormat: Text.PlainText
@@ -249,22 +247,22 @@ Item {
                             font.pixelSize: Style.font.caption
                             elide: Text.ElideRight
                         }
-                        Text {
-                            id: dismissMark
+                        Row {
+                            id: headerActions
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "×"
-                            textFormat: Text.PlainText
-                            color: root.inkMuted
-                            font.family: Style.font.family
-                            font.pixelSize: Style.space(18)
-                            Accessible.role: Accessible.Button
-                            Accessible.name: "Dismiss assistant"
-                            Accessible.onPressAction: root.dismiss()
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -Style.space(6)
-                                cursorShape: Qt.PointingHandCursor
+                            spacing: Style.space(4)
+                            NativeButton {
+                                objectName: "agavaiMinimize"
+                                quiet: true
+                                text: "−"
+                                accessibleName: "Minimize assistant"
+                                onClicked: root.compact = true
+                            }
+                            NativeButton {
+                                quiet: true
+                                text: "×"
+                                accessibleName: "Dismiss assistant"
                                 onClicked: root.dismiss()
                             }
                         }
@@ -440,58 +438,34 @@ Item {
                         Layout.alignment: Qt.AlignHCenter
                         Layout.preferredWidth: root.listening && root.expanded ? Style.space(96) : Style.space(132)
                         Layout.preferredHeight: root.listening && root.expanded ? Style.space(96) : Style.space(132)
-                        Canvas {
-                            id: orb
+                        VoiceOrb {
                             anchors.fill: parent
-                            property real spin: 0
-                            onSpinChanged: requestPaint()
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            Connections {
-                                target: root
-                                function onStrengthChanged() { orb.requestPaint() }
-                            }
-                            onPaint: {
-                                var ctx = getContext("2d");
-                                if (!ctx || width < 2 || height < 2)
-                                    return;
-                                ctx.reset();
-                                var cx = width / 2;
-                                var cy = height / 2;
-                                var pulse = 0.78 + root.strength * 0.34;
-                                var radius = Math.min(width, height) * 0.31 * pulse;
-                                // A ring only while the mic is open, so listening is distinct from results.
-                                if (root.listening) {
-                                    ctx.beginPath();
-                                    ctx.lineWidth = Math.max(2, width * 0.02) + root.strength * 3;
-                                    ctx.strokeStyle = Qt.rgba(0.55, 0.78, 1, 0.38 + root.strength * 0.5);
-                                    ctx.arc(cx, cy, radius * (1.22 + root.strength * 0.38), 0, Math.PI * 2);
-                                    ctx.stroke();
-                                }
-                                var glow = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius * 1.85);
-                                glow.addColorStop(0, Qt.rgba(0.62, 0.45, 1, 0.34 + root.strength * 0.28));
-                                glow.addColorStop(1, Qt.rgba(0.62, 0.45, 1, 0));
-                                ctx.fillStyle = glow;
-                                ctx.fillRect(0, 0, width, height);
-                                ctx.save();
-                                ctx.beginPath();
-                                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-                                ctx.clip();
-                                var colors = ["#64d2ff", "#30d158", "#ffd60a", "#ff375f", "#bf5af2"];
-                                for (var i = 0; i < colors.length; i++) {
-                                    var angle = spin + i * Math.PI * 2 / colors.length;
-                                    var bx = cx + Math.cos(angle) * radius * 0.45;
-                                    var by = cy + Math.sin(angle * 1.31) * radius * 0.45;
-                                    var br = radius * (0.72 + 0.18 * Math.sin(spin * 1.4 + i));
-                                    var blob = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-                                    blob.addColorStop(0, colors[i]);
-                                    blob.addColorStop(1, Qt.rgba(1, 1, 1, 0));
-                                    ctx.fillStyle = blob;
-                                    ctx.fillRect(0, 0, width, height);
-                                }
-                                ctx.restore();
-                            }
+                            phase: root.phase
+                            strength: root.strength
                         }
+                    }
+                }
+            }
+            VoiceOrb {
+                id: compactOrb
+                objectName: "agavaiCompactOrb"
+                visible: root.compact
+                anchors.fill: parent
+                phase: root.phase
+                strength: root.strength
+                Accessible.role: Accessible.Button
+                Accessible.name: "Expand Agavai"
+                Accessible.onPressAction: root.compact = false
+                MouseArea {
+                    objectName: "agavaiCompactPointer"
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.RightButton)
+                            root.dismiss();
+                        else
+                            root.compact = false;
                     }
                 }
             }
