@@ -25,9 +25,13 @@ Voxtype is not in this capture. Dictation keeps its own file interface. The assi
 
 The model is [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1), a cache-aware streaming FastConformer with an RNN-T decoder, about 120 million parameters. Audio arrives in short chunks while the person is still talking. The encoder keeps a cache, so each chunk continues the sentence instead of re-reading it from the start. The attention context shipped with the model is 70 frames of the past and 1 frame of lookahead, about 80 ms. The model card states a design latency of 80–160 ms. On its end-of-utterance test the median delay is 160 ms and the 90th percentile is 280 ms.
 
-The device is configurable. The default is CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. The cache-aware ONNX used here steps 128 mel frames at a time, about 1.28 seconds. Partials update on that step. The 80–160 ms figure above is the model's attention lookahead, from the model card.
+The device is configurable. The default is CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. The dynamic cache-aware ONNX steps 16 new mel frames at a time, 160 ms, with nine preceding frames for the subsampling context. The frontend uses the reference EOU pipeline's HTK mel scale with area normalization and raw log features. Pre-emphasis and overlapping FFT windows continue across microphone packets. Only the start and explicit end of a stream are padded. The full-precision decoder avoids the dropped tokens observed with the earlier INT8 decoder. `scripts/download-asr.sh` pins and verifies both exports from [parakeet-rs](https://huggingface.co/altunenes/parakeet-rs).
 
 Each step returns the current hypothesis. Until an end marker appears, that text replaces the previous partial on the overlay. It is not a new conversation turn. That rule is already in [ui-design.md](ui-design.md).
+
+After end of utterance the worker waits for the parent's reset before accepting another turn. Already queued audio cannot start a second hypothesis while the parent is committing the first.
+
+An end-of-utterance token with no visible words is ignored in the worker. Silence keeps the same capture open, so starting to speak does not race a microphone restart.
 
 The model uses two markers:
 

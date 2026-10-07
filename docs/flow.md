@@ -140,9 +140,9 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 
 Transport in and the recognizer. The stage is specified in [audio.md](audio.md). The running timer and file transcript live in [src/agavai/meter.py](../src/agavai/meter.py) and [src/agavai/voxtype.py](../src/agavai/voxtype.py) until this replaces them. F9 keeps Voxtype.
 
-- **Deploy.** In the listen process. One capture of the default source, 16 kHz, mono, 16-bit. The model is Parakeet-Realtime-EOU-120M. Not a separate service.
+- **Deploy.** In the listen process. One capture of the default source, 16 kHz, mono, 16-bit. The model is Parakeet-Realtime-EOU-120M, with a dynamic cache-aware encoder and full-precision decoder installed by `scripts/download-asr.sh`. Not a separate service.
 - **Lifecycle.** Each chunk updates a cache-aware hypothesis. Interim text is a partial. End of utterance clears that stream’s cache after the line is committed. End of boundary updates the partial and does not commit.
-- **Latency.** Model-card design latency is 80–160 ms. End-of-utterance median on the card’s test is 160 ms. No figure has been measured here.
+- **Latency.** The worker processes 160 ms of new features per step and waits for complete overlapping FFT windows. Model-card design latency is 80–160 ms. End-of-utterance median on the card’s test is 160 ms. No end-to-end latency has been measured here.
 - **Throughput.** One stream. One hypothesis at a time.
 - **Configuration.** Device defaults to CPU. GPU is used when the config selects GPU and an NVIDIA GPU is present.
 - **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The chosen device is not yet written anywhere else.

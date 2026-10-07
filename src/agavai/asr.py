@@ -46,7 +46,7 @@ class StreamingRecognizer:
         python = Path(cfg.asr.venv).expanduser() / "bin" / "python"
         missing = [
             name
-            for name in ("streaming_encoder.fp16.onnx", "decoder_joint-model.int8.onnx", "vocab.txt")
+            for name in ("encoder.onnx", "decoder_joint.onnx", "vocab.txt")
             if not (root / name).is_file()
         ]
         if missing:

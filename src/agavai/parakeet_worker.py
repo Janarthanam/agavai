@@ -8,8 +8,8 @@ stdlib-only and speaks a length-prefixed PCM protocol on stdin:
 
 Stdout is JSON lines: ready, interim, eou, eob, reset, error.
 
-The cache-aware encoder export steps 128 mel frames at a time (about 1.28 s
-of audio). That is this ONNX file's step, not the model card's 80 ms lookahead.
+The cache-aware encoder steps 16 new mel frames (160 ms) with nine frames
+of pre-encode context. PCM and mel overlap survive transport boundaries.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ N_FFT = 512
 WIN = 400
 HOP = 160
 N_MELS = 128
-# center=True STFT: frames = samples/hop + 1, so 127 hops produce 128 frames.
-CHUNK_SAMPLES = 127 * HOP
+CHUNK_FRAMES = 16
+PRE_ENCODE_FRAMES = 9
 BLANK = 1026
 EOU = 1024
 EOB = 1025
@@ -51,31 +51,15 @@ def read_exact(n: int) -> bytes | None:
 
 
 def hz_to_mel(frequencies: np.ndarray) -> np.ndarray:
-    f_sp = 200.0 / 3
-    min_log_hz = 1000.0
-    min_log_mel = min_log_hz / f_sp
-    logstep = np.log(6.4) / 27.0
-    mels = frequencies / f_sp
-    log_t = frequencies >= min_log_hz
-    if np.any(log_t):
-        mels = mels.copy()
-        mels[log_t] = min_log_mel + np.log(frequencies[log_t] / min_log_hz) / logstep
-    return mels
+    return 2595.0 * np.log10(1.0 + frequencies / 700.0)
 
 
 def mel_to_hz(mels: np.ndarray) -> np.ndarray:
-    f_sp = 200.0 / 3
-    min_log_hz = 1000.0
-    min_log_mel = min_log_hz / f_sp
-    logstep = np.log(6.4) / 27.0
-    freqs = f_sp * mels
-    log_t = mels >= min_log_mel
-    freqs = np.where(log_t, min_log_hz * np.exp(logstep * (mels - min_log_mel)), freqs)
-    return freqs
+    return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
 
 
 def mel_filterbank() -> np.ndarray:
-    """Slaney mel matrix, matching NeMo's librosa filterbank. No feature norm."""
+    """HTK mel scale with area normalization, matching the EOU reference frontend."""
     n_freqs = N_FFT // 2 + 1
     fftfreqs = np.linspace(0, SAMPLE_RATE / 2, n_freqs)
     mel_f = mel_to_hz(np.linspace(hz_to_mel(np.array([0.0]))[0], hz_to_mel(np.array([SAMPLE_RATE / 2]))[0], N_MELS + 2))
@@ -104,20 +88,42 @@ FB = mel_filterbank()
 WINDOW = hann_window()
 
 
-def log_mel(samples: np.ndarray) -> np.ndarray:
-    """Raw log-mel, shape [128, frames]. The ONNX package is not per-feature normalized."""
-    x = np.concatenate([samples[:1], samples[1:] - np.float32(0.97) * samples[:-1]]).astype(np.float32)
-    x = np.pad(x, (N_FFT // 2, N_FFT // 2))
-    n_frames = 1 + (x.shape[0] - N_FFT) // HOP
-    frames = np.lib.stride_tricks.as_strided(
-        x,
-        shape=(n_frames, N_FFT),
-        strides=(x.strides[0] * HOP, x.strides[0]),
-    )
+def log_mel(frames: np.ndarray) -> np.ndarray:
+    """Raw log-mel from complete FFT windows; no per-feature normalization."""
     spec = np.fft.rfft(frames * WINDOW, axis=1)
     power = (spec.real**2 + spec.imag**2).astype(np.float32)
     mel = power @ FB.T
     return np.log(mel + LOG_GUARD).astype(np.float32).T
+
+
+class MelStream:
+    def __init__(self) -> None:
+        self.pending = np.zeros(N_FFT // 2, np.float32)
+        self.previous: np.float32 | None = None
+        self.samples = 0
+        self.frames = 0
+
+    def feed(self, samples: np.ndarray, *, final: bool = False) -> np.ndarray:
+        if samples.size:
+            emphasized = samples.copy()
+            emphasized[1:] -= np.float32(0.97) * samples[:-1]
+            if self.previous is not None:
+                emphasized[0] -= np.float32(0.97) * self.previous
+            self.previous = samples[-1]
+            self.samples += samples.size
+            self.pending = np.concatenate([self.pending, emphasized])
+        if final:
+            self.pending = np.concatenate([self.pending, np.zeros(N_FFT // 2, np.float32)])
+        count = max(0, 1 + (self.pending.size - N_FFT) // HOP)
+        if final:
+            count = min(count, self.samples // HOP - self.frames)
+        if not count:
+            return np.empty((N_MELS, 0), np.float32)
+        windows = np.lib.stride_tricks.sliding_window_view(self.pending, N_FFT)[::HOP][:count]
+        mel = log_mel(windows)
+        self.pending = self.pending[count * HOP:]
+        self.frames += count
+        return mel
 
 
 def decode(ids: list[int], vocab: list[str]) -> str:
@@ -134,54 +140,70 @@ class Stream:
         if device == "cuda":
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         opts = ort.SessionOptions()
-        self.encoder = ort.InferenceSession(str(root / "streaming_encoder.fp16.onnx"), opts, providers=providers)
-        self.decoder = ort.InferenceSession(str(root / "decoder_joint-model.int8.onnx"), opts, providers=providers)
+        self.encoder = ort.InferenceSession(str(root / "encoder.onnx"), opts, providers=providers)
+        self.decoder = ort.InferenceSession(str(root / "decoder_joint.onnx"), opts, providers=providers)
         self.vocab = (root / "vocab.txt").read_text(encoding="utf-8").splitlines()
         self.reset()
 
     def reset(self) -> None:
-        self.pre_cache = np.zeros((1, N_MELS, 16), np.float32)
+        self.frontend = MelStream()
+        self.pending_mel = np.empty((N_MELS, 0), np.float32)
+        self.pre_cache = np.zeros((N_MELS, PRE_ENCODE_FRAMES), np.float32)
+        self.ended = False
         self.cache_lc = np.zeros((17, 1, 70, 512), np.float32)
         self.cache_lt = np.zeros((17, 1, 512, 8), np.float32)
-        self.cache_len = np.zeros((1,), np.int32)
+        self.cache_len = np.zeros((1,), np.int64)
         self.h = np.zeros((1, 1, 640), np.float32)
         self.c = np.zeros((1, 1, 640), np.float32)
         self.last = BLANK
         self.hyp: list[int] = []
 
-    def step(self, samples: np.ndarray) -> None:
-        mel = log_mel(samples)
-        frames = mel.shape[1]
-        if frames < 128:
-            pad = np.full((N_MELS, 128 - frames), np.log(LOG_GUARD), np.float32)
-            mel = np.concatenate([mel, pad], axis=1)
-            length = frames
-        else:
-            mel = mel[:, :128]
-            length = 128
+    def feed(self, samples: np.ndarray, *, final: bool = False) -> None:
+        if self.ended:
+            return
+        mel = self.frontend.feed(samples, final=final)
+        self.pending_mel = np.concatenate([self.pending_mel, mel], axis=1)
+        while self.pending_mel.shape[1] >= CHUNK_FRAMES:
+            chunk = self.pending_mel[:, :CHUNK_FRAMES]
+            self.pending_mel = self.pending_mel[:, CHUNK_FRAMES:]
+            if self._encode(chunk):
+                self.ended = True
+                return
+        if final and self.pending_mel.shape[1]:
+            # Only an explicit flush pads the final short chunk, never a live boundary.
+            chunk = np.pad(
+                self.pending_mel,
+                ((0, 0), (0, CHUNK_FRAMES - self.pending_mel.shape[1])),
+                constant_values=np.log(LOG_GUARD),
+            )
+            self.ended = self._encode(chunk)
+            self.pending_mel = np.empty((N_MELS, 0), np.float32)
+
+    def _encode(self, mel: np.ndarray) -> bool:
+        features = np.concatenate([self.pre_cache, mel], axis=1)
+        self.pre_cache = features[:, -PRE_ENCODE_FRAMES:]
         feeds = {
-            "audio_signal": mel[None, :, :].astype(np.float32),
-            "audio_length": np.asarray([length], np.int32),
-            "pre_cache": self.pre_cache,
+            "audio_signal": features[None, :, :],
+            "length": np.asarray([features.shape[1]], np.int64),
             "cache_last_channel": self.cache_lc,
             "cache_last_time": self.cache_lt,
             "cache_last_channel_len": self.cache_len,
         }
-        encoded, enc_len, self.pre_cache, self.cache_lc, self.cache_lt, self.cache_len = self.encoder.run(
+        encoded, enc_len, self.cache_lc, self.cache_lt, self.cache_len = self.encoder.run(
             [
-                "encoded_output",
-                "encoded_length",
-                "new_pre_cache",
+                "outputs",
+                "encoded_lengths",
                 "new_cache_last_channel",
                 "new_cache_last_time",
                 "new_cache_last_channel_len",
             ],
             feeds,
         )
-        steps = int(enc_len[0]) if enc_len is not None else encoded.shape[-1]
-        for t in range(max(0, steps)):
+        steps = int(enc_len[0])
+        for t in range(steps):
             if self._decode_frame(encoded[:, :, t : t + 1]):
-                return
+                return True
+        return False
 
     def _decode_frame(self, frame: np.ndarray) -> bool:
         """Greedy RNN-T for one encoder frame. True when the utterance ended."""
@@ -191,6 +213,7 @@ class Stream:
                 {
                     "encoder_outputs": frame,
                     "targets": np.asarray([[self.last]], np.int32),
+                    "target_length": np.asarray([1], np.int32),
                     "input_states_1": self.h,
                     "input_states_2": self.c,
                 },
@@ -198,13 +221,16 @@ class Stream:
             token = int(np.argmax(logits[0, 0, -1]))
             if token == BLANK:
                 return False
+            if token == EOU:
+                text = decode(self.hyp, self.vocab)
+                # Silence must not close capture and discard the beginning of speech.
+                if not text:
+                    return False
+                emit("eou", text)
+                return True
             self.last = token
             self.h = h2
             self.c = c2
-            if token == EOU:
-                emit("eou", decode(self.hyp, self.vocab))
-                self.reset()
-                return True
             if token == EOB:
                 emit("eob", decode(self.hyp, self.vocab))
                 continue
@@ -218,19 +244,13 @@ def main() -> None:
     device = sys.argv[2] if len(sys.argv) > 2 else "cpu"
     stream = Stream(model_dir, device)
     emit("ready")
-    pending = np.zeros((0,), np.float32)
     while True:
         header = read_exact(4)
         if header is None:
             break
         n = struct.unpack(">I", header)[0]
         if n == 0:
-            if pending.size:
-                padded = np.zeros((CHUNK_SAMPLES,), np.float32)
-                take = min(pending.size, CHUNK_SAMPLES)
-                padded[:take] = pending[:take]
-                stream.step(padded)
-                pending = np.zeros((0,), np.float32)
+            stream.feed(np.empty(0, np.float32), final=True)
             stream.reset()
             emit("reset")
             continue
@@ -238,10 +258,7 @@ def main() -> None:
         if payload is None:
             break
         samples = np.frombuffer(payload, dtype="<i2").astype(np.float32) / np.float32(32768.0)
-        pending = np.concatenate([pending, samples])
-        while pending.size >= CHUNK_SAMPLES:
-            stream.step(pending[:CHUNK_SAMPLES])
-            pending = pending[CHUNK_SAMPLES:]
+        stream.feed(samples)
 
 
 if __name__ == "__main__":
