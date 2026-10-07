@@ -5,7 +5,7 @@ Replace the silence timer and the Voxtype file on the assistant with Parakeet-Re
 ## Surface
 
 - [~] P0 voice Stream the recognizer into the listen loop and commit on end of utterance
-- [~] P0 voice Correct dropped words and premature turn endings at streaming boundaries
+- [x] P0 voice Correct dropped words and premature turn endings at streaming boundaries
 
 ### Log
 
@@ -17,3 +17,4 @@ Replace the silence timer and the Voxtype file on the assistant with Parakeet-Re
 - Changed files for this fix: `src/agavai/parakeet_worker.py`, `src/agavai/asr.py` (asset names only), `scripts/download-asr.sh`, `features/asr_worker.feature`, `features/steps/asr_worker_steps.py`, `features/support/asr_checks.py`, `features/fixtures/asr-sentence.wav`, `features/fixtures/README.md`, `tests/README.md`, `docs/audio.md`, `docs/flow.md`, and this task log. Existing uncommitted logging/error-handling changes are excluded from the fix's commit.
 - 2026-10-07 13:16 +0530 — Codex session asr-boundaries — frontend alignment. A new one-second initial-silence replay still cut the sentence tail with the previous Slaney-scale frontend. Matching the reference EOU frontend's HTK scale fixes that replay exactly. Empty EOU tokens are ignored without closing capture; nonempty EOU remains the commit signal. Added numerical mel-scale anchors and a real speech scenario for initial silence.
 - 2026-10-07 13:18 +0530 — Codex session asr-boundaries — implementation complete, awaiting commit and approval to install assets outside the repository. Full Behave suite: 17 features, 128 scenarios, 477 steps passed, with `AGAVAI_ASR_TEST_MODEL_DIR=/tmp/agavai-corrected-model` and `XDG_RUNTIME_DIR=/tmp/agavai-silent-listening-tests`. Parent/worker startup handshake passed. `bash -n scripts/download-asr.sh`, `git diff --check`, and downloader size/checksum recognition of regular files passed. Reviewed the diff. Downloaded encoder/decoder hashes match the pinned manifest. No live speech was recorded for these tests.
+- 2026-10-07 13:20 +0530 — Codex session asr-boundaries — complete. Fix committed as `00bf41c`. Approved installation copied the verified encoder and decoder to the configured model directory, retaining the earlier assets. All three model replay scenarios pass against the installed copies without a test model override: full sentence across three packet sizes, initial silence, and two successive turns. The full 128-scenario suite passed before installation. Close and reopen Agavai to load the fix. Only this subtask is marked complete; the earlier streaming rollout remains in its prior state.
