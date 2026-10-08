@@ -5,7 +5,7 @@ The listening overlay still opens as an Omarchy menu card. Listening should be a
 ## Surface
 
 - [~] P0 ui Replace the top menu popup with a bottom-centered voice orb, and show results on that same surface without menu chrome
-- [~] P0 ui Keep listening in an orb-only corner mode without taking desktop focus
+- [x] P0 ui Keep listening in an orb-only corner mode without taking desktop focus
 
 ### Log
 
@@ -19,3 +19,5 @@ The listening overlay still opens as an Omarchy menu card. Listening should be a
 - 2026-10-08T11:39:36+05:30 — Codex session outside-focus — in progress. User reports expanded modal blocks clicks and requests minimizing to the bottom-right orb when another window is clicked. Expanded mode still uses Exclusive keyboard focus, which Hyprland also applies to pointer routing. Scope: switch expanded focus to OnDemand, minimize on native focus loss while retaining capture/session, update native regression and UI contracts. Preserve unrelated changes. Earlier capture diagnostics confirmed a real headset stream and transcription; explicit cancellation ended observed sessions.
 
 - 2026-10-08T11:43:06+05:30 — Codex session outside-focus — implemented and validated, awaiting commit and approved live installation. Changed files: `plugin/Chat.qml`, `features/support/compact-ui.qml`, `README.md`, `docs/ui-design.md`, `docs/flow.md`, and this task. Expanded layer now uses OnDemand; expanding activates the native window, losing window focus switches only the compact flag. Regression passed with a real second native window taking focus and receiving typing, while the original listening phase/session remains intact. Existing compact geometry, minimize, snapshot, dismissal and reopen checks also pass; plugin validation and diff whitespace pass. Installed model speech replay also passed during diagnostics. Reviewed the diff; unrelated edits remain excluded.
+
+- 2026-10-08T11:43:36+05:30 — Codex session outside-focus — complete. Fix committed as `e970c5f`; approved installation replaced only live `Chat.qml`, retaining the backup at `/tmp/agavai-chat-pre-outside-focus.qml`. Installed source matches; plugin validation and rescan succeeded. Immediate ping raced asynchronous loading, then retry returned `ok`. Native regression verifies normal focus and minimization without cancelling listening; original surface task and unrelated changes remain untouched.
