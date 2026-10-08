@@ -19,6 +19,8 @@ flowchart LR
 
 One capture reads the default microphone at 16 kHz, one channel, 16-bit. That is the format the streaming ASR model expects. A second capture is not opened to decide when the person has stopped. If the orb still grows and shrinks with the voice, that meter must not start or stop a request.
 
+The capture pump also measures RMS dBFS from those same PCM packets. The session thread publishes the latest level to the snapshot at most 10 times per second, independently of recognizer hypotheses. No second microphone stream or VAD gate is used. In both orb views, a breathing listening ring remains visible during silence; speech makes the orb respond more strongly.
+
 Voxtype is not in this capture. Dictation keeps its own file interface. The assistant does not start, stop, or cancel a Voxtype recording.
 
 ## Streaming ASR

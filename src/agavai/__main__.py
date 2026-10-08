@@ -384,7 +384,10 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
     write_state(cfg, "listening")
     hypothesis = ""
     try:
-        for kind, text in stream.events(should_stop=stop_requested):
+        for kind, text in stream.events(
+            on_level=lambda db: ui.level(db, "off", "off"),
+            should_stop=stop_requested,
+        ):
             if kind == "interim" and text:
                 hypothesis = text
                 ui.partial(text)

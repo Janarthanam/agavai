@@ -198,15 +198,16 @@ Item {
         Item {
             id: stage
             objectName: "agavaiStage"
-            readonly property int sheetWidth: Math.max(1, Math.min(Style.space(680), panel.width - Style.gapsOut * 2))
-            readonly property int voiceWidth: Math.max(1, Math.min(Style.space(440), panel.width - Style.gapsOut * 2))
+            readonly property int edgeMargin: Style.space(28)
+            readonly property int sheetWidth: Math.max(1, Math.min(Style.space(680), panel.width - edgeMargin * 2))
+            readonly property int voiceWidth: Math.max(1, Math.min(Style.space(440), panel.width - edgeMargin * 2))
             width: root.compact ? Style.space(80) : root.expanded ? sheetWidth : voiceWidth
             readonly property int inset: Style.space(18)
             height: root.compact ? Style.space(80) : Math.min(Math.max(col.implicitHeight + inset * 2, Style.space(220)), Math.max(Style.space(280), panel.height - Style.space(40)))
             clip: true
-            x: root.compact ? parent.width - width - Style.space(28) : (parent.width - width) / 2
+            x: parent.width - width - edgeMargin
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.space(28)
+            anchors.bottomMargin: edgeMargin
 
             Rectangle {
                 visible: !root.compact

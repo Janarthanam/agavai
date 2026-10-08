@@ -16,10 +16,11 @@ import shutil
 import struct
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from agavai.config import Config
-from agavai.meter import ParecSource
+from agavai.meter import ParecSource, rms_dbfs
 
 MIC_ERROR = "Microphone input is unavailable. Check your input device and try again."
 
@@ -92,7 +93,7 @@ class StreamingRecognizer:
             self.close()
             raise AsrError("Streaming ASR did not start.")
 
-    def events(self, should_stop=None):
+    def events(self, on_level, should_stop=None):
         if self.proc.poll() is not None:
             raise AsrError(self._stderr() or "Streaming ASR stopped.")
         if not shutil.which("parec"):
@@ -100,16 +101,24 @@ class StreamingRecognizer:
         self._mic_error.clear()
         self._pump_done.clear()
         self._stop_pump.clear()
+        self._level_db = None
+        next_level_at = 0.0
         self._parec = subprocess.Popen(ParecSource.ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self._pump = threading.Thread(target=self._pump_audio, args=(should_stop,), daemon=True)
         self._pump.start()
         try:
             while True:
+                line = self._read_line(0.05)
                 if should_stop and should_stop():
                     return
                 if self._mic_error.is_set():
                     raise AsrError(MIC_ERROR)
-                line = self._read_line(0.05)
+                # Publish on the session thread so level and transcript writes cannot race.
+                db = self._level_db
+                now = time.monotonic()
+                if db is not None and now >= next_level_at:
+                    on_level(db)
+                    next_level_at = now + 0.1
                 if line is None:
                     if self.proc.poll() is not None:
                         raise AsrError(self._stderr() or "Streaming ASR stopped.")
@@ -155,6 +164,7 @@ class StreamingRecognizer:
                         self._mic_error.set()
                     break
                 got = True
+                self._level_db = rms_dbfs(data)
                 self._write(data)
         except Exception:
             self._mic_error.set()
