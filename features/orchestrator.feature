@@ -37,6 +37,7 @@ Feature: Local tool loop
     Then the spoken reply should be "Which image do you want?"
     And the tool "wallpaper_list" should have been called once
     And the native result title is "Images"
+    And no context decision was requested
 
   Scenario: A follow-up sends the earlier conversation and keeps the image tools
     Given a chat UI in a temp runtime dir
@@ -45,6 +46,7 @@ Feature: Local tool loop
     When I run a turn with text "show me all the images of screensaver" on the chat UI
     Then the spoken reply should be "set the image you want as your screensaver"
     Given the router selects no heads
+    And the context response is "follow_up"
     And llama-server replies "Setting ship at sea."
     When I continue the turn with text "ship at sea"
     Then the spoken reply should be "Setting ship at sea."

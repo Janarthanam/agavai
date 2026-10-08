@@ -12,6 +12,7 @@ Agavai is a local Omarchy assistant for one person at the machine.
 - Speak, and the words appear while you are still talking. The utterance is sent when streaming ASR emits end of utterance. A second shortcut press is not required. In the expanded view, Enter sends the current line immediately and Escape dismisses.
 - The overlay starts as an orb at the bottom right without keyboard focus. Clicking expands transcripts and results at the same bottom-right corner; minimizing releases focus without changing capture. Both views keep a 28-logical-pixel bottom and right inset. The expanded view uses on-demand focus and minimizes when another window takes focus. Incoming snapshots never expand it automatically.
 - The overlay stays up after a turn, with results retained for the expanded view, and listens for the next utterance. A new session, after the previous process has exited, starts blank.
+- A context response from the local model distinguishes a follow-up from a new conversation. Follow-ups retain earlier results and messages. An unrelated query clears earlier conversation output and inherited tool heads before its answer is generated, while the same session stays active.
 - The reply is one or two short spoken sentences. Richer content (files, images, lists) is on screen. Spoken lines use names, not filesystem paths.
 - Desktop actions go through an allowlist. There is no generic shell. The model may claim a change only after a tool result says it happened.
 - Interim text from streaming ASR is shown in the expanded overlay and is not a turn. The finished line, after end of utterance or Enter, is the only user text the LLM sees. Partials are replaced when the hypothesis changes. [ui-design.md](ui-design.md) already states that rule.
@@ -91,12 +92,15 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **Stay listening after every completed turn.** The session returns to the microphone with the canvas kept. `wants_followup` is not consulted. A policy that reopened the mic only for questions would drop the “still listening” behavior [ui-design.md](ui-design.md) describes. Assumption: the user dismisses with Escape when they are done. An end of utterance with no words is not a turn, so it does not continue the stored messages.
 
+**Classify conversation context before the next answer.** When a completed utterance has stored history, the on-device model returns `follow_up` or `new_conversation` in a separate call with no tools, temperature zero, and at most 16 output tokens. It sees the new request and stored messages, including earlier tool results. A follow-up retains those messages, tool heads, and canvas; a new conversation clears them before routing and answering. This decision runs with every router backend. Neither the utterance count nor a matching tool head determines relevance. The first turn, partial speech, and empty utterances skip classification.
+
 ### How it fails
 
 | Failure | What happens |
 |---|---|
 | Shell cannot summon Overlay | Invoke exits. The microphone is not opened. |
 | llama-server is down | Orchestrator returns the systemctl hint. The session then listens again. |
+| Context classification fails or returns an invalid choice | Snapshot shows an error; the earlier canvas and model history remain. No action or answer call runs for that request. |
 | Jev times out, lacks a key, or HTTP fails | Keyword router, unless `[router] fallback` is `none`, in which case the turn has no tools. |
 | Jev answers `chat` and keywords still match | Keyword heads are used. The remote answer is not authoritative. |
 | No mic frames, or streaming ASR cannot start | Snapshot phase `error`. The session process exits. The turn is not run. |
@@ -168,8 +172,8 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 [src/agavai/orchestrator.py](../src/agavai/orchestrator.py) and [src/agavai/canvas.py](../src/agavai/canvas.py).
 
 - **Deploy.** In-process. `run_turn` on ListenSession, and also on the one-shot `agavai ask` process.
-- **Lifecycle.** Input is the utterance string plus, on a follow-up, the stored messages and heads. Output is the spoken sentence. It health-checks LlamaServer, asks Router for heads, merges with prior heads (at most two), and loops at most `max_tool_rounds`. A wallpaper or screensaver “show me” request runs `wallpaper_list` before the model speaks when that tool is in the selected schemas. Tool results pass through Snapshot in full. The model sees kind and spoken name, clipped to 500 characters, with paths removed. `<think>` blocks are stripped. Paths that leak into the final sentence are replaced the same way.
-- **Latency.** Bound by `max_tool_rounds` times `[llm] timeout_secs`, plus tool time. That is a ceiling (6 × 120 s plus tools), not a target. No typical-turn measurement is in the repo.
+- **Lifecycle.** Input is the utterance string plus stored messages and heads when the caller permits continuation. Output is the spoken sentence. It health-checks LlamaServer and, if there is history, classifies the new query's context locally. A `new_conversation` response clears the prior canvas, turns, model messages, and heads while preserving `session_id`; `follow_up` retains them. It then asks Router for heads, merges any retained heads (at most two), and loops at most `max_tool_rounds`. A wallpaper or screensaver “show me” request runs `wallpaper_list` before the model speaks when that tool is in the selected schemas. Tool results pass through Snapshot in full. The model sees kind and spoken name, clipped to 500 characters, with paths removed. `<think>` blocks are stripped. Paths that leak into the final sentence are replaced the same way.
+- **Latency.** Bound by `max_tool_rounds` times `[llm] timeout_secs`, plus tool time and one context call when there is history. That call uses the same timeout and a 16-token output cap. This is a ceiling, not a target. No typical-turn measurement is in the repo.
 - **Throughput.** One turn at a time inside the process. `agavai ask` does not share memory with ListenSession.
 - **Configuration.** `[llm] max_tool_rounds`, `max_tokens`, `temperature`, `timeout_secs`. The system prompt is fixed in code, including the local time line.
 - **Observability.** Tool start and tool done land on Snapshot. Router’s choice is not logged. A Python traceback is printed when the turn raises; the user hears “The local agent hit an error.”
@@ -237,7 +241,7 @@ Heads:
 [src/agavai/ui.py](../src/agavai/ui.py).
 
 - **Deploy.** A JSON file, `$XDG_RUNTIME_DIR/agavai/ui.json`, written by ListenSession or by `agavai ask`. Overlay and Bar only read it.
-- **Lifecycle.** Writes are a temp file and `replace`. `begin_session` clears turns, transcript, display, and the in-memory model messages, and sets a new `session_id`. `continue_listening` clears the live transcript line and the error, and leaves the canvas. After `agavai cancel` stores the session id in `dismissed-session`, further writes from that id are skipped. `ui-open` checks the session id, `openable`, an absolute path, and the extension allowlist, then runs `xdg-open` with a fixed argument list.
+- **Lifecycle.** Writes are a temp file and `replace`. `begin_session` clears turns, transcript, display, and the in-memory model messages, and sets a new `session_id`. `clear_conversation` clears conversation content and model heads while keeping that session id, so dismissal still suppresses late writes during a topic change. `continue_listening` clears the live transcript line and the error, and leaves the canvas. After `agavai cancel` stores the session id in `dismissed-session`, further writes from that id are skipped. `ui-open` checks the session id, `openable`, an absolute path, and the extension allowlist, then runs `xdg-open` with a fixed argument list.
 - **Latency.** The file is the UI protocol. Assumption: readers see a replace as one snapshot, not a torn write. Interim hypotheses are the hottest writer. A slow reader falls behind the file watch; nothing queues intermediate frames.
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.
 - **Configuration.** None beyond the runtime directory. Turn history kept on the overlay is five. Result text is clipped (280 characters on the tool row, 160 on arguments).
@@ -307,7 +311,7 @@ What crosses each boundary:
 11. Snapshot receives the full list and stores a `display` block whose items have paths. Orchestrator sends LlamaServer only kind and name, clipped to 500 characters.
 12. LlamaServer receives that tool message and leaves a short sentence. Speech receives the sentence after path substitution and leaves audio. Snapshot receives phase `speaking`, then phase `listening` with `display` still set.
 
-The stored model messages and the head `files` stay in the process. A second utterance is sent with `continue_conversation`, so Orchestrator merges the new router choice with `files`, still at most two heads, and does not clear `display` when the user line is published.
+The stored model messages and the head `files` stay in the process. A second utterance is sent with `continue_conversation`, which permits the local context decision. For `follow_up`, Orchestrator merges the new router choice with `files`, still at most two heads, and retains `display`. For `new_conversation`, it clears earlier turns and results, discards the stored model messages and head `files`, and answers using only the new request and its selected heads.
 
 `agavai ask "find the budget notes"` does not open transport in or streaming ASR. It starts a blank Snapshot, plays the think cue, runs Orchestrator once, speaks, and sets phase `idle`. It does not keep messages for a later voice turn. If ListenSession is also running, both write Snapshot; they are not coordinated.
 

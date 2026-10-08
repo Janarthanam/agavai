@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from unittest.mock import patch
 
 from behave import given, then, when
 
 from agavai.config import Config
-from agavai.orchestrator import _strip_think, run_turn, wants_followup
+from agavai.llm import LlmError
+from agavai.orchestrator import CONTEXT_SYSTEM, _strip_think, run_turn, wants_followup
+from agavai.ui import cancel_ui
 
 
 @given("llama-server is down")
@@ -142,7 +145,20 @@ def step_keyword_ui(context):
 
 @given('llama-server replies "{reply}"')
 def step_reply_only(context, reply):
-    def fake_chat(_cfg, messages, tools=None):
+    context.context_requests = []
+    context.action_requests = []
+
+    def fake_chat(cfg, messages, tools=None):
+        if messages[0]["content"] == CONTEXT_SYSTEM:
+            assert not tools
+            assert cfg.temperature == 0 and cfg.max_tokens == 16
+            context.context_requests.append(json.loads(messages[-1]["content"]))
+            if getattr(context, "dismiss_during_context", False):
+                cancel_ui(context.cfg)
+            if getattr(context, "context_error", None):
+                raise context.context_error
+            return {"content": context.context_response, "tool_calls": getattr(context, "context_tool_calls", [])}
+        context.action_requests.append(deepcopy(context.ui.data))
         context.seen_messages = messages
         context.model_tools = {item["function"]["name"] for item in (tools or [])}
         return {"content": reply, "tool_calls": []}
@@ -155,6 +171,32 @@ def step_reply_only(context, reply):
     context.add_cleanup(context.chat_patch.stop)
 
 
+@given('the context response is "{response}"')
+def step_context_response(context, response):
+    context.context_response = response
+
+
+@given("the context response is empty")
+def step_context_empty(context):
+    step_context_response(context, "")
+
+
+@given("the context response contains a tool call")
+def step_context_tool_call(context):
+    context.context_response = "follow_up"
+    context.context_tool_calls = [{"id": "c1", "function": {"name": "wallpaper_set", "arguments": '{"name":"Ship At Sea"}'}}]
+
+
+@given('the context model fails with "{error}"')
+def step_context_error(context, error):
+    context.context_error = LlmError(error)
+
+
+@given("the session is dismissed during the context decision")
+def step_context_dismiss(context):
+    context.dismiss_during_context = True
+
+
 @when('I run a turn with text "{text}"')
 def step_turn(context, text):
     context.reply = run_turn(text, Config())
@@ -162,17 +204,28 @@ def step_turn(context, text):
 
 @when('I run a turn with text "{text}" on the chat UI')
 def step_turn_ui(context, text):
+    context.before_turn = deepcopy(context.ui.data)
     context.reply = run_turn(text, context.cfg, context.ui)
 
 
 @when('I continue the turn with text "{text}"')
 def step_continue(context, text):
+    context.before_turn = deepcopy(context.ui.data)
+    context.before_messages = deepcopy(context.ui.model_messages)
+    context.before_heads = list(context.ui.model_heads)
+    context.context_requests = []
+    context.action_requests = []
     context.reply = run_turn(text, context.cfg, context.ui, continue_conversation=True)
 
 
 @then('the spoken reply should be "{text}"')
 def step_reply_eq(context, text):
     assert context.reply == text, context.reply
+
+
+@then("no spoken reply is produced")
+def step_no_reply(context):
+    assert context.reply == "", context.reply
 
 
 @then('the spoken reply should contain "{text}"')
@@ -231,3 +284,77 @@ def step_messages(context, text):
 @then('the follow-up model was offered "{name}"')
 def step_offered_now(context, name):
     assert name in context.model_tools, context.model_tools
+
+
+@then('the model messages excluded "{text}"')
+def step_messages_excluded(context, text):
+    assert text not in json.dumps(context.seen_messages), context.seen_messages
+    assert text not in json.dumps(context.ui.model_messages), context.ui.model_messages
+
+
+@then('the new answer uses head "{head}"')
+def step_new_head(context, head):
+    assert context.ui.model_heads == ([] if head == "none" else [head]), context.ui.model_heads
+    if head != "wallpaper":
+        assert "wallpaper_set" not in context.model_tools, context.model_tools
+
+
+@then("no context decision was requested")
+def step_no_context(context):
+    assert not context.context_requests, context.context_requests
+
+
+@then("no action answer was requested")
+def step_no_action_answer(context):
+    assert not context.action_requests, context.action_requests
+
+
+@then('the context decision used the earlier results and "{request}"')
+def step_context_input(context, request):
+    assert len(context.context_requests) == 1, context.context_requests
+    decision = context.context_requests[0]
+    assert decision["request"] == request, decision
+    assert decision["conversation"] == context.before_messages, decision
+    assert "Ship At Sea" in json.dumps(decision["conversation"]), decision
+    assert context.cfg.llm.max_tokens == 512 and context.cfg.llm.temperature == 0.2
+
+
+@then("the new answer started with a blank conversation canvas")
+def step_blank_answer(context):
+    assert len(context.action_requests) == 1, context.action_requests
+    snapshot = context.action_requests[0]
+    for key in ("display", "answer_html", "completion", "error"):
+        assert key not in snapshot, snapshot
+    assert len(snapshot["turns"]) == 1, snapshot["turns"]
+    assert snapshot["turns"][0]["tools"] == [], snapshot["turns"]
+    assert snapshot["turns"][0]["assistant"] == "", snapshot["turns"]
+    assert snapshot["transcript"]["final"]
+    assert snapshot["phase"] == "thinking"
+
+
+@then("the earlier canvas and conversation were retained")
+def step_retained_conversation(context):
+    snapshot = context.action_requests[0]
+    assert snapshot["display"] == context.before_turn["display"]
+    assert snapshot["turns"][:-1] == context.before_turn["turns"]
+    assert context.seen_messages[1:-2] == context.before_messages, context.seen_messages
+    assert all(message.get("content") != CONTEXT_SYSTEM for message in context.ui.model_messages)
+
+
+@then("the earlier canvas and model history were retained")
+def step_retained_history(context):
+    snapshot = json.loads((context.runtime_dir / "ui.json").read_text())
+    assert snapshot["display"] == context.before_turn["display"]
+    assert context.ui.model_messages == context.before_messages
+    assert context.ui.model_heads == context.before_heads
+
+
+@then("the listening session identity was retained")
+def step_same_session(context):
+    snapshot = json.loads((context.runtime_dir / "ui.json").read_text())
+    assert snapshot["session_id"] == context.before_turn["session_id"]
+
+
+@then("the conversation snapshot was unchanged")
+def step_same_snapshot(context):
+    assert context.ui.data == context.before_turn

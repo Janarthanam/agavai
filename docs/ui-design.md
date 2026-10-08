@@ -10,13 +10,13 @@ The shortcut opens an orb-only listening presence at the bottom right of the act
 
 In the expanded view, partial transcription occupies the primary line under the listening label, above the orb. Replace the current partial utterance as recognition revises it; append only finalized segments. Never turn each partial into a conversation turn. A pause submits the utterance; the same shortcut or Enter submits immediately. Escape cancels capture and pending work before dismissing the surface.
 
-The surface stays open and listening until the user dismisses it, in either compact or expanded mode. Silence does not close the microphone or send noise to the model. Each finished utterance is sent with the earlier conversation, then the orb returns to listening with the results still on screen. A new invocation still starts a blank session.
+The surface stays open and listening until the user dismisses it, in either compact or expanded mode. Silence does not close the microphone or send noise to the model. For each finished utterance after the first, the local model classifies its relation to the earlier conversation. A follow-up keeps the earlier messages and results; an unrelated request clears prior turns, canvas results, answer, and completion before generating the new answer. The orb returns to listening after either kind of turn. A new invocation still starts a blank session.
 
 A finished desktop action, such as setting the wallpaper, shows a Done line with what changed. The spoken reply says the same thing. A failed action shows Not completed with the reason. Looking something up does not use that line. The listening ring remains, with the hint that Escape dismisses.
 
 The surface transitions from Listening → Transcribing (when final recognition is pending) → Working → Results. During tool execution, show a human-readable activity such as “Searching files”, with the tool identifier available in details. Results appear in the expanded view of the same surface instead of opening a second window. A brief spoken answer accompanies the richer screen content.
 
-Results persist until dismissed or replaced by a new request. Escape closes the surface. Starting a new request resets selection, transcription, tool status, and previous previews. Error states keep the surface visible and offer a retry.
+Results persist until dismissed, replaced by new results, or cleared when the context response identifies a new conversation. Escape closes the surface. A new conversation resets selection, transcription, tool status, and previous previews without changing the listening session identity. An invalid or failed context response shows an error and retains the earlier results and model history for a retry. Partial speech never triggers a context decision.
 
 ## Result presentation
 

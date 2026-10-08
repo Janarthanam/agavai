@@ -75,16 +75,20 @@ class ChatUi:
 
     def begin_session(self) -> None:
         """Reset the overlay to a blank session: prior turns and canvas drop."""
+        self.clear_conversation()
+        self.data["level_db"] = None
+        self.data["vad_state"] = "off"
+        self.data["vad_backend"] = "off"
+        self.data["session_id"] = uuid.uuid4().hex
+
+    def clear_conversation(self) -> None:
+        """Drop conversation content while keeping the listening session identity."""
         self.data["turns"] = []
         self.data["transcript"] = {"text": "", "final": False}
         self.data.pop("answer_html", None)
         self.data.pop("error", None)
-        self.data["level_db"] = None
-        self.data["vad_state"] = "off"
-        self.data["vad_backend"] = "off"
         self.data.pop("display", None)
         self.data.pop("completion", None)
-        self.data["session_id"] = uuid.uuid4().hex
         self.model_messages = []
         self.model_heads = []
 
@@ -136,7 +140,7 @@ class ChatUi:
 
     def user(self, text: str, *, keep_display: bool = False) -> None:
         if not keep_display:
-            self.data.pop("display", None)
+            self.clear_conversation()
         self.data.pop("error", None)
         self.data.pop("answer_html", None)
         self.data.pop("completion", None)
