@@ -106,6 +106,7 @@ Item {
             return;
         var nextSession = String(obj.session_id || "");
         var nextDisplay = JSON.stringify(obj.display || null);
+        var canvasChanged = !!obj.display && nextDisplay !== JSON.stringify(snapshot.display || null);
         if (nextSession !== sessionId) {
             selected = 0;
             actionError = "";
@@ -116,8 +117,11 @@ Item {
         snapshot = obj;
         phase = String(obj.phase || "idle");
         phaseLabel = String(obj.phase_label || phase);
-        if (sessionId !== dismissedSession && (phase !== "idle" || expanded))
+        if (sessionId !== dismissedSession && (phase !== "idle" || expanded)) {
             opened = true;
+            if (canvasChanged)
+                compact = false;
+        }
     }
     function acquireFocus() {
         if (!wantsKeyboardFocus)

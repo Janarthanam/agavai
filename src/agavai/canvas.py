@@ -78,11 +78,17 @@ _NAMED = {"folder", "file", "image", "video"}
 
 
 def spoken_name(item: dict[str, Any]) -> str:
-    """What to say for one typed result. Files, folders, images, and videos use their name, never the path."""
+    """Readable result name for speech; exact filenames stay on the canvas."""
     kind = str(item.get("kind") or "text")
     title = " ".join(str(item.get("title") or "").split())
     if kind in _NAMED:
-        return title
+        path = Path(str(item.get("path") or ""))
+        filename_derived = title == " ".join(path.name.split())
+        if kind != "folder" and path.suffix and Path(title).suffix.lower() == path.suffix.lower():
+            title = Path(title).stem
+        if filename_derived:
+            title = re.sub(r"[_-]+", " ", title)
+        return " ".join(title.split())
     detail = " ".join(str(item.get("subtitle") or "").split())
     if detail.startswith("/"):
         detail = ""
@@ -110,20 +116,29 @@ def model_view(tool: str, result: str) -> str:
 
 
 def read_aloud(reply: str, block: dict[str, Any] | None) -> str:
-    """Replace paths in a spoken line with the name chosen for that result type."""
+    """Replace paths and echoed filenames with the readable result label."""
     text = str(reply or "")
-    pairs: list[tuple[str, str]] = []
+    labels: dict[str, str] = {}
     for item in (block or {}).get("items") or []:
         path = str(item.get("path") or "")
         label = spoken_name(item)
         if not path.startswith("/") or not label:
             continue
         bare = path.rstrip("/")
-        pairs.append((bare + "/", label))
-        pairs.append((bare, label))
-    for path, label in sorted(pairs, key=lambda pair: len(pair[0]), reverse=True):
-        text = text.replace(path, label)
-    text = _PATH.sub(lambda match: match.group(0).strip("/").rsplit("/", 1)[-1], text)
+        labels[bare + "/"] = label
+        labels[bare] = label
+        if item.get("kind") in _NAMED:
+            labels.setdefault(Path(bare).name, label)
+    if labels:
+        names = "|".join(re.escape(name) for name in sorted(labels, key=len, reverse=True))
+        text = re.sub(r"(?<![\w.-])(?:" + names + r")(?![\w-]|\.[\w])", lambda match: labels[match.group(0)], text)
+
+    def path_label(match):
+        raw = match.group(0)
+        path = raw.rstrip(".")
+        return spoken_name({"kind": "file", "path": path, "title": Path(path).name}) + raw[len(path):]
+
+    text = _PATH.sub(path_label, text)
     return " ".join(text.split())
 
 

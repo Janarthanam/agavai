@@ -2,7 +2,7 @@
 
 The listening overlay still opens as an Omarchy menu card. Listening should be a voice presence, and results should grow from that same presence.
 
-Listening-orb status: waiting for input. Repository changes are committed and validated. Approval is needed to install `Chat.qml` and `VoiceOrb.qml` under `~/.config/omarchy/plugins/janar.agavai/`, reload the shell, and open/restart Agavai for live microphone and native geometry verification, because these change state outside this repository.
+Listening-orb and canvas status: in progress. Preparing the requested automatic canvas opening along with the committed bottom-right positioning fix. Live installation under `~/.config/omarchy/plugins/janar.agavai/` and shell reload still need approval because they change state outside this repository.
 
 ## Surface
 
@@ -10,6 +10,7 @@ Listening-orb status: waiting for input. Repository changes are committed and va
 - [x] P0 ui Keep listening in an orb-only corner mode without taking desktop focus
 - [~] P0 ui Show microphone listening and live input through orb motion
 - [~] P0 ui Keep the expanded panel at the bottom right
+- [~] P0 ui Open the canvas when a command returns visual results
 
 ### Log
 
@@ -35,3 +36,7 @@ Listening-orb status: waiting for input. Repository changes are committed and va
 - 2026-10-08T16:49+05:30 — Codex session listening-orb — implementation validated, awaiting commit and approval for live installation. Changed files: `plugin/Chat.qml`, `plugin/VoiceOrb.qml`, `src/agavai/asr.py` (meter callback and capture-error ordering only), `src/agavai/__main__.py` (callback wiring only), `features/steps/invocation_steps.py` (recognizer stand-in signatures only), new `features/asr_meter.feature`, new `features/steps/asr_meter_steps.py`, new `features/support/orb-ui.qml`, `features/support/compact-ui.qml`, `README.md`, `tests/README.md`, `docs/audio.md` (meter paragraph only), `docs/ui-design.md`, `docs/flow.md`, and this task. Full Behave suite passed: 18 features / 132 scenarios / 495 steps, including installed-model speech replays and offscreen native animation checks. PCM transport is unchanged, only one capture is opened, and levels are published at most 10 Hz without ASR hypotheses; cancellation and empty capture clear feedback. Rendered quiet, speech, and idle orb images inspected under `/tmp/agavai-orb-visual-pido98hj`. Orb qmllint and diff whitespace passed; diff reviewed. Existing changes in ASR diagnostics, listener cleanup, invocation ownership, CPU threading, and other work are excluded. Desktop geometry/focus regression and actual microphone/transcription verification remain pending approved live runtime access.
 
 - 2026-10-08T16:51+05:30 — Codex session listening-orb — waiting for input. Implementation committed as `23f3d37`, with validation above. Installed `Chat.qml` and `VoiceOrb.qml` still differ from the new sources; live installation and verification require the approval stated near the top. Existing uncommitted changes are preserved.
+
+- 2026-10-08T17:06+05:30 — Codex session result-canvas — in progress. User reports the expanded view still at bottom center and requests automatic canvas display for commands that use it. Confirmed installed `Chat.qml` still contains the earlier centering expression; repository positioning already fixed by `23f3d37`. Automatically expand only newly published structured results, including repeated identical results with a fresh display identity. Retained results, microphone levels, partials, ordinary replies, and errors must preserve manual minimization. Scope: `plugin/Chat.qml`, `src/agavai/ui.py` (display publication only), native regression, UI/runtime contracts, and approved plugin installation. Another session is changing conversation context in `ui.py`, orchestrator, specs, and tests; preserve those edits and stage only this task's hunks.
+
+- 2026-10-08T17:16+05:30 — Codex session result-canvas — implementation validated, awaiting commit and approved live installation. Each new display gets a presentation id; the overlay opens new canvas results at the bottom right and respects minimization for retained results and ordinary snapshots. Changed files: `plugin/Chat.qml`, `src/agavai/ui.py`, `features/support/compact-ui.qml`, new `features/result_canvas.feature`, new shared `features/steps/result_steps.py`, `README.md`, `docs/flow.md`, `docs/ui-design.md`, and this task. Isolated native regression passed, including corner geometry, automatic expansion, repeated identical results, focus loss, minimization, and dismissal. Full Behave suite passed: 22 features / 176 scenarios / 755 steps; plugin validation, orb qmllint, and diff whitespace passed. Reviewed the diff. Concurrent conversation-context work is now committed as `260705f`; its behavior remains intact. Installed plugin still requires replacement and shell reload before the user sees the fix.

@@ -117,11 +117,15 @@ class ChatUi:
 
     def display(self, block: dict[str, Any] | None) -> None:
         """Structured canvas for meaningful output (lists, images, cards)."""
+        self._set_display(block)
+        self._write()
+
+    def _set_display(self, block: dict[str, Any] | None) -> None:
         if block is None:
             self.data.pop("display", None)
         else:
-            self.data["display"] = block
-        self._write()
+            # Reissuing identical results must still open the canvas once.
+            self.data["display"] = {**block, "id": uuid.uuid4().hex}
 
     def level(self, db: float | None, vad_state: str, vad_backend: str) -> None:
         """Throttled 10 Hz mic level + VAD state while listening."""
@@ -177,7 +181,7 @@ class ChatUi:
                 break
         block = display_for(name, result)
         if block is not None:
-            self.data["display"] = block
+            self._set_display(block)
         if name not in _QUIET_TOOLS:
             detail = _clip(result, 140)
             if detail[:1] in "{[":

@@ -272,7 +272,8 @@ def step_no_path(context):
     assert context.notes_path not in tool_text, tool_text
     assert '"kind": "folder"' in tool_text, tool_text
     assert "ship at sea" in tool_text, tool_text
-    assert "notes.md" in tool_text, tool_text
+    assert '"name": "notes"' in tool_text, tool_text
+    assert "notes.md" not in tool_text, tool_text
 
 
 @then('the model messages included "{text}"')

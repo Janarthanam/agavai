@@ -61,13 +61,13 @@ ShellRoot {
                         input.mouseClick(find(chat, "agavaiCompactPointer"), 40, 40, Qt.LeftButton);
                     } else {
                         check(chat.sessionId === "test" && chat.items.length === 1, "Minimizing must preserve session and results");
-                        chat.applySnapshot(JSON.stringify({session_id: "test", phase: "speaking", error: "Retry needed", turns: [{assistant: "Your notes"}], display: {items: [{title: "Notes"}]}}));
+                        chat.applySnapshot(JSON.stringify({session_id: "test", phase: "speaking", error: "Retry needed", turns: [{assistant: "Your notes"}], display: {id: "canvas1", items: [{title: "Notes"}]}}));
                     }
                 } else if (step === 2) {
                     check(!chat.compact && details.visible && !orb.visible && chat.wantsKeyboardFocus, "Expanding must reveal the full view");
                     checkPosition(stage, panel);
                     check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.OnDemand, "Expanded view must let other windows receive input");
-                    chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", display: {items: [{title: "Notes"}]}}));
+                    chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", display: {id: "canvas1", items: [{title: "Notes"}]}}));
                 } else if (step === 3) {
                     check(!chat.compact && chat.items.length === 1, "Snapshots must preserve the chosen expanded view");
                     checkPosition(stage, panel);
@@ -94,6 +94,27 @@ ShellRoot {
                     check(chat.compact && chat.opened && chat.phase === "listening" && chat.sessionId === "next", "Focus loss must minimize without stopping or replacing the listening session");
                     input.keyClick(Qt.Key_A);
                     check(otherInput.text === "a", "The other window must receive keyboard input");
+                    chat.applySnapshot(JSON.stringify({session_id: "next", phase: "speaking", display: {id: "canvas2", items: [{title: "Budget"}]}}));
+                } else if (step === 9) {
+                    check(!chat.compact && chat.items[0].title === "Budget", "New canvas results must expand automatically");
+                    checkPosition(stage, panel);
+                    find(chat, "agavaiMinimize").clicked();
+                    chat.applySnapshot(JSON.stringify({session_id: "next", phase: "listening", level_db: -20, display: {id: "canvas2", items: [{title: "Budget"}]}}));
+                } else if (step === 10) {
+                    check(chat.compact && !chat.wantsKeyboardFocus, "Retained canvas and microphone updates must respect minimization");
+                    checkPosition(stage, panel);
+                    chat.applySnapshot(JSON.stringify({session_id: "next", phase: "speaking", display: {id: "canvas3", items: [{title: "Budget"}]}}));
+                } else if (step === 11) {
+                    check(!chat.compact && chat.items[0].title === "Budget", "Reissuing the same results must reopen the canvas");
+                    checkPosition(stage, panel);
+                    find(chat, "agavaiMinimize").clicked();
+                    chat.applySnapshot(JSON.stringify({session_id: "next", phase: "error", error: "Retry needed"}));
+                } else if (step === 12) {
+                    check(chat.compact, "Errors without a new canvas must not expand the panel");
+                    chat.phase = "idle";
+                    input.mouseClick(find(chat, "agavaiCompactPointer"), 40, 40, Qt.RightButton);
+                    chat.applySnapshot(JSON.stringify({session_id: "next", phase: "speaking", display: {id: "late", items: [{title: "Late"}]}}));
+                    check(!chat.opened && chat.compact, "Late canvas results must not reopen a dismissed session");
                     console.log("COMPACT_UI_PASS");
                     Qt.quit();
                 }
