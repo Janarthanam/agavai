@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtTest
 import Quickshell
 import Quickshell.Wayland
@@ -8,6 +9,14 @@ import "Assistant"
 ShellRoot {
     TestCase { id: input; when: false }
     Chat { id: chat; runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") }
+    FloatingWindow {
+        id: otherWindow
+        visible: false
+        title: "Agavai input regression"
+        implicitWidth: 240
+        implicitHeight: 100
+        TextInput { id: otherInput; anchors.fill: parent; focus: true }
+    }
 
     function find(object, name) {
         if (object.objectName === name)
@@ -52,7 +61,7 @@ ShellRoot {
                     }
                 } else if (step === 2) {
                     check(!chat.compact && details.visible && !orb.visible && chat.wantsKeyboardFocus, "Expanding must reveal the full view");
-                    check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.Exclusive, "Expanded view must support keyboard controls");
+                    check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.OnDemand, "Expanded view must let other windows receive input");
                     chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", display: {items: [{title: "Notes"}]}}));
                 } else if (step === 3) {
                     check(!chat.compact && chat.items.length === 1, "Snapshots must preserve the chosen expanded view");
@@ -67,6 +76,17 @@ ShellRoot {
                     check(!chat.opened, "Late snapshots must not reopen a dismissed session");
                     chat.applySnapshot(JSON.stringify({session_id: "next", phase: "listening"}));
                     check(chat.opened && chat.compact && !chat.wantsKeyboardFocus, "A new session must start compact");
+                    input.mouseClick(find(chat, "agavaiCompactPointer"), 40, 40, Qt.LeftButton);
+                } else if (step === 6) {
+                    check(!chat.compact && panel.contentItem.Window.active, "Expanded view must acquire focus when activated");
+                    otherWindow.visible = true;
+                } else if (step === 7) {
+                    otherWindow.contentItem.Window.window.requestActivate();
+                } else if (step === 8) {
+                    check(otherWindow.contentItem.Window.active, "Another window must be able to take focus");
+                    check(chat.compact && chat.opened && chat.phase === "listening" && chat.sessionId === "next", "Focus loss must minimize without stopping or replacing the listening session");
+                    input.keyClick(Qt.Key_A);
+                    check(otherInput.text === "a", "The other window must receive keyboard input");
                     console.log("COMPACT_UI_PASS");
                     Qt.quit();
                 }

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -122,12 +123,22 @@ Item {
         if (!wantsKeyboardFocus)
             return;
         Qt.callLater(function () {
-            if (root.wantsKeyboardFocus)
+            if (root.wantsKeyboardFocus) {
                 keyTarget.forceActiveFocus();
+                panel.contentItem.Window.window.requestActivate();
+            }
         });
     }
     onExpandedChanged: acquireFocus()
     onWantsKeyboardFocusChanged: acquireFocus()
+
+    Connections {
+        target: panel.contentItem.Window.window
+        function onActiveChanged() {
+            if (root.wantsKeyboardFocus && !target.active)
+                root.compact = true;
+        }
+    }
 
     FileView {
         id: uiFile
@@ -178,7 +189,7 @@ Item {
         color: "transparent"
         WlrLayershell.namespace: "agavai-chat"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.wantsKeyboardFocus ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.wantsKeyboardFocus ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         exclusionMode: ExclusionMode.Ignore
         mask: Region {
             item: stage
