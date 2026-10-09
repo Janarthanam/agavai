@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>AGGAWAII / Agavai — architecture atlas</title>
+  <link rel="stylesheet" href="architecture.css">
+  <script src="architecture.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#architecture">Skip to architecture</a>
+  <header class="masthead">
+    <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">A</span><span>AGGAWAII <small>Agavai in this repository</small></span></a>
+    <nav aria-label="Document"><a href="#requirements">Purpose</a><a href="#architecture">Architecture</a><a href="#flows">Algorithms</a><a href="#modules">Components</a><a href="#operations">Operations</a><a href="#references">Sources</a></nav>
+  </header>
+  <main>
+    <section class="intro" id="requirements">
+      <p class="eyebrow">Architecture & design · source snapshot 08 October 2026</p>
+      <h1>From a spoken thought<br>to a desktop action.</h1>
+      <p class="lede">A streaming ear, a local tool-capable brain, and a voice. Explore how Agavai listens, commits a request, acts through an allowlist, and returns to listening.</p>
+      <div class="intro-footer"><span>One desktop user · serial turns · Omarchy / Hyprland</span><a href="design.md">Read the design document ↗</a></div>
+      <details class="scope-note"><summary>What this reference describes</summary><p>This documents the inspected repository working tree at base commit <code>f44544c</code>, including changes already present from other sessions. It is a source snapshot, not a check of your installed desktop. <a href="../docs/flow.md">flow.md</a> governs runtime behavior, <a href="../docs/audio.md">audio.md</a> governs recognition, and <a href="../docs/ui-design.md">ui-design.md</a> governs the native surface. Older Voxtype, GTK and silence-timer descriptions in architecture.md are superseded on the automatic assistant path. Context classification and setup changes were in progress at inspection time and are labeled accordingly. No end-to-end latency SLA is established. This reference runs offline; it does not call models, open a microphone, or execute desktop tools.</p></details>
+    </section>
+
+    <section id="architecture" class="section architecture-section">
+      <div class="section-heading"><div><p class="eyebrow">High-level design</p><h2>The system, across its boundaries</h2></div><span class="hint">Hover to inspect · click to keep details · keyboard and touch supported</span></div>
+      <div id="map-tabs" class="tabs" role="tablist" aria-label="Architecture views">
+        <button type="button" role="tab" id="tab-runtime" aria-selected="true" aria-controls="map-panel" data-view="runtime">01 / Voice loop</button>
+        <button type="button" role="tab" id="tab-audio" aria-selected="false" aria-controls="map-panel" data-view="audio">02 / Recognition</button>
+        <button type="button" role="tab" id="tab-tools" aria-selected="false" aria-controls="map-panel" data-view="tools">03 / Brain & tools</button>
+        <button type="button" role="tab" id="tab-deploy" aria-selected="false" aria-controls="map-panel" data-view="deploy">04 / Deployment</button>
+      </div>
+      <div class="map-layout">
+        <div class="map-panel" id="map-panel" role="tabpanel" aria-labelledby="tab-runtime">
+          <div class="map-caption"><p id="map-description"></p><span class="legend"><i></i> local <i class="remote"></i> optional remote <i class="wip"></i> work in progress</span></div>
+          <div class="map-scroll" aria-label="Architecture diagram; scroll horizontally on small screens">
+            <div id="diagram" class="diagram"><svg id="connections" xmlns="http://www.w3.org/2000/svg" aria-label="Component interactions"></svg><div id="boundaries"></div><div id="nodes"></div><div id="edge-labels"></div></div>
+          </div>
+          <p class="map-footnote">Arrows show requests or one-way events; a double arrow includes the response described in its inspector. Component cards are logical boundaries: several run in the same Python process.</p>
+        </div>
+        <aside class="inspector" id="inspector" aria-label="Selected component or interaction"></aside>
+      </div>
+      <p class="selection-status sr-only" id="selection-status" aria-live="polite"></p>
+      <details class="protocol-details"><summary>Read all interaction contracts as a table</summary><div class="table-scroll"><table><caption>Payloads, return values and transports for every diagram arrow</caption><thead><tr><th>Interaction</th><th>Protocol / transport</th><th>Data and control</th></tr></thead><tbody id="protocol-table"></tbody></table></div></details>
+    </section>
+
+    <section class="section" id="flows">
+      <div class="section-heading"><div><p class="eyebrow">Low-level design</p><h2>Walk the algorithm, one boundary at a time</h2></div><span class="hint">Illustrative execution · no model or desktop access</span></div>
+      <div class="flow-toolbar"><label for="scenario">Use case</label><select id="scenario"><option value="search">Spoken file search</option><option value="recognition">Inside streaming recognition</option><option value="followup">Wallpaper choice, then a new topic</option><option value="cancel">Cancel during playback</option><option value="typed">Typed request</option></select><div class="step-controls"><button type="button" id="previous" aria-label="Previous step">← Previous</button><span id="step-count" class="mono"></span><button type="button" id="next" aria-label="Next step">Next →</button></div></div>
+      <div class="flow-layout"><ol id="steps" class="steps"></ol><div class="flow-detail"><div id="sequence" class="sequence" aria-label="Current sequence step"></div><article id="step-detail" aria-live="polite"></article><p class="trace-note">Each step states what goes in, what comes out, and which state changes. The architecture map above highlights the selected step when its components are in that view.</p></div></div>
+    </section>
+
+    <section class="section" id="decisions">
+      <p class="eyebrow">Design choices</p><h2>Why the pipeline has this shape</h2>
+      <div class="table-scroll"><table><thead><tr><th>Choice</th><th>What it buys</th><th>Cost / alternative</th></tr></thead><tbody>
+        <tr><td>Streaming ASR with EOU</td><td>Live hypotheses; a learned end token commits the sentence. No timer waits after recognition.</td><td>Cache, frontend and reset alignment must be correct. File transcription is simpler but hides words until stop; energy/Silero endpointing can mistake pauses for finished requests.</td></tr>
+        <tr><td>Separate ASR → GGUF → TTS</td><td>Each model has a focused job; local CPU defaults fit the repository's target desktop.</td><td>Serial stages add latency. The v2 decision record discusses speech-to-speech models but found no drop-in tool-capable replacement within its machine budget; those evaluations are historical, not refreshed here.</td></tr>
+        <tr><td>One session process</td><td>Simple ownership; serial turns; context dies when the user dismisses.</td><td>Cold ASR load per session. A resident agent would retain context but complicate microphone ownership. F9 exclusion is still unenforced.</td></tr>
+        <tr><td>One native overlay</td><td>Compact orb leaves other apps usable; expanded transcript and results share cancellation and selection.</td><td>Depends on the Omarchy shell. The earlier GTK fallback is superseded. This browser reference cannot validate native layer-shell focus.</td></tr>
+        <tr><td>Tool heads before completion</td><td>At most eight advertised schemas by default; smaller context for Qwen.</td><td>Routing can miss a head. Jev sends committed utterances remotely; keyword routing avoids that hop. One extra-head retry is implemented.</td></tr>
+        <tr><td>Direct allowlisted functions</td><td>Voice actions use the existing DISPATCH; bounded subprocess argument lists; no shell supplied by the model.</td><td>Tools share process trust and are not sandboxed. MCP exposes the same functions externally, with an extra protocol boundary.</td></tr>
+        <tr><td>Atomic UI snapshots</td><td>QML sees complete JSON; dismissed session ids suppress late writes.</td><td>No event queue or replay; rapid writes collapse into the latest snapshot. Typed ask and listening can contend for the same file.</td></tr>
+        <tr><td>Warm Kokoro + fallbacks</td><td>CPU speech model can outlive a session; eSpeak and notification preserve a reply path.</td><td>Cold synthesis and playback add delay. eSpeak and typed playback do not use the listener's interruptible Kokoro cancellation path.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="section" id="modules"><p class="eyebrow">Modules</p><h2>Every component's contract</h2><p class="section-copy">Deployment, lifecycle, configuration, performance, throughput, failures and observability. The same source data powers the map inspector and this catalogue.</p><div id="module-catalogue" class="catalogue"></div><h3>Tool heads and the complete allowlist</h3><p class="section-copy">A head is a group of schemas, not an agent or process. The dispatcher is the execution boundary; the advertised schema subset is not a separate authorization layer.</p><div class="table-scroll"><table><thead><tr><th>Head</th><th>Allowlisted tools</th><th>Execution backend</th></tr></thead><tbody id="heads-table"></tbody></table></div></section>
+
+    <section class="section" id="operations"><p class="eyebrow">Deployment & reliability</p><h2>A desktop application, with one model service</h2><div class="operations-grid"><article><h3>Install and start</h3><ol><li>Keep the repository or extracted light bundle in a permanent directory. Installed CLI launchers symlink into it.</li><li>Setup reviews <code>~/.config/agavai/config.toml</code> first, checks an executable llama-server, then downloads the selected <code>all / llm / voice / none</code> assets.</li><li>Install verifies the GGUF exists, registers the QML plugin and app, and enables and restarts <code>agavai-llm.service</code>.</li><li>The plugin lives in Omarchy's shell. A user invocation starts a detached listener; it owns an ASR worker and capture subprocess. Kokoro is started on demand.</li></ol><p><a href="../docs/install-bundle.md">Installation details ↗</a> · Setup/config review was concurrent work in progress at this snapshot.</p></article><article><h3>Limits are bounds, not SLAs</h3><dl><dt>Person / concurrency</dt><dd>One voice session; one turn at a time; llama-server <code>--parallel 1</code>. No queue or measured requests/sec.</dd><dt>Router</dt><dd>2 s request timeout; at most two initial heads; eight schemas by default.</dd><dt>Local completion</dt><dd>120 s per HTTP call; six tool rounds; 512 completion tokens; 8,192 context tokens by default.</dd><dt>ASR</dt><dd>160 ms of new mel features per encoder step. Intra-op threads = 1. Upstream latency figures reported in audio.md are not desktop end-to-end measurements.</dd><dt>UI / context</dt><dd>Meter at most 10 Hz; five visible turns; up to 40 display items; 8 KiB text preview; at most 24 stored non-system messages.</dd><dt>Speech</dt><dd>30 s socket timeout; cold startup polls for about 10 s; one-shot synthesis timeout 120 s. Server accept idle timeout 600 s.</dd></dl></article></div>
+      <h3>Failure and cancellation behavior</h3><div class="table-scroll"><table><thead><tr><th>Trigger</th><th>Actual response</th><th>Practical limit</th></tr></thead><tbody>
+        <tr><td>Overlay summon fails</td><td>Invocation returns an error before starting a listener.</td><td>No second native renderer is launched.</td></tr>
+        <tr><td>Missing ASR assets, runtime or microphone frames</td><td>Visible error; listener returns failure; capture and worker are cleaned up.</td><td>No Voxtype or timer fallback on automatic listen.</td></tr>
+        <tr><td>Silence / empty EOU</td><td>Worker ignores empty EOU; capture remains open.</td><td>Enter on empty speech can say “I did not hear anything.”</td></tr>
+        <tr><td>Jev key / timeout / HTTP failure</td><td>Keyword heads, unless fallback is <code>none</code>. An empty successful choice also falls back when enabled.</td><td>Router decisions are not logged in the snapshot.</td></tr>
+        <tr><td>llama-server down / HTTP failure</td><td>Health check gives a service-start hint; LlmError is surfaced; listener can return to listening.</td><td>No HTTP retry policy. Context classification adds a call on subsequent turns.</td></tr>
+        <tr><td>Missing head / unknown tool / invalid args</td><td>One head-attach retry; otherwise dispatcher returns result text describing the error.</td><td>Schema advertisement is guidance, not strict per-turn permission enforcement.</td></tr>
+        <tr><td>Cancel</td><td>Mark dismissed-session, create listen.cancel, then SIGTERM the identity-checked listener; suppress late snapshots.</td><td>In-flight blocking HTTP, synthesis or tools may finish before checks resume. Cancellation does not roll back completed actions.</td></tr>
+        <tr><td>Speech fails</td><td>Kokoro → eSpeak → notification after configured preference.</td><td>Kokoro listener playback is interruptible; blocking eSpeak and typed playback can complete before cancel is observed.</td></tr>
+        <tr><td>Concurrent entry paths</td><td>Listener startup guard checks a pid/start token and an exclusive lock.</td><td>It is not a F9 microphone lock or an ask/listen snapshot-writer lock. No system-wide exclusivity claim.</td></tr>
+      </tbody></table></div><h3>Where to look when something stalls</h3><p><code>agavai status</code> reports coarse state, model selection and HTTP health. <code>systemctl --user status agavai-llm</code> and <code>journalctl --user -u agavai-llm</code> inspect the resident model service. <code>$XDG_RUNTIME_DIR/agavai/ui.json</code> holds the latest phase, transcript and clipped tool rows. Kokoro uses <code>kokoro-serve.log</code> / <code>kokoro.log</code>. ASR stderr is retained in a bounded parent buffer; detached listener stdout/stderr are redirected to <code>/dev/null</code>, so diagnostic coverage is incomplete. No distributed tracing or metrics service is implemented.</p>
+    </section>
+
+    <section class="section" id="references"><p class="eyebrow">Conclusion & references</p><h2>Follow the evidence back to the code</h2><p class="section-copy">The current system is a serial session with separate inference processes, direct desktop tool dispatch and a watched UI snapshot. The only default remote model hop is optional Jev routing; browser-opening tools can independently open network URLs. Source links refer to repository files, not live installation state.</p><div class="source-grid"><article><h3>Current specifications</h3><ul><li><a href="../docs/flow.md">Voice loop — runtime authority</a></li><li><a href="../docs/audio.md">Audio pipeline and ASR design</a></li><li><a href="../docs/ui-design.md">Native overlay and results contract</a></li><li><a href="../share/config.example.toml">Configuration reference</a></li><li><a href="../docs/install-bundle.md">Installation and bundle guide</a></li></ul></article><article><h3>Decisions and evaluation context</h3><ul><li><a href="../docs/v2.md">v2 cascade decision and historical model alternatives</a></li><li><a href="../docs/architecture.md">Earlier architecture — model selection, legacy sections</a></li><li><a href="../docs/ui-prototype/index.html">Isolated UI design prototype</a></li><li><a href="../tasks/conversation-context.md">Concurrent context-classification work</a></li><li><a href="../tasks/install-bundle.md">Concurrent setup/bundle work</a></li><li><a href="../tests/README.md">Behavior and real-model replay validation</a></li></ul></article></div><p class="provenance">Built from source inspection on 2026-10-08 · base <code>f44544c</code> · session <code>architecture-visualization</code>. The module inspector links every component to its implementation. Recheck contracts when source changes; this atlas is not generated automatically from the app.</p></section>
+  </main>
+  <footer>AGGAWAII / Agavai · Interactive architecture reference · <a href="design.md">Markdown design</a></footer>
+  <div id="hover-card" class="hover-card" role="tooltip" hidden></div>
+  <noscript><p class="noscript">Enable JavaScript to inspect diagrams and sequences. The <a href="design.md">Markdown design document</a> contains the architecture and module contracts.</p></noscript>
+</body>
+</html>
