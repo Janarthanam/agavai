@@ -21,6 +21,8 @@ import sys
 import numpy as np
 import onnxruntime as ort
 
+ort.set_default_logger_severity(3)
+
 SAMPLE_RATE = 16000
 N_FFT = 512
 WIN = 400
@@ -140,6 +142,8 @@ class Stream:
         if device == "cuda":
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         opts = ort.SessionOptions()
+        # Tiny streaming steps fall behind real time with a pool spanning every core.
+        opts.intra_op_num_threads = 1
         self.encoder = ort.InferenceSession(str(root / "encoder.onnx"), opts, providers=providers)
         self.decoder = ort.InferenceSession(str(root / "decoder_joint.onnx"), opts, providers=providers)
         self.vocab = (root / "vocab.txt").read_text(encoding="utf-8").splitlines()

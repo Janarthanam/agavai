@@ -3,14 +3,14 @@ import sys
 
 from agavai.ui import summon_overlay
 from agavai.config import load_config
-from agavai.state import read_state
-from agavai.__main__ import start_session
+from agavai.__main__ import read_listener, start_session
 
 
 def run() -> int:
     cfg = load_config()
     if summon_overlay():
-        if read_state(cfg) not in {"listening", "transcribing", "thinking", "speaking"}:
+        # A leftover "listening" state with no process must not block a new session.
+        if read_listener(cfg) is None:
             start_session(cfg, automatic=True)
         return 0
     print("Could not open Agavai. Ensure the Omarchy shell and janar.agavai plugin are running.", file=sys.stderr)

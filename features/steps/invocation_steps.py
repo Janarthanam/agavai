@@ -34,7 +34,10 @@ class _Scripted:
 
 @when('I invoke Agavai while it is "{phase}"')
 def invoke(context, phase):
-    with patch("agavai.app.load_config", return_value=context.cfg), patch("agavai.app.read_state", return_value=phase), patch("agavai.app.summon_overlay", return_value=True) as summon, patch("agavai.app.start_session", return_value=True) as start:
+    # A live listener occupies the busy phases. Idle has no process, even if a
+    # previous session left the state file behind.
+    live = None if phase == "idle" else 4242
+    with patch("agavai.app.load_config", return_value=context.cfg), patch("agavai.app.read_listener", return_value=live), patch("agavai.app.summon_overlay", return_value=True) as summon, patch("agavai.app.start_session", return_value=True) as start:
         context.invoke_result = app.run()
         context.summon_count = summon.call_count
         context.start_calls = start.call_args_list

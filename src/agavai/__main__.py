@@ -363,6 +363,8 @@ def listen_session(cfg, ui: ChatUi) -> int:
             _pid_path(cfg).unlink()
         except OSError:
             pass
+        if read_state(cfg) == "listening":
+            write_state(cfg, "idle")
         signal.signal(signal.SIGTERM, prev_handler)
     print(reply or "")
     return 0

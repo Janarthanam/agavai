@@ -15,6 +15,7 @@ import select
 import shutil
 import struct
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -77,9 +78,9 @@ class StreamingRecognizer:
         self._write_lock = threading.Lock()
         ready = self._read_line(120)
         if not ready:
-            err = self._stderr()
+            detail = self._failure("Streaming ASR did not start.")
             self.close()
-            raise AsrError(err or "Streaming ASR did not start.")
+            raise AsrError(detail)
         try:
             msg = json.loads(ready)
         except json.JSONDecodeError as exc:
@@ -95,7 +96,7 @@ class StreamingRecognizer:
 
     def events(self, on_level, should_stop=None):
         if self.proc.poll() is not None:
-            raise AsrError(self._stderr() or "Streaming ASR stopped.")
+            raise AsrError(self._failure("Streaming ASR stopped."))
         if not shutil.which("parec"):
             raise AsrError(MIC_ERROR)
         self._mic_error.clear()
@@ -121,7 +122,9 @@ class StreamingRecognizer:
                     next_level_at = now + 0.1
                 if line is None:
                     if self.proc.poll() is not None:
-                        raise AsrError(self._stderr() or "Streaming ASR stopped.")
+                        if should_stop and should_stop():
+                            return
+                        raise AsrError(self._failure("Streaming ASR stopped."))
                     if self._pump_done.is_set():
                         yield from self._flush()
                         return
@@ -284,8 +287,16 @@ class StreamingRecognizer:
         except OSError:
             return
 
-    def _stderr(self) -> str:
-        return bytes(self._stderr_buf).decode("utf-8", "replace").strip()
+    def _failure(self, fallback: str) -> str:
+        """A short message for the overlay. Runtime warnings are not the failure."""
+        text = bytes(self._stderr_buf).decode("utf-8", "replace")
+        for line in reversed(text.splitlines()):
+            if line.startswith("Traceback") or "Error" in line or "Exception" in line:
+                print(text, file=sys.stderr)
+                return fallback
+        if text.strip():
+            print(text, file=sys.stderr)
+        return fallback
 
     def _stop_capture(self) -> None:
         self._stop_pump.set()

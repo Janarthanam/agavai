@@ -33,6 +33,8 @@ Each step returns the current hypothesis. Until an end marker appears, that text
 
 After end of utterance the worker waits for the parent's reset before accepting another turn. Already queued audio cannot start a second hypothesis while the parent is committing the first.
 
+ONNX inference uses one thread per session. The default per-core pools made the small streaming steps slower than the incoming audio on the target desktop and left recognition accumulating a backlog while saturating the CPU.
+
 An end-of-utterance token with no visible words is ignored in the worker. Silence keeps the same capture open, so starting to speak does not race a microphone restart.
 
 The model uses two markers:
