@@ -1,8 +1,10 @@
 # Agavai installation bundle
 
-- [~] P1 Bundle the current app for installation on another computer
+- [x] P1 Bundle the current app for installation on another computer
 
 ### Log
+
+- 2026-10-09 — Codex session install-bundle-finalize — complete. Implementation and previous bookkeeping are now committed in `48f49b3`; no installer code changes needed. Revalidated 17 setup scenarios / 52 steps, shell syntax, full gzip integrity, archive checksum and bundled installer/guide equality with current repository files. Deliverable remains `dist/agavai-0.1.0-omarchy-light.tar.gz`, 313,496 bytes; SHA256 `fcf1fafd8ad31610f1a44687ac838b4df41a6be276ea86e9382b02dc2ecf37e0`. Changed file this session: this task's completion status and appended log. Existing unrelated working-tree changes excluded. No live installation or receiving-machine test performed. Bundle retains its validated October 8 application snapshot; it is not rebuilt from concurrent October 9 application changes.
 
 - 2026-10-08 — Codex session configure-before-service — in progress. User requires explicit configuration before installing or restarting the service. Scope: setup/editor validation, direct installer readiness gate, service installation order, focused regression checks, guide and rebuilt small archive. Reuse `load_config`; service configuration must not depend on terminal-only model/binary overrides. Existing setup test files were empty at inspection; restore coverage with configuration-order cases. No live installation.
 
