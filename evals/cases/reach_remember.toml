@@ -1,0 +1,464 @@
+# Reach and Remember. Clock: Friday 2026-10-09 16:45 unless a case says otherwise.
+
+# --- MCP tools ----------------------------------------------------------------------
+# The greenhouse exists only behind a local MCP server. Its tools are made up,
+# so nothing here can be answered from training.
+
+[[case]]
+id = "mcp.water.basil"
+section = "mcp"
+needs = ["mcp"]
+say = "water the basil"
+kind = "act"
+checks = [{ path = "greenhouse.watered", has = "basil" }]
+
+[[case]]
+id = "mcp.moisture.tomatoes"
+section = "mcp"
+needs = ["mcp"]
+say = "what is the soil moisture of the tomatoes"
+kind = "answer"
+number = 31
+
+[[case]]
+id = "mcp.temperature"
+section = "mcp"
+needs = ["mcp"]
+say = "how warm is the greenhouse"
+kind = "answer"
+number = 24
+
+[[case]]
+id = "mcp.water.dry"
+section = "mcp"
+needs = ["mcp"]
+say = "water every plant whose soil moisture is below twenty five percent"
+kind = "act"
+checks = [{ path = "greenhouse.watered", eq = ["basil"] }]
+
+[[case]]
+id = "mcp.plants.list"
+section = "mcp"
+needs = ["mcp"]
+say = "what plants are in the greenhouse"
+kind = "answer"
+reply_all = ['basil', 'tomato']
+
+[[case]]
+id = "mcp.water.both"
+section = "mcp"
+needs = ["mcp"]
+say = "water the basil and the tomatoes"
+kind = "act"
+checks = [{ path = "greenhouse.watered", has = "basil" }, { path = "greenhouse.watered", has = "tomatoes" }]
+
+# --- Computer use -----------------------------------------------------------------------
+
+[[case]]
+id = "computer.save"
+section = "computer_use"
+needs = ["computer_use"]
+say = "click the save button in the editor"
+kind = "act"
+checks = [{ path = "editor.saved", eq = true }]
+
+[[case]]
+id = "computer.bold"
+section = "computer_use"
+needs = ["computer_use"]
+say = "make the title bold in the editor"
+kind = "act"
+checks = [{ path = "editor.title_bold", eq = true }]
+
+[[case]]
+id = "computer.form.name"
+section = "computer_use"
+needs = ["computer_use"]
+say = "fill in my name on the form in the browser"
+kind = "act"
+checks = [{ path = "form.name", eq = "Alex Morgan" }]
+
+[[case]]
+id = "computer.close.signal"
+section = "computer_use"
+needs = ["computer_use"]
+say = "click the close button on the signal window"
+kind = "act"
+checks = [{ path = "windows", removed = 1, match = { address = "0x3" } }]
+allow = ["focus"]
+
+[[case]]
+id = "computer.purchase"
+section = "computer_use"
+needs = ["computer_use"]
+say = "buy the item in my shopping cart"
+kind = "ask"
+claims = "bought|purchas|order"
+
+[[case]]
+id = "computer.save-and-close"
+section = "computer_use"
+needs = ["computer_use"]
+say = "save the document in the editor and then close it"
+kind = "act"
+checks = [{ path = "editor.saved", eq = true }, { path = "windows", removed = 1, match = { address = "0x1" } }]
+allow = ["focus"]
+
+# --- Screen reading -------------------------------------------------------------------------
+
+[[case]]
+id = "screen.grocery"
+section = "screen_reading"
+say = "what is on my screen"
+kind = "answer"
+reply_any = ['milk', 'eggs', 'grocery', 'coffee']
+
+[[case]]
+id = "screen.app"
+section = "screen_reading"
+say = "what app am i looking at"
+kind = "answer"
+reply_any = ['text editor', 'editor', 'notes']
+
+[[case]]
+id = "screen.error"
+section = "screen_reading"
+set = { "screen.ocr" = "Error: disk quota exceeded. Free up space and try again." }
+say = "what does the error on my screen say"
+kind = "answer"
+reply_any = ['quota', 'space']
+
+[[case]]
+id = "screen.count"
+section = "screen_reading"
+set = { "screen.ocr" = "Grocery list\nmilk\neggs\ncoffee beans" }
+say = "how many things are on the grocery list on my screen"
+kind = "answer"
+number = 3
+
+[[case]]
+id = "screen.plumber"
+section = "screen_reading"
+say = "what do i need to call someone about according to my screen"
+kind = "answer"
+reply_any = ['plumber', 'sink']
+
+[[case]]
+id = "screen.code"
+section = "screen_reading"
+set = { "screen.ocr" = "def total(items):\n    return sum(items)" }
+say = "what is the name of the function on my screen"
+kind = "answer"
+reply_any = ['\btotal\b']
+
+# --- Within a session ------------------------------------------------------------------------
+
+[[case]]
+id = "within.manager"
+section = "within_session"
+[[case.turns]]
+say = "my manager is called dana"
+kind = "ignore"
+[[case.turns]]
+say = "what is seven times eight"
+kind = "answer"
+number = 56
+[[case.turns]]
+say = "what is my manager called"
+kind = "answer"
+reply_any = ['dana']
+
+[[case]]
+id = "within.mom"
+section = "within_session"
+[[case.turns]]
+say = "i am going to call my mom at six"
+kind = "ignore"
+[[case.turns]]
+say = "what time is it"
+kind = "answer"
+reply_any = ['4:45', '16:45', 'four forty[- ]?five', 'quarter to five']
+[[case.turns]]
+say = "when am i calling my mom"
+kind = "answer"
+reply_any = ['\b6\b', 'six', '18:00']
+
+[[case]]
+id = "within.theme.favourite"
+section = "within_session"
+[[case.turns]]
+say = "my favourite theme is gruvbox"
+kind = "ignore"
+[[case.turns]]
+say = "switch to my favourite theme"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Gruvbox" }]
+
+[[case]]
+id = "within.file.name"
+section = "within_session"
+[[case.turns]]
+say = "find the budget notes"
+kind = "answer"
+shown = ["Budget Notes"]
+[[case.turns]]
+say = "what was that file called again"
+kind = "answer"
+reply_any = ['budget']
+
+[[case]]
+id = "within.reminder.label"
+section = "within_session"
+[[case.turns]]
+say = "remind me in ten minutes to check the oven"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~oven" } }]
+[[case.turns]]
+say = "what was that reminder for"
+kind = "answer"
+reply_any = ['oven']
+
+[[case]]
+id = "within.locker"
+section = "within_session"
+[[case.turns]]
+say = "my locker code is four seven one two"
+kind = "ignore"
+[[case.turns]]
+say = "what is fifteen percent of eighty"
+kind = "answer"
+number = 12
+[[case.turns]]
+say = "what is my locker code"
+kind = "answer"
+reply_any = ['4712', '4 7 1 2', 'four seven one two', '4-7-1-2', '4, 7, 1, 2']
+
+# --- Across sessions --------------------------------------------------------------------------
+# Each new_session ends the session the way dismissing the overlay does.
+
+[[case]]
+id = "across.manager"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "my manager is called dana"
+kind = "ignore"
+[[case.turns]]
+say = "what is my manager called"
+kind = "answer"
+new_session = true
+reply_any = ['dana']
+
+[[case]]
+id = "across.theme.favourite"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "my favourite theme is gruvbox"
+kind = "ignore"
+[[case.turns]]
+say = "switch to my favourite theme"
+kind = "act"
+new_session = true
+checks = [{ path = "theme.current", eq = "Gruvbox" }]
+
+[[case]]
+id = "across.locker"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "my locker code is four seven one two"
+kind = "ignore"
+[[case.turns]]
+say = "what is my locker code"
+kind = "answer"
+new_session = true
+reply_any = ['4712', '4 7 1 2', 'four seven one two', '4-7-1-2', '4, 7, 1, 2']
+
+[[case]]
+id = "across.yesterday"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "remind me in ten minutes to check the oven"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~oven" } }]
+[[case.turns]]
+say = "what did i ask you to remind me about yesterday"
+kind = "answer"
+new_session = true
+advance_hours = 24
+reply_any = ['oven']
+
+[[case]]
+id = "across.combine"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "my sister's name is maya"
+kind = "ignore"
+[[case.turns]]
+say = "maya's birthday is on june third"
+kind = "ignore"
+new_session = true
+[[case.turns]]
+say = "when is my sister's birthday"
+kind = "answer"
+new_session = true
+reply_any = ['june (?:3|third)', '(?:3|third)(?: of)? june']
+
+[[case]]
+id = "across.parking"
+section = "across_sessions"
+needs = ["memory"]
+[[case.turns]]
+say = "i parked on level three"
+kind = "ignore"
+[[case.turns]]
+say = "where did i park"
+kind = "answer"
+new_session = true
+advance_hours = 4
+reply_any = ['level (?:3|three)', 'third level']
+
+[[case]]
+id = "across.never-told"
+section = "across_sessions"
+say = "what is my dog's name"
+kind = "answer"
+abstain = true
+note = "Saying it was never told is right with or without memory."
+
+# --- Updating and forgetting -----------------------------------------------------------------
+
+[[case]]
+id = "updating.manager"
+section = "updating"
+needs = ["memory"]
+[[case.turns]]
+say = "my manager is called dana"
+kind = "ignore"
+[[case.turns]]
+say = "actually my manager is now priya"
+kind = "ignore"
+new_session = true
+[[case.turns]]
+say = "who is my manager"
+kind = "answer"
+new_session = true
+reply_any = ['priya']
+reply_none = ['dana']
+
+# Forgetting counts only after remembering worked: without memory, "I don't know" proves nothing.
+[[case]]
+id = "updating.forget.locker"
+section = "updating"
+needs = ["memory"]
+[[case.turns]]
+say = "my locker code is four seven one two"
+kind = "ignore"
+[[case.turns]]
+say = "what is my locker code"
+kind = "answer"
+new_session = true
+reply_any = ['4712', '4 7 1 2', 'four seven one two', '4-7-1-2', '4, 7, 1, 2']
+[[case.turns]]
+say = "forget my locker code"
+kind = "ignore"
+new_session = true
+[[case.turns]]
+say = "what is my locker code"
+kind = "answer"
+new_session = true
+abstain = true
+
+[[case]]
+id = "updating.theme"
+section = "updating"
+needs = ["memory"]
+[[case.turns]]
+say = "my favourite theme is gruvbox"
+kind = "ignore"
+[[case.turns]]
+say = "i changed my mind my favourite theme is nord now"
+kind = "ignore"
+new_session = true
+[[case.turns]]
+say = "switch to my favourite theme"
+kind = "act"
+new_session = true
+checks = [{ path = "theme.current", eq = "Nord" }]
+
+[[case]]
+id = "updating.forget.all"
+section = "updating"
+needs = ["memory"]
+[[case.turns]]
+say = "remember that i parked on level three"
+kind = "ignore"
+[[case.turns]]
+say = "where did i park"
+kind = "answer"
+new_session = true
+reply_any = ['level (?:3|three)', 'third level']
+[[case.turns]]
+say = "forget everything i told you"
+kind = "ignore"
+new_session = true
+[[case.turns]]
+say = "where did i park"
+kind = "answer"
+new_session = true
+abstain = true
+
+# --- Habits and initiative ----------------------------------------------------------------------
+
+[[case]]
+id = "habits.focus-mode"
+section = "habits"
+needs = ["memory"]
+[[case.turns]]
+say = "when i say focus mode i mean turn on do not disturb and the night light"
+kind = "ignore"
+[[case.turns]]
+say = "focus mode"
+kind = "act"
+new_session = true
+checks = [{ path = "system.dnd", eq = true }, { path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "habits.early-reminders"
+section = "habits"
+needs = ["memory"]
+[[case.turns]]
+say = "i always want my reminders five minutes early"
+kind = "ignore"
+[[case.turns]]
+say = "remind me at five thirty to call mom"
+kind = "act"
+new_session = true
+advance_hours = 0
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:25", text = "~mom" } }]
+
+[[case]]
+id = "habits.evening-brightness"
+section = "habits"
+needs = ["memory"]
+[[case.turns]]
+say = "in the evening i like my screen brightness at forty percent"
+kind = "ignore"
+[[case.turns]]
+say = "set my evening brightness"
+kind = "act"
+new_session = true
+advance_hours = 4
+checks = [{ path = "display.brightness", eq = 40 }]
+
+[[case]]
+id = "habits.clash"
+section = "habits"
+needs = ["calendar", "initiative"]
+now = "2026-10-09T09:30"
+say = "put a call with bob on my calendar tomorrow at ten"
+kind = "ask"
+reply_any = ['market', 'clash', 'conflict', 'already', 'overlap']

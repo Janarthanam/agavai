@@ -1,0 +1,25 @@
+# Speed and footprint budgets. Proposed in docs/eval.md (open decisions 5 and
+# 6); a person sets the real ones. Changing a number changes the eval version.
+
+[speed]
+first_words_s = 0.5        # first words on the overlay, after speech starts
+commit_s = 0.5             # turn committed, after speech ends
+desktop_changed_s = 3.0    # desktop changed, after commit, one tool
+reply_audio_no_tool_s = 2.5
+reply_audio_tool_s = 4.0
+
+[interruption]
+cancel_stops_audio_s = 0.3
+
+[measure]
+samples = 5
+marginal = 0.15            # within 15% of a budget is flagged
+
+[reliability]
+runs = 5
+cases = [
+  "desktop.volume.up", "desktop.reminder", "desktop.theme.set", "desktop.lock", "desktop.wallpaper.set",
+  "desktop.launch.browser", "desktop.battery", "values.reminder.ninety", "values.brightness.forty",
+  "judgment.ask.reminder", "judgment.decline.font", "judgment.ignore.thanks", "truth.bluetooth.no-adapter",
+  "multi.dim-dnd", "screen.grocery",
+]

@@ -1,0 +1,303 @@
+# Do / Desktop: a plain request for each thing Agavai's desktop tools can do.
+# Clock: Friday 2026-10-09 16:45 unless a case says otherwise.
+
+[[case]]
+id = "desktop.volume.up"
+section = "desktop"
+say = "turn the volume up"
+kind = "act"
+checks = [{ path = "audio.volume", gt = 50 }]
+
+[[case]]
+id = "desktop.volume.down"
+section = "desktop"
+say = "turn the volume down"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "desktop.speakers.mute"
+section = "desktop"
+say = "mute the sound"
+kind = "act"
+checks = [{ path = "audio.muted", eq = true }]
+
+[[case]]
+id = "desktop.mic.mute"
+section = "desktop"
+say = "mute my microphone"
+kind = "act"
+checks = [{ path = "audio.mic_muted", eq = true }]
+
+[[case]]
+id = "desktop.brightness.up"
+section = "desktop"
+say = "make the screen brighter"
+kind = "act"
+checks = [{ path = "display.brightness", gt = 60 }]
+
+[[case]]
+id = "desktop.brightness.down"
+section = "desktop"
+say = "dim the screen"
+kind = "act"
+checks = [{ path = "display.brightness", lt = 60 }]
+
+[[case]]
+id = "desktop.brightness.show"
+section = "desktop"
+say = "how bright is the screen"
+kind = "answer"
+number = 60
+
+[[case]]
+id = "desktop.bluetooth.on"
+section = "desktop"
+say = "turn on bluetooth"
+kind = "act"
+checks = [{ path = "bluetooth.power", eq = true }]
+
+[[case]]
+id = "desktop.bluetooth.off"
+section = "desktop"
+set = { "bluetooth.power" = true }
+say = "turn off bluetooth"
+kind = "act"
+checks = [{ path = "bluetooth.power", eq = false }]
+
+[[case]]
+id = "desktop.bluetooth.status"
+section = "desktop"
+say = "is bluetooth on"
+kind = "answer"
+reply_any = ['\boff\b', '\bnot (?:on|enabled|turned on)\b', "isn't on", '\bdisabled\b']
+
+[[case]]
+id = "desktop.nightlight.on"
+section = "desktop"
+say = "turn on the night light"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "desktop.dnd.on"
+section = "desktop"
+say = "turn on do not disturb"
+kind = "act"
+checks = [{ path = "system.dnd", eq = true }]
+
+[[case]]
+id = "desktop.dnd.off"
+section = "desktop"
+set = { "system.dnd" = true }
+say = "turn off do not disturb"
+kind = "act"
+checks = [{ path = "system.dnd", eq = false }]
+
+[[case]]
+id = "desktop.awake.on"
+section = "desktop"
+say = "keep the computer awake"
+kind = "act"
+checks = [{ path = "system.stay_awake", eq = true }]
+
+[[case]]
+id = "desktop.lock"
+section = "desktop"
+say = "lock the screen"
+kind = "act"
+checks = [{ path = "system.locked", eq = true }]
+
+[[case]]
+id = "desktop.battery"
+section = "desktop"
+say = "what is my battery level"
+kind = "answer"
+number = 43
+
+[[case]]
+id = "desktop.network"
+section = "desktop"
+say = "what network am i connected to"
+kind = "answer"
+reply_any = ['home ?net']
+
+[[case]]
+id = "desktop.themes.list"
+section = "desktop"
+say = "what themes do i have"
+kind = "answer"
+shown = ["Gruvbox"]
+
+[[case]]
+id = "desktop.theme.set"
+section = "desktop"
+say = "set the theme to gruvbox"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Gruvbox" }]
+
+[[case]]
+id = "desktop.wallpaper.current"
+section = "desktop"
+say = "what is my wallpaper"
+kind = "answer"
+reply_any = ['mountain dawn']
+
+[[case]]
+id = "desktop.wallpaper.list"
+section = "desktop"
+say = "show me my wallpapers"
+kind = "answer"
+shown = ["ship at sea"]
+
+[[case]]
+id = "desktop.wallpaper.set"
+section = "desktop"
+say = "set the wallpaper to ship at sea"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "ship at sea" }]
+
+[[case]]
+id = "desktop.wallpaper.next"
+section = "desktop"
+say = "next wallpaper"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "neon city" }]
+
+[[case]]
+id = "desktop.wallpaper.picker"
+section = "desktop"
+say = "open the wallpaper picker"
+kind = "act"
+checks = [{ path = "pickers", added = 1, one_of = ["wallpaper"] }]
+
+[[case]]
+id = "desktop.launch.browser"
+section = "desktop"
+say = "open the browser"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["browser", "firefox"] }]
+
+[[case]]
+id = "desktop.launch.terminal"
+section = "desktop"
+say = "open a terminal"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["terminal"] }]
+
+[[case]]
+id = "desktop.app.calculator"
+section = "desktop"
+say = "open the calculator"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["calculator"] }]
+
+[[case]]
+id = "desktop.url.youtube"
+section = "desktop"
+say = "open youtube"
+kind = "act"
+checks = [{ path = "urls", has = "youtube" }]
+
+[[case]]
+id = "desktop.windows.list"
+section = "desktop"
+say = "what windows are open"
+kind = "answer"
+reply_any = ['firefox', 'signal', 'text editor', 'downloads']
+
+[[case]]
+id = "desktop.window.focus"
+section = "desktop"
+say = "switch to the signal window"
+kind = "act"
+checks = [{ path = "focus.window", eq = "0x3" }]
+allow = ["workspace"]
+
+[[case]]
+id = "desktop.window.close"
+section = "desktop"
+say = "close the files window"
+kind = "act"
+checks = [{ path = "windows", removed = 1, match = { address = "0x4" } }]
+allow = ["focus"]
+
+[[case]]
+id = "desktop.workspace.three"
+section = "desktop"
+say = "go to workspace three"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 3 }]
+allow = ["focus"]
+
+[[case]]
+id = "desktop.workspace.next"
+section = "desktop"
+say = "go to the next workspace"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 2 }]
+allow = ["focus"]
+
+[[case]]
+id = "desktop.fullscreen"
+section = "desktop"
+say = "make this window full screen"
+kind = "act"
+checks = [{ path = "fullscreen.window", eq = "0x1" }]
+
+[[case]]
+id = "desktop.screenshot"
+section = "desktop"
+say = "take a screenshot"
+kind = "act"
+checks = [{ path = "screenshots", added = 1 }]
+
+[[case]]
+id = "desktop.reminder"
+section = "desktop"
+say = "remind me in ten minutes to check the oven"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~oven" } }]
+
+[[case]]
+id = "desktop.reminders.list"
+section = "desktop"
+set = { reminders = [{ minutes = 30, due = "2026-10-09T17:15", text = "call the bank" }] }
+say = "what reminders do i have"
+kind = "answer"
+reply_any = ['bank']
+
+[[case]]
+id = "desktop.notification"
+section = "desktop"
+say = "send me a notification that says stand up"
+kind = "act"
+checks = [{ path = "notifications", added = 1 }, { path = "notifications", has = "stand up" }]
+
+[[case]]
+id = "desktop.time"
+section = "desktop"
+say = "what time is it"
+kind = "answer"
+reply_any = ['4:45', '16:45', 'four forty[- ]?five', 'quarter to five']
+
+[[case]]
+id = "desktop.date"
+section = "desktop"
+say = "what is the date today"
+kind = "answer"
+reply_any = ['october (?:9|ninth)', '(?:9|ninth)(?: of)? october', '2026-10-09']
+
+[[case]]
+id = "desktop.emoji"
+section = "desktop"
+say = "open the emoji picker"
+kind = "act"
+checks = [{ path = "pickers", added = 1, one_of = ["emoji"] }]
+
+[[case]]
+id = "desktop.clipboard"
+section = "desktop"
+say = "show my clipboard history"
+kind = "act"
+checks = [{ path = "pickers", added = 1, one_of = ["clipboard"] }]

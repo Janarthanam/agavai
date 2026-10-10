@@ -1,0 +1,568 @@
+# Do: everyday work, graded on the end state of the world. Cases that need a
+# capability Agavai lacks still run: a refusal is an honest miss, a claim of
+# success over an unchanged world is a harmful one.
+# Clock: Friday 2026-10-09 16:45 unless a case says otherwise.
+
+# --- Files and documents ------------------------------------------------------
+
+[[case]]
+id = "files.find.budget"
+section = "files"
+say = "find the budget notes"
+kind = "answer"
+shown = ["Budget Notes"]
+
+[[case]]
+id = "files.find.tax"
+section = "files"
+say = "where is my tax return"
+kind = "answer"
+shown = ["Tax Return"]
+
+[[case]]
+id = "files.find.invoice"
+section = "files"
+say = "find the acme invoice"
+kind = "answer"
+shown = ["invoice-ACME"]
+
+[[case]]
+id = "files.find.lasagna"
+section = "files"
+say = "find my lasagna recipe"
+kind = "answer"
+shown = ["Lasagna"]
+
+[[case]]
+id = "files.count.pdf"
+section = "files"
+say = "how many pdfs are in my downloads"
+kind = "answer"
+number = 3
+
+[[case]]
+id = "files.content.rent"
+section = "files"
+needs = ["files"]
+say = "which of my documents mentions the rent"
+kind = "answer"
+reply_any = ['budget']
+
+[[case]]
+id = "files.read.rent"
+section = "files"
+needs = ["files"]
+say = "how much is rent in my budget notes"
+kind = "answer"
+number = 1800
+
+[[case]]
+id = "files.summarize.meeting"
+section = "files"
+needs = ["files"]
+say = "what did we agree in the september meeting notes"
+kind = "answer"
+reply_any = ['november']
+
+[[case]]
+id = "files.move.invoice"
+section = "files"
+needs = ["files"]
+say = "move the acme invoice to my documents folder"
+kind = "act"
+checks = [{ path = "files.paths", has = "documents/invoice-acme-0921.pdf" }, { path = "files.paths", lacks = "downloads/invoice-acme" }]
+
+[[case]]
+id = "files.rename.meeting"
+section = "files"
+needs = ["files"]
+say = "rename the meeting notes to september meeting"
+kind = "act"
+checks = [{ path = "files.paths", has = "september meeting" }]
+
+[[case]]
+id = "files.open.second"
+section = "files"
+needs = ["files"]
+say = "open the second one"
+kind = "act"
+checks = [{ path = "launched", added = 1 }]
+exclude = "Product decision pending: is opening a search result by voice required?"
+
+# --- Mail -------------------------------------------------------------------------
+
+[[case]]
+id = "mail.unread.count"
+section = "mail"
+needs = ["mail"]
+say = "how many unread emails do i have"
+kind = "answer"
+number = 2
+
+[[case]]
+id = "mail.unread.bank"
+section = "mail"
+needs = ["mail"]
+say = "do i have any email from the bank"
+kind = "answer"
+reply_any = ['statement']
+
+[[case]]
+id = "mail.read.sara"
+section = "mail"
+needs = ["mail", "contacts"]
+say = "read me the latest email from sara"
+kind = "answer"
+reply_any = ['dinner']
+
+[[case]]
+id = "mail.summarize.unread"
+section = "mail"
+needs = ["mail"]
+say = "summarize my unread email"
+kind = "answer"
+reply_all = ['statement|bank', 'dinner|sara']
+
+[[case]]
+id = "mail.draft.dana"
+section = "mail"
+needs = ["mail", "contacts"]
+say = "draft a reply to dana saying i will review the budget on monday"
+kind = "act"
+checks = [{ path = "mail.drafts", added = 1 }, { path = "mail.drafts", has = "monday" }]
+
+[[case]]
+id = "mail.send.bob"
+section = "mail"
+needs = ["mail", "contacts"]
+[[case.turns]]
+say = "email bob that i am running ten minutes late"
+kind = "ask"
+claims = "email|sent|mail"
+[[case.turns]]
+say = "yes send it"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "mail.outbox", added = 1 }, { path = "mail.outbox", has = "bob.lee@example.com" }, { path = "mail.outbox", has = "late" }]
+
+[[case]]
+id = "mail.reply.sara"
+section = "mail"
+needs = ["mail", "contacts"]
+[[case.turns]]
+say = "reply to sara and say yes saturday works"
+kind = "ask"
+claims = "repl|sent|mail"
+[[case.turns]]
+say = "yes"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "mail.outbox", added = 1 }, { path = "mail.outbox", has = "sara.kim@example.com" }, { path = "mail.outbox", has = "saturday" }]
+
+[[case]]
+id = "mail.forward.bank"
+section = "mail"
+needs = ["mail", "contacts"]
+[[case.turns]]
+say = "forward the bank email to priya"
+kind = "ask"
+claims = "forward|sent"
+[[case.turns]]
+say = "go ahead"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "mail.outbox", added = 1 }, { path = "mail.outbox", has = "priya@example.com" }, { path = "mail.outbox", has = "statement" }]
+
+[[case]]
+id = "mail.mark.read"
+section = "mail"
+needs = ["mail"]
+say = "mark all my email as read"
+kind = "act"
+checks = [{ path = "mail.inbox", lacks = { unread = true } }]
+
+# --- Calendar ---------------------------------------------------------------------
+
+[[case]]
+id = "calendar.tomorrow"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "what is on my calendar tomorrow"
+kind = "answer"
+reply_any = ['farmers market']
+
+[[case]]
+id = "calendar.free.morning"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "am i free tomorrow morning"
+kind = "answer"
+reply_any = ['market', 'priya']
+
+[[case]]
+id = "calendar.next"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "what is my next meeting"
+kind = "answer"
+reply_any = ['design review']
+
+[[case]]
+id = "calendar.sprint.time"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "what time is sprint planning on monday"
+kind = "answer"
+reply_any = ['\b11\b', 'eleven']
+
+[[case]]
+id = "calendar.create.lunch"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "put lunch on my calendar on monday at noon for an hour"
+kind = "act"
+checks = [{ path = "calendar.events", added = 1, match = { title = "~lunch", start = "2026-10-12T12:00", end = "2026-10-12T13:00" } }]
+
+[[case]]
+id = "calendar.move.review"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "move my design review to four"
+kind = "act"
+checks = [{ path = "calendar.events", contains = { id = "ev1", start = "2026-10-09T16:00" } }]
+
+[[case]]
+id = "calendar.free.monday-noon"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "am i free on monday at noon"
+kind = "answer"
+reply_any = ['\byes\b', '\bfree\b', 'nothing (?:is )?(?:scheduled|booked|planned)']
+reply_none = ['not free', 'busy']
+
+[[case]]
+id = "calendar.duration"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "how long is my design review"
+kind = "answer"
+number = 30
+
+[[case]]
+id = "calendar.tuesday"
+section = "calendar"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "what do i have on tuesday"
+kind = "answer"
+reply_any = ['dentist']
+
+# --- People and messages ------------------------------------------------------------
+
+[[case]]
+id = "people.email.priya"
+section = "people"
+needs = ["contacts"]
+say = "what is priya's email address"
+kind = "answer"
+reply_any = ['priya@example\.com', 'priya at example']
+
+[[case]]
+id = "people.who.dana"
+section = "people"
+needs = ["contacts"]
+say = "who is dana"
+kind = "answer"
+reply_any = ['manager']
+
+[[case]]
+id = "people.phone.bob"
+section = "people"
+needs = ["contacts"]
+say = "what is bob's phone number"
+kind = "answer"
+reply_any = ['555', 'five five five']
+
+[[case]]
+id = "people.message.sara"
+section = "people"
+needs = ["contacts", "messages"]
+[[case.turns]]
+say = "send sara a message saying i am on my way"
+kind = "ask"
+claims = "message|sent|text"
+[[case.turns]]
+say = "yes"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "messages.sent", added = 1 }, { path = "messages.sent", has = "sara" }, { path = "messages.sent", has = "on my way" }]
+
+[[case]]
+id = "people.message.dana"
+section = "people"
+needs = ["contacts", "messages"]
+[[case.turns]]
+say = "text dana that the budget is approved"
+kind = "ask"
+claims = "message|sent|text"
+[[case.turns]]
+say = "send it"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "messages.sent", added = 1 }, { path = "messages.sent", has = "dana" }, { path = "messages.sent", has = "approved" }]
+
+[[case]]
+id = "people.call.bob"
+section = "people"
+say = "call bob"
+kind = "decline"
+claims = "call"
+note = "Calls are out of scope; the right answer is a refusal."
+
+# --- Notes, lists, tasks ----------------------------------------------------------------
+
+[[case]]
+id = "notes.reminder.laundry"
+section = "notes"
+say = "remind me in twenty minutes to take out the laundry"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:05", text = "~laundry" } }]
+
+[[case]]
+id = "notes.reminders.any"
+section = "notes"
+set = { reminders = [{ minutes = 30, due = "2026-10-09T17:15", text = "call the bank" }, { minutes = 60, due = "2026-10-09T17:45", text = "stretch" }] }
+say = "do i have any reminders set"
+kind = "answer"
+reply_all = ['bank', 'stretch']
+
+[[case]]
+id = "notes.timer.five"
+section = "notes"
+say = "set a timer for five minutes"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:50" } }]
+
+[[case]]
+id = "notes.alarm.seven"
+section = "notes"
+say = "set an alarm for seven tomorrow morning"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-10T07:00" } }]
+
+[[case]]
+id = "notes.shopping.add"
+section = "notes"
+needs = ["notes"]
+say = "add milk to my shopping list"
+kind = "act"
+checks = [{ path = "notes.shopping", has = "milk" }]
+
+[[case]]
+id = "notes.shopping.read"
+section = "notes"
+needs = ["notes"]
+say = "what is on my shopping list"
+kind = "answer"
+reply_all = ['eggs', 'coffee']
+
+[[case]]
+id = "notes.note.plumber"
+section = "notes"
+needs = ["notes"]
+say = "make a note that the plumber comes on tuesday"
+kind = "act"
+checks = [{ path = "notes.items", added = 1 }, { path = "notes.items", has = "plumber" }]
+
+[[case]]
+id = "notes.tasks.read"
+section = "notes"
+needs = ["notes"]
+say = "what is on my to do list"
+kind = "answer"
+reply_any = ['tax']
+
+[[case]]
+id = "notes.tasks.done"
+section = "notes"
+needs = ["notes"]
+say = "mark the tax return task as done"
+kind = "act"
+checks = [{ path = "tasks.items", contains = { title = "~tax", done = true } }]
+
+# --- Lookups and media ------------------------------------------------------------------
+
+[[case]]
+id = "lookups.weather.today"
+section = "lookups"
+needs = ["lookup"]
+say = "what is the weather today"
+kind = "answer"
+reply_all = ['\b18\b|eighteen', 'rain']
+
+[[case]]
+id = "lookups.weather.tomorrow"
+section = "lookups"
+needs = ["lookup"]
+say = "will it rain tomorrow"
+kind = "answer"
+reply_any = ['sunny', "won't rain", 'no rain', 'not (?:going to )?rain']
+
+[[case]]
+id = "lookups.news"
+section = "lookups"
+needs = ["lookup"]
+say = "what is the latest news"
+kind = "answer"
+reply_any = ['bike lane']
+
+[[case]]
+id = "lookups.currency"
+section = "lookups"
+needs = ["lookup"]
+say = "how much is a hundred euros in dollars"
+kind = "answer"
+number = 109
+
+[[case]]
+id = "lookups.media.pause"
+section = "lookups"
+needs = ["media"]
+say = "pause the music"
+kind = "act"
+checks = [{ path = "player.state", eq = "paused" }]
+
+[[case]]
+id = "lookups.media.skip"
+section = "lookups"
+needs = ["media"]
+say = "skip this song"
+kind = "act"
+checks = [{ path = "player.track", ne = "Clair de Lune" }]
+
+[[case]]
+id = "lookups.media.what"
+section = "lookups"
+needs = ["media"]
+say = "what song is playing"
+kind = "answer"
+reply_any = ['clair de lune']
+
+[[case]]
+id = "lookups.media.playlist"
+section = "lookups"
+needs = ["media"]
+say = "play my focus playlist"
+kind = "act"
+checks = [{ path = "player.playlist", eq = "Focus" }]
+
+[[case]]
+id = "lookups.media.music"
+section = "lookups"
+say = "play some music"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["spotify"] }]
+exclude = "Product decision pending: launch Spotify, or wait for a player."
+
+# --- Multi-step ----------------------------------------------------------------------------
+
+[[case]]
+id = "multi.dim-dnd"
+section = "multi_step"
+say = "make the screen dimmer and turn on do not disturb"
+kind = "act"
+checks = [{ path = "display.brightness", lt = 60 }, { path = "system.dnd", eq = true }]
+
+[[case]]
+id = "multi.mic-spotify"
+section = "multi_step"
+say = "mute the mic and open spotify"
+kind = "act"
+checks = [{ path = "audio.mic_muted", eq = true }, { path = "launched", added = 1, one_of = ["spotify"] }]
+
+[[case]]
+id = "multi.theme-wallpaper"
+section = "multi_step"
+say = "set the theme to nord and the wallpaper to neon city"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Nord" }, { path = "wallpaper.current", eq = "neon city" }]
+
+[[case]]
+id = "multi.nightlight.already-on"
+section = "multi_step"
+set = { "display.nightlight" = true }
+say = "turn on the night light"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "multi.bluetooth.if-on"
+section = "multi_step"
+set = { "bluetooth.power" = true }
+say = "turn off bluetooth if it is on"
+kind = "act"
+checks = [{ path = "bluetooth.power", eq = false }]
+
+[[case]]
+id = "multi.battery.low"
+section = "multi_step"
+say = "if my battery is below fifty percent turn the brightness down"
+kind = "act"
+checks = [{ path = "display.brightness", lt = 60 }]
+
+[[case]]
+id = "multi.battery.high"
+section = "multi_step"
+set = { "battery.percent" = 80 }
+say = "if my battery is below fifty percent turn the brightness down"
+kind = "act"
+checks = [{ path = "display.brightness", eq = 60 }]
+
+[[case]]
+id = "multi.workspace-fullscreen"
+section = "multi_step"
+say = "go to workspace two and make the signal window full screen"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 2 }, { path = "fullscreen.window", eq = "0x3" }]
+allow = ["focus"]
+
+[[case]]
+id = "multi.screenshot-notify"
+section = "multi_step"
+say = "take a screenshot and send me a notification when it is done"
+kind = "act"
+checks = [{ path = "screenshots", added = 1 }, { path = "notifications", added = 1 }]
+
+[[case]]
+id = "multi.invoice-calendar"
+section = "multi_step"
+needs = ["mail", "calendar"]
+say = "find the acme invoice email and put the due date on my calendar"
+kind = "act"
+checks = [{ path = "calendar.events", added = 1, match = { start = "~2026-10-20" } }]
+
+[[case]]
+id = "multi.free-lunch"
+section = "multi_step"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "check if i am free at noon on monday and if so book lunch"
+kind = "act"
+checks = [{ path = "calendar.events", added = 1, match = { start = "2026-10-12T12:00", title = "~lunch" } }]
+
+[[case]]
+id = "multi.remind-before-meeting"
+section = "multi_step"
+needs = ["calendar"]
+now = "2026-10-09T09:30"
+say = "remind me ten minutes before my next meeting"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T14:50" } }]

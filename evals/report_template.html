@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agavai eval report</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --neutral: #b5b4ac;
+  --critical: #d03b3b;
+  --critical-text: #b42828;
+  --warning: #fab219;
+  --focus: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --good: #0ca30c;
+    --good-text: #0ca30c;
+    --neutral: #5b5a55;
+    --critical: #d03b3b;
+    --critical-text: #ef6b6b;
+    --focus: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255, 255, 255, 0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --good: #0ca30c;
+  --good-text: #0ca30c;
+  --neutral: #5b5a55;
+  --critical: #d03b3b;
+  --critical-text: #ef6b6b;
+  --focus: #3987e5;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0 0 4px; font-weight: 650; }
+h2 { font-size: 19px; margin: 40px 0 6px; font-weight: 620; }
+h3 { font-size: 15px; margin: 20px 0 6px; font-weight: 620; }
+p { margin: 0 0 10px; }
+.lede { color: var(--ink-2); max-width: 760px; }
+.meta { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 20px; }
+.kpi .label { color: var(--ink-2); font-size: 13px; }
+.kpi .value { font-size: 40px; font-weight: 640; line-height: 1.1; margin: 4px 0; }
+.kpi.hero .value { font-size: 56px; }
+.kpi .sub { color: var(--muted); font-size: 13px; }
+.chart { width: 100%; display: block; overflow: visible; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin: 4px 0 8px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-weight: 560; }
+.status .icon { width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; color: #fff; font-weight: 700; }
+.status.done { color: var(--good-text); } .status.done .icon { background: var(--good); }
+.status.honest { color: var(--ink-2); } .status.honest .icon { background: var(--neutral); color: var(--ink); }
+.status.harmful { color: var(--critical-text); } .status.harmful .icon { background: var(--critical); }
+.status.other { color: var(--muted); } .status.other .icon { background: var(--grid); color: var(--ink-2); }
+.chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--ring); color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--surface-2); }
+tr.detail td { background: var(--surface-2); }
+.quote { font-style: italic; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-word; }
+.turn { border-left: 2px solid var(--axis); padding: 4px 0 8px 12px; margin: 6px 0; }
+.turn .who { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0 12px; }
+select, input[type="search"], button, .file-label {
+  font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 7px; padding: 6px 10px; max-width: 100%;
+}
+button, .file-label { cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible, tr.clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13.5px; }
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 10; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  max-width: 280px; display: none;
+}
+.tooltip .v { font-weight: 650; font-size: 15px; }
+.tooltip .k { color: var(--ink-2); }
+.tooltip .keyline { display: inline-block; width: 12px; height: 2px; vertical-align: middle; margin-right: 6px; }
+.note { color: var(--ink-2); font-size: 13px; }
+.drop { border: 1px dashed var(--axis); border-radius: 10px; padding: 24px; text-align: center; color: var(--ink-2); }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.area-head { margin: 18px 0 2px; font-weight: 620; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.area-head .scores { color: var(--ink-2); font-weight: 500; font-size: 13px; }
+.section-row { display: grid; grid-template-columns: minmax(120px, 190px) 1fr minmax(118px, auto); gap: 10px; align-items: center; padding: 5px 0; }
+.section-row .name { font-size: 14px; }
+.section-row .name button { all: unset; cursor: pointer; border-bottom: 1px dotted var(--axis); }
+.section-row .name button:focus-visible { outline: 2px solid var(--focus); }
+.section-row .figure { font-size: 13px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.section-row .figure b { color: var(--ink); font-size: 14px; }
+.bar-track { position: relative; height: 14px; }
+.track { position: relative; height: 14px; background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px); background-size: 25% 100%; background-repeat: repeat-x; border-right: 1px solid var(--grid); }
+.track.plain { background-image: none; border-right: 0; }
+.bar { position: absolute; left: 0; top: 1px; height: 12px; border-radius: 0 4px 4px 0; }
+.stack { display: flex; gap: 2px; height: 12px; margin-top: 1px; }
+.stack > div { height: 12px; min-width: 2px; }
+.stack > div:last-child { border-radius: 0 4px 4px 0; }
+.hit { cursor: default; }
+.hit:hover, .hit:focus-visible { filter: brightness(1.15); outline: none; }
+.budget { position: absolute; top: -3px; width: 2px; height: 20px; background: var(--ink); }
+.area-row { display: grid; grid-template-columns: minmax(90px, 140px) 1fr 44px; gap: 10px; align-items: center; padding: 4px 0; }
+.area-row .bars { display: grid; gap: 3px; }
+.area-row .vals { font-size: 12.5px; color: var(--ink-2); line-height: 17px; text-align: right; font-variant-numeric: tabular-nums; }
+.scale { display: grid; grid-template-columns: minmax(90px, 140px) 1fr 44px; gap: 10px; font-size: 11px; color: var(--muted); }
+.scale .ticks { display: flex; justify-content: space-between; }
+.speed-row { display: grid; grid-template-columns: minmax(130px, 220px) 1fr 70px; gap: 10px; align-items: center; padding: 6px 0; }
+.speed-row .val { font-size: 12.5px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) {
+  .speed-row { grid-template-columns: 1fr 70px; }
+  .speed-row .track { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 620px) {
+  .section-row { grid-template-columns: 1fr auto; }
+  .section-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
+  .kpi.hero .value { font-size: 44px; }
+}
+@media (forced-colors: active) {
+  .swatch, .status .icon { forced-color-adjust: none; }
+}
+</style>
+</head>
+<body>
+<main id="app">
+  <div class="drop" id="empty" hidden>
+    <p>No report data in this page.</p>
+    <label class="file-label">Open a report.json <input type="file" accept="application/json,.json" hidden data-open></label>
+  </div>
+</main>
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+<script type="application/json" id="report-data">__REPORT_DATA__</script>
+<script>
+"use strict";
+const OUTCOME = {
+  done: { label: "Done", icon: "✓", cls: "done" },
+  honest: { label: "Honest miss", icon: "–", cls: "honest" },
+  harmful: { label: "Harmful miss", icon: "✕", cls: "harmful" },
+  excluded: { label: "Excluded", icon: "·", cls: "other" },
+  invalid: { label: "Invalid", icon: "!", cls: "other" },
+  not_run: { label: "Not run", icon: "·", cls: "other" },
+  unscored: { label: "Unscored", icon: "·", cls: "other" },
+};
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+const fmt = (v, digits = 0) => v === null || v === undefined ? "–" : Number(v).toFixed(digits);
+const pct = v => v === null || v === undefined ? "–" : `${fmt(v, v % 1 ? 1 : 0)}`;
+function statusBadge(outcome) {
+  const o = OUTCOME[outcome] || OUTCOME.unscored;
+  return el("span", { class: `status ${o.cls}` }, el("span", { class: "icon", "aria-hidden": "true", text: o.icon }), o.label);
+}
+
+const tip = document.getElementById("tooltip");
+function showTip(event, rows) {
+  tip.replaceChildren(...rows);
+  tip.style.display = "block";
+  const pad = 14;
+  const box = tip.getBoundingClientRect();
+  let x = event.clientX + pad, y = event.clientY + pad;
+  if (x + box.width > innerWidth - 8) x = event.clientX - box.width - pad;
+  if (y + box.height > innerHeight - 8) y = event.clientY - box.height - pad;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${Math.max(8, y)}px`;
+}
+function hideTip() { tip.style.display = "none"; }
+function hoverable(node, rows) {
+  node.setAttribute("tabindex", "0");
+  node.addEventListener("pointermove", e => showTip(e, rows()));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", () => {
+    const r = node.getBoundingClientRect();
+    showTip({ clientX: r.right, clientY: r.top }, rows());
+  });
+  node.addEventListener("blur", hideTip);
+}
+
+function header(data) {
+  const fp = data.run.fingerprint || {};
+  const model = (fp.model_path || "").split("/").pop();
+  return el("header", {},
+    el("h1", { text: "Agavai assistant eval" }),
+    el("p", { class: "meta" },
+      `Run ${data.run.id} · eval version ${data.eval_version} · ${model || "model unknown"} · llama-server ${fp.llama_server_build || "?"} · commit ${(fp.git_commit || "").slice(0, 7)}${fp.git_dirty ? " (uncommitted changes)" : ""} · router ${fp.router || "?"}`),
+    el("p", { class: "lede" },
+      "The assistant score counts everything a personal assistant should do, including capabilities Agavai has not built yet; a request it cannot serve is a miss. The shipped score counts only cases Agavai can attempt today. A harmful miss is a wrong change to the world, or a reply that claims something the world does not show."),
+    el("div", { class: "row" },
+      el("label", { class: "file-label" }, "Open another report.json", el("input", { type: "file", accept: "application/json,.json", hidden: true, "data-open": true })),
+      el("button", { type: "button", onclick: () => cycleTheme(), text: "Theme" })));
+}
+
+function kpis(data) {
+  const t = data.totals;
+  const tile = (label, value, sub, hero) => el("div", { class: `card kpi${hero ? " hero" : ""}` },
+    el("div", { class: "label", text: label }), el("div", { class: "value", text: value }), el("div", { class: "sub", text: sub }));
+  return el("section", { class: "kpis", "aria-label": "Headline scores" },
+    tile("Assistant score", pct(t.assistant.score), `Out of 100, all seven areas. Without measured sections: ${pct(t.assistant.without_measured)}`, true),
+    tile("Shipped score", pct(t.shipped.score), `What Agavai can attempt today. Without measured sections: ${pct(t.shipped.without_measured)}`, true),
+    tile("Harmful misses", String(t.harmful), `${t.harmful_shipped} in shipped cases. Every one is listed below.`),
+    tile("Cases", `${t.cases_scored}`, `${t.cases_shipped} shipped, ${t.cases_scored - t.cases_shipped} need unbuilt capabilities; ${t.excluded} excluded, ${t.invalid} invalid`));
+}
+
+function areaChart(data) {
+  const rows = data.areas.map(area => {
+    const bars = el("div", { class: "bars" });
+    const vals = el("div", { class: "vals" });
+    [["score", "--series-1", "Assistant"], ["shipped_score", "--series-2", "Shipped"]].forEach(([key, color, label]) => {
+      const value = area[key];
+      const track = el("div", { class: "track hit" });
+      if (value !== null) track.append(el("div", { class: "bar", style: `width:${value}%;background:var(${color})` }));
+      hoverable(track, () => [el("div", { class: "v", text: value === null ? "no cases" : fmt(value, 1) }),
+        el("div", { class: "k" }, el("span", { class: "keyline", style: `background:var(${color})` }), `${label} score · ${area.title}`)]);
+      bars.append(track);
+      vals.append(el("div", { text: value === null ? "–" : fmt(value, 0) }));
+    });
+    return el("div", { class: "area-row" }, el("div", { text: area.title }), bars, vals);
+  });
+  return el("div", { class: "card" },
+    el("div", { class: "legend" },
+      el("span", { class: "key" }, el("span", { class: "swatch", style: "background:var(--series-1)" }), "Assistant score (everything)"),
+      el("span", { class: "key" }, el("span", { class: "swatch", style: "background:var(--series-2)" }), "Shipped score (what Agavai can attempt today)")),
+    el("div", { class: "scale", "aria-hidden": "true" }, el("span"), el("div", { class: "ticks" }, ["0", "25", "50", "75", "100"].map(v => el("span", { text: v }))), el("span")),
+    rows);
+}
+
+function stackedBar(section, shippedOnly) {
+  const items = section.items.filter(i => ["done", "honest", "harmful"].includes(i.outcome) && (!shippedOnly || i.shipped));
+  const n = items.length;
+  const wrap = el("div", { class: "bar-track" });
+  if (!n) {
+    wrap.append(el("span", { class: "note", text: section.unscored_reason || "No cases" }));
+    return wrap;
+  }
+  const counts = { done: 0, honest: 0, harmful: 0 };
+  items.forEach(i => counts[i.outcome]++);
+  const stack = el("div", { class: "stack", role: "img", "aria-label": `${section.title}: ${counts.done} done, ${counts.honest} honest misses, ${counts.harmful} harmful misses` });
+  for (const [key, color] of [["done", "--good"], ["honest", "--neutral"], ["harmful", "--critical"]]) {
+    if (!counts[key]) continue;
+    const part = el("div", { class: "hit", style: `flex:${counts[key]} 0 0;background:var(${color})` });
+    hoverable(part, () => [el("div", { class: "v", text: `${counts[key]} of ${n}` }), el("div", { class: "k", text: `${OUTCOME[key].label} · ${section.title}` })]);
+    stack.append(part);
+  }
+  wrap.append(stack);
+  return wrap;
+}
+
+function sectionsView(data, state) {
+  const box = el("div", { class: "card" });
+  const legend = el("div", { class: "legend" },
+    ...["done", "honest", "harmful"].map(k => statusBadge(k)),
+    el("label", { class: "check" }, el("input", { type: "checkbox", checked: state.shippedOnly, onchange: e => { state.shippedOnly = e.target.checked; rerender(); } }), "Shipped cases only"));
+  box.append(legend);
+  for (const area of data.areas) {
+    box.append(el("div", { class: "area-head" }, el("span", { text: area.title }),
+      el("span", { class: "scores", text: `assistant ${pct(area.score)} · shipped ${pct(area.shipped_score)}` })));
+    for (const section of data.sections.filter(s => s.area === area.id)) {
+      const score = state.shippedOnly ? section.shipped_score : section.score;
+      const n = state.shippedOnly ? section.shipped_n : section.n;
+      const se = state.shippedOnly ? section.shipped_se : section.se;
+      const chips = [];
+      if (section.kind !== "exact") chips.push(el("span", { class: "chip", text: section.kind }));
+      if (section.n && !section.shipped_n) chips.push(el("span", { class: "chip", text: "not built" }));
+      else if (section.not_built) chips.push(el("span", { class: "chip", text: `${section.not_built} not built` }));
+      box.append(el("div", { class: "section-row" },
+        el("div", { class: "name" }, el("button", { type: "button", text: section.title, onclick: () => { state.section = section.id; state.area = ""; state.outcome = ""; rerender(); document.getElementById("cases").scrollIntoView({ behavior: "smooth" }); } }), " ", ...chips),
+        stackedBar(section, state.shippedOnly),
+        el("div", { class: "figure" }, score === null ? el("span", { text: section.unscored_reason ? "unscored" : "–" }) : el("span", {}, el("b", { text: pct(score) }), ` · n ${n} · ±${fmt(se, 0)}`))));
+    }
+  }
+  box.append(el("p", { class: "note" }, "Score is the share of cases done. ± is one standard error, clustered by intent; a difference smaller than about two of them is not a finding. Measured sections time a clock or sample the model and are not exact."));
+  return box;
+}
+
+function harmfulView(data) {
+  if (!data.harmful.length) return el("p", { class: "note", text: "No harmful misses in this run." });
+  const rows = data.harmful.map(h => el("tr", {},
+    el("td", {}, el("span", { class: "mono", text: h.id }), h.shipped ? null : el("div", {}, el("span", { class: "chip", text: "needs unbuilt capability" }))),
+    el("td", { class: "quote", text: h.say || "" }),
+    el("td", { text: h.reply || "" }),
+    el("td", { text: h.reason })));
+  return el("div", { class: "card table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "Case" }), el("th", { text: "Said" }), el("th", { text: "Agavai replied" }), el("th", { text: "Why it is harmful" }))),
+    el("tbody", {}, rows)));
+}
+
+function weakest(data) {
+  const rows = data.sections.filter(s => s.shipped_n >= 5 && s.shipped_score !== null).sort((a, b) => a.shipped_score - b.shipped_score).slice(0, 5);
+  return el("div", { class: "card" }, el("h3", { text: "Weakest shipped sections" }),
+    el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "Section" }), el("th", { class: "num", text: "Shipped score" }), el("th", { class: "num", text: "Cases" }), el("th", { class: "num", text: "Harmful" }))),
+      el("tbody", {}, rows.map(s => el("tr", {}, el("td", { text: s.title }), el("td", { class: "num", text: pct(s.shipped_score) }), el("td", { class: "num", text: s.shipped_n }), el("td", { class: "num", text: s.items.filter(i => i.shipped && i.outcome === "harmful").length })))))));
+}
+
+function changeText(change) {
+  const show = v => typeof v === "string" ? v : JSON.stringify(v);
+  const before = show(change.before), after = show(change.after);
+  return `${change.path}: ${before.length > 90 ? before.slice(0, 90) + "…" : before} → ${after.length > 140 ? after.slice(0, 140) + "…" : after}`;
+}
+
+function turnsView(item) {
+  const box = el("div", {});
+  if (item.note) box.append(el("p", { class: "note", text: item.note }));
+  if (!item.turns || !item.turns.length) {
+    box.append(el("p", { class: "note", text: item.reason || "" }));
+    for (const key of ["transcript", "heard", "reply", "commits", "runs"]) {
+      if (item[key] !== undefined) box.append(el("p", {}, el("span", { class: "who", text: `${key} ` }), el("span", { class: "mono", text: typeof item[key] === "string" ? item[key] : JSON.stringify(item[key]) })));
+    }
+    return box;
+  }
+  item.turns.forEach(turn => {
+    const t = el("div", { class: "turn" });
+    t.append(el("div", { class: "who", text: "Said" }), el("div", { class: "quote", text: turn.say || "(nothing)" }));
+    if (turn.heard) t.append(el("div", { class: "who", text: "Heard" }), el("div", { class: "quote", text: turn.heard }));
+    t.append(el("div", { class: "who", text: "Agavai replied" }), el("div", { text: turn.reply || "(no reply)" }));
+    if (turn.grade) t.append(el("div", { style: "margin-top:4px" }, statusBadge(turn.grade.outcome), " ", el("span", { class: "note", text: turn.grade.reason })));
+    if (turn.grade && turn.grade.failed && turn.grade.failed.length) t.append(el("div", { class: "note", text: `Unmet: ${turn.grade.failed.join("; ")}` }));
+    t.append(el("div", { class: "who", text: "World changes" }), turn.changes.length
+      ? el("ul", { class: "mono", style: "margin:2px 0;padding-left:18px" }, turn.changes.map(c => el("li", { text: changeText(c) })))
+      : el("div", { class: "note", text: "none" }));
+    if (turn.shown && turn.shown.length) t.append(el("div", { class: "who", text: "Canvas" }), el("div", { class: "note", text: turn.shown.slice(0, 8).join(" · ") }));
+    const diag = [`${turn.model_calls} model calls`, `${fmt(turn.seconds, 1)} s`];
+    if (turn.context) diag.push(`context: ${turn.context}`);
+    if (turn.heads && turn.heads.length) diag.push(`tools offered: ${turn.heads.map(h => h.join("+") || "none").join(" → ")}`);
+    t.append(el("div", { class: "note", text: diag.join(" · ") }));
+    if (turn.tools && turn.tools.length) t.append(el("details", {}, el("summary", { class: "note", text: "Tool calls (diagnostic only; never graded)" }),
+      el("ul", { class: "mono", style: "padding-left:18px" }, turn.tools.map(c => el("li", { text: `${c.name}(${c.arguments}) → ${c.result}` })))));
+    if (turn.error) t.append(el("pre", { class: "mono", text: turn.error }));
+    box.append(t);
+  });
+  return box;
+}
+
+function caseExplorer(data, state) {
+  const sections = data.sections;
+  const all = sections.flatMap(s => s.items.map(i => ({ ...i, sectionTitle: s.title, area: s.area })));
+  const outcomes = ["", "done", "honest", "harmful", "excluded", "invalid", "not_run"];
+  const filters = el("div", { class: "filters" },
+    el("select", { "aria-label": "Area", onchange: e => { state.area = e.target.value; state.section = ""; rerender(); } },
+      el("option", { value: "", text: "All areas" }), data.areas.map(a => el("option", { value: a.id, text: a.title, selected: state.area === a.id }))),
+    el("select", { "aria-label": "Section", onchange: e => { state.section = e.target.value; rerender(); } },
+      el("option", { value: "", text: "All sections" }), sections.filter(s => !state.area || s.area === state.area).map(s => el("option", { value: s.id, text: s.title, selected: state.section === s.id }))),
+    el("select", { "aria-label": "Outcome", onchange: e => { state.outcome = e.target.value; rerender(); } },
+      outcomes.map(o => el("option", { value: o, text: o ? OUTCOME[o].label : "All outcomes", selected: state.outcome === o }))),
+    el("label", { class: "check" }, el("input", { type: "checkbox", checked: state.shippedOnly, onchange: e => { state.shippedOnly = e.target.checked; rerender(); } }), "Shipped only"),
+    el("input", { type: "search", placeholder: "Search said, replied, reason", value: state.query, "aria-label": "Search cases",
+      oninput: e => { state.query = e.target.value; renderRows(); } }));
+  const tbody = el("tbody", {});
+  const count = el("p", { class: "note" });
+  function renderRows() {
+    const q = state.query.trim().toLowerCase();
+    const rows = all.filter(i => (!state.area || i.area === state.area) && (!state.section || i.section === state.section || sections.find(s => s.id === state.section)?.items.includes(i))
+      && (!state.outcome || i.outcome === state.outcome) && (!state.shippedOnly || i.shipped)
+      && (!q || JSON.stringify([i.id, i.says, i.reason, i.reply, i.transcript, (i.turns || []).map(t => t.reply)]).toLowerCase().includes(q)));
+    count.textContent = `${rows.length} of ${all.length} items`;
+    tbody.replaceChildren();
+    rows.slice(0, 400).forEach(item => {
+      const said = item.says ? item.says.join(" → ") : (item.text || item.heard || item.reply || "");
+      const detail = el("tr", { class: "detail", hidden: true }, el("td", { colspan: 5 }));
+      const row = el("tr", { class: "clickable", tabindex: 0, "aria-expanded": "false" },
+        el("td", {}, el("span", { class: "mono", text: item.id })),
+        el("td", { text: item.sectionTitle }),
+        el("td", { class: "quote", text: said }),
+        el("td", {}, statusBadge(item.outcome)),
+        el("td", {}, el("span", { text: item.reason || "" }), item.needs && item.needs.length ? el("div", {}, item.needs.map(n => el("span", { class: "chip", text: `needs ${n}` }))) : null));
+      const toggle = () => {
+        const open = detail.hidden;
+        detail.hidden = !open;
+        row.setAttribute("aria-expanded", String(open));
+        if (open && !detail.firstChild.firstChild) detail.firstChild.append(turnsView(item));
+      };
+      row.addEventListener("click", toggle);
+      row.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      tbody.append(row, detail);
+    });
+  }
+  renderRows();
+  return el("div", {}, filters, count, el("div", { class: "card table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "Case" }), el("th", { text: "Section" }), el("th", { text: "Said" }), el("th", { text: "Outcome" }), el("th", { text: "Reason" }))),
+    tbody)));
+}
+
+function speedChart(section) {
+  const items = section.items.filter(i => i.budget !== undefined);
+  if (!items.length) return el("p", { class: "note", text: "Speed was not measured in this run." });
+  const labels = { first_words: "First words on screen", commit: "Turn committed after speech ends", desktop_changed: "Desktop changed (one tool)",
+    reply_audio_no_tool: "Reply audio starts (no tool)", reply_audio_tool: "Reply audio starts (with a tool)", cancel_stops_audio: "Audio stops after cancel" };
+  const never = i => i.median === null || i.median === undefined;
+  const max = Math.ceil(Math.max(...items.flatMap(i => [i.budget, i.median ?? 0, ...(i.samples || []).filter(s => s !== null)])) * 1.05);
+  const rows = items.map(item => {
+    const track = el("div", { class: "track plain hit" },
+      el("div", { class: "bar", style: `width:${never(item) ? 100 : Math.min(100, item.median / max * 100)}%;background:var(--series-1)` }),
+      el("div", { class: "budget", style: `left:calc(${item.budget / max * 100}% - 1px)` }));
+    hoverable(track, () => [el("div", { class: "v", text: never(item) ? "most samples never happened" : `${fmt(item.median, 2)} s median` }),
+      el("div", { class: "k", text: `budget ${item.budget} s · samples ${(item.samples || []).map(s => s === null ? "never" : fmt(s, 2)).join(", ")}` })]);
+    return el("div", { class: "speed-row" }, el("div", { text: labels[item.id] || item.id }), track, el("div", { class: "val", text: never(item) ? "never" : `${fmt(item.median, 2)} s` }));
+  });
+  return el("div", {},
+    el("div", { class: "legend" }, el("span", { class: "key" }, el("span", { class: "swatch", style: "background:var(--series-1)" }), "Median time"),
+      el("span", { class: "key" }, el("span", { style: "display:inline-block;width:2px;height:14px;background:var(--ink)" }), "Budget (proposed)"),
+      el("span", { class: "key note", text: `scale 0 to ${max} s` })),
+    rows,
+    el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "Checkpoint" }), el("th", { class: "num", text: "Median" }), el("th", { class: "num", text: "Budget" }), el("th", { text: "Outcome" }), el("th", { text: "How it was measured" }))),
+      el("tbody", {}, items.map(i => el("tr", {}, el("td", { text: labels[i.id] || i.id }), el("td", { class: "num", text: never(i) ? "never" : `${fmt(i.median, 2)} s` }),
+        el("td", { class: "num", text: `${i.budget} s` }), el("td", {}, statusBadge(i.outcome), i.marginal ? el("span", { class: "chip", text: "marginal" }) : null), el("td", { class: "note", text: i.basis || "" })))))));
+}
+
+function practicalView(data) {
+  const find = id => data.sections.find(s => s.id === id);
+  const reliability = find("reliability");
+  const fp = data.footprint || {};
+  const footprintRows = [["Model server memory", fp.llama_server_rss_mb, "MB"], ["Recognizer peak memory", fp.recognizer_peak_rss_mb, "MB"],
+    ["Recognizer load time", fp.recognizer_load_s, "s"], ["Recognizer time per 160 ms step", fp.recognizer_step_mean_s, "s"],
+    ["Speech engine peak memory", fp.speech_peak_rss_mb, "MB"]];
+  return el("div", { class: "grid-2" },
+    el("div", { class: "card", style: "grid-column:1/-1" }, el("h3", { text: "Speed" }), speedChart(find("speed"))),
+    el("div", { class: "card" }, el("h3", { text: "Reliability: right in every one of five runs at product settings" }),
+      reliability.items.length ? el("div", { class: "table-wrap" }, el("table", {}, el("tbody", {}, reliability.items.map(i => el("tr", {},
+        el("td", {}, el("span", { class: "mono", text: i.id })), el("td", {}, statusBadge(i.outcome)), el("td", { class: "note", text: i.reason })))))) : el("p", { class: "note", text: "Not measured in this run." })),
+    el("div", { class: "card" }, el("h3", { text: "Footprint (unscored)" }), el("p", { class: "note", text: fp.unscored || "Not measured in this run." }),
+      el("table", {}, el("tbody", {}, footprintRows.map(([k, v, u]) => el("tr", {}, el("td", { text: k }), el("td", { class: "num", text: v === null || v === undefined ? "–" : `${v} ${u}` }))),
+        el("tr", {}, el("td", { text: "Processor use while listening" }), el("td", { class: "num note", text: fp.listening_idle_cpu_note ? "not measured" : "–" }))))));
+}
+
+function voiceView(data) {
+  const find = id => data.sections.find(s => s.id === id);
+  const table = (items, cols) => items.length ? el("div", { class: "table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, cols.map(([label]) => el("th", { text: label })))),
+    el("tbody", {}, items.map(i => el("tr", {}, cols.map(([, get]) => { const v = get(i); return el("td", {}, v instanceof Node ? v : String(v ?? "")); })))))) : el("p", { class: "note", text: "Not run in this run." });
+  return el("div", { class: "grid-2" },
+    el("div", { class: "card", style: "grid-column:1/-1" }, el("h3", { text: "Hearing: did the recognizer keep the words that decide the action?" }),
+      el("p", { class: "note", text: "Synthesized requests (Kokoro), several voices, with room tone, background noise, and faster speech. The transcript includes what pressing Enter would still commit." }),
+      table(find("hearing").items, [["Clip", i => el("span", { class: "mono", text: i.id })], ["Said", i => i.text], ["Heard", i => i.transcript], ["", i => statusBadge(i.outcome)], ["Word errors", i => `${i.word_errors}/${i.words}`]])),
+    el("div", { class: "card" }, el("h3", { text: "Turn taking: one commit per request" }),
+      table(find("turn_taking").items, [["Clip", i => el("span", { class: "mono", text: i.id })], ["", i => statusBadge(i.outcome)], ["Why", i => i.reason]])),
+    el("div", { class: "card" }, el("h3", { text: "Spoken tasks: audio in, right end state out" }),
+      table(find("spoken_tasks").items, [["Case", i => el("span", { class: "mono", text: i.case })], ["Heard", i => i.heard], ["Committed by", i => i.committed_by], ["", i => statusBadge(i.outcome)]])),
+    el("div", { class: "card", style: "grid-column:1/-1" }, el("h3", { text: "Speech output: do numbers and names survive being spoken?" }),
+      table(find("speech_output").items, [["Reply", i => i.text], ["Heard back", i => i.transcript], ["", i => statusBadge(i.outcome)]])));
+}
+
+function diagnosticsView(data) {
+  const box = el("div", { class: "grid-2" });
+  for (const d of Object.values(data.diagnostics)) {
+    box.append(el("div", { class: "card" }, el("h3", { text: d.title }), el("p", { class: "note", text: d.question }),
+      el("div", { class: "kpi" }, el("div", { class: "value", text: pct(d.score) }), el("div", { class: "sub", text: `${d.n} checks · not in any total` })),
+      d.misses.length ? el("details", {}, el("summary", { class: "note", text: `${d.misses.length} misses` }),
+        el("ul", { class: "note" }, d.misses.map(m => el("li", { text: `“${m.say}” — ${m.expected ? `expected ${m.expected}, got ${m.got}` : `needed ${m.needed.join("+") || "none"}, offered ${m.offered.join("+") || "none"}`}` })))) : null));
+  }
+  const rules = Object.values(data.reply_rules);
+  box.append(el("div", { class: "card" }, el("h3", { text: "Reply rules" }),
+    el("p", { class: "note", text: "Every final reply against the rules in Agavai's system prompt. Proposed rules are reported, not counted." }),
+    el("table", {}, el("tbody", {}, rules.map(r => el("tr", {}, el("td", {}, r.label, r.counted ? null : el("span", { class: "chip", text: "proposed" })),
+      el("td", { class: "num", text: r.total ? `${fmt(100 * r.passed / r.total, 0)}%` : "–" }), el("td", { class: "num note", text: `${r.passed}/${r.total}` })))))));
+  box.append(el("div", { class: "card" }, el("h3", { text: "Capabilities not built yet" }),
+    el("p", { class: "note", text: "Cases that need these still run: a refusal is an honest miss, a false claim is a harmful one." }),
+    el("table", {}, el("tbody", {}, data.capabilities.map(c => el("tr", {}, el("td", { class: "mono", text: c.id }), el("td", { class: "num", text: `${c.cases} cases` }), el("td", { text: c.built ? "built" : "not built" })))))));
+  return box;
+}
+
+function runView(data) {
+  const fp = data.run.fingerprint || {};
+  const rows = Object.entries(fp).map(([k, v]) => el("tr", {}, el("td", { text: k }), el("td", { class: "mono", text: typeof v === "string" ? v : JSON.stringify(v) })));
+  const canary = data.run.canary || {};
+  return el("div", { class: "card table-wrap" },
+    el("p", {}, statusBadge(canary.ok ? "done" : "harmful"), " ", el("span", { class: "note", text: canary.ok ? "Canary: three cases repeated exactly, so sampling was pinned." : `Canary failed: ${(canary.problems || []).join("; ")}` })),
+    el("p", { class: "note", text: `Stages: ${Object.entries(data.run.stages).map(([k, v]) => `${k} ${v ? "ran" : "missing"}`).join(", ")}. Report generated ${data.generated}.` }),
+    el("table", {}, el("tbody", {}, rows)));
+}
+
+let current = null;
+const state = { shippedOnly: false, area: "", section: "", outcome: "", query: "" };
+function rerender() { if (current) render(current); }
+function render(data) {
+  current = data;
+  const app = document.getElementById("app");
+  const scrollY = window.scrollY;
+  app.replaceChildren(
+    header(data), kpis(data),
+    el("h2", { text: "Areas" }), areaChart(data),
+    el("h2", { text: "Sections" }), sectionsView(data, state),
+    el("h2", { text: "Harmful misses" }), el("p", { class: "lede", text: "Listed by name so an average cannot bury them." }), harmfulView(data),
+    el("h2", { text: "Where to look first" }), weakest(data),
+    el("h2", { text: "Practical" }), practicalView(data),
+    el("h2", { text: "Voice" }), voiceView(data),
+    el("h2", { text: "Diagnostics and reply rules" }), diagnosticsView(data),
+    el("h2", { id: "cases", text: "Every case" }), el("p", { class: "lede", text: "Select a row to see what was said, what Agavai replied, how the world changed, and why it was graded so." }), caseExplorer(data, state),
+    el("h2", { text: "Run" }), runView(data));
+  bindOpeners();
+  window.scrollTo(0, scrollY);
+}
+
+function bindOpeners() {
+  document.querySelectorAll("input[data-open]").forEach(input => input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try { render(JSON.parse(await file.text())); } catch (error) { alert(`Could not read ${file.name}: ${error.message}`); }
+  }));
+}
+function cycleTheme() {
+  const root = document.documentElement;
+  const next = root.dataset.theme === "dark" ? "light" : root.dataset.theme === "light" ? "" : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  if (next) root.dataset.theme = next; else delete root.dataset.theme;
+}
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", async e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) { try { render(JSON.parse(await file.text())); } catch (error) { alert(`Could not read ${file.name}: ${error.message}`); } }
+});
+
+const raw = document.getElementById("report-data").textContent.trim();
+if (raw && raw !== "__REPORT_DATA__") render(JSON.parse(raw));
+else { document.getElementById("empty").hidden = false; bindOpeners(); }
+</script>
+</body>
+</html>

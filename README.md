@@ -64,3 +64,11 @@ cd ~/Projects/agavai
 pip install -e '.[dev]'   # or: pip install behave
 PYTHONPATH=src behave
 ```
+
+## Eval
+
+`evals/` scores Agavai as a personal assistant against the running local model: a simulated desktop and mailbox, a fixed clock, pinned sampling, and graders that look only at the world and the spoken reply. It is a measurement, not a test. Design and how to run it: [`docs/eval.md`](docs/eval.md).
+
+```bash
+PYTHONPATH=src .venv/bin/python -m evals run      # writes evals/results/<run>/report.json and report.html
+```

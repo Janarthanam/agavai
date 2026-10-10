@@ -1,0 +1,291 @@
+# One made-up person, Alex Morgan. Desktop, files, mail, calendar, and notes
+# agree with each other. Nothing here is real. Cases change parts of it with
+# `set`; the clock defaults to Friday 2026-10-09 16:45.
+
+reminders = []
+notifications = []
+launched = []
+urls = []
+pickers = []
+screenshots = []
+
+[persona]
+name = "Alex Morgan"
+email = "alex@example.com"
+
+[audio]
+volume = 50
+muted = false
+mic_muted = false
+
+[display]
+brightness = 60
+nightlight = false
+
+[bluetooth]
+adapter = true
+power = false
+
+[system]
+dnd = false
+stay_awake = false
+locked = false
+
+[theme]
+current = "Tokyo Night"
+available = ["Catppuccin", "Catppuccin Latte", "Everforest", "Gruvbox", "Kanagawa", "Matte Black", "Nord", "Osaka Jade", "Ristretto", "Rose Pine", "Tokyo Night"]
+
+[wallpaper]
+current = "mountain dawn"
+images = ["ship at sea", "mountain dawn", "neon city", "forest path", "desert dunes"]
+
+[workspace]
+active = 1
+
+[focus]
+window = "0x1"
+
+[fullscreen]
+window = ""
+
+[[windows]]
+address = "0x1"
+class = "org.gnome.TextEditor"
+title = "notes.txt - Text Editor"
+workspace = 1
+
+[[windows]]
+address = "0x2"
+class = "firefox"
+title = "Quarterly planning - Mozilla Firefox"
+workspace = 1
+
+[[windows]]
+address = "0x3"
+class = "Signal"
+title = "Signal"
+workspace = 2
+
+[[windows]]
+address = "0x4"
+class = "org.gnome.Nautilus"
+title = "Downloads"
+workspace = 3
+
+[screen]
+ocr = "Grocery list\nmilk\neggs\ncoffee beans\nCall the plumber about the kitchen sink"
+
+[launchers]
+browser = true
+terminal = true
+files = true
+editor = true
+about = true
+spotify = true
+signal = true
+discord = true
+clipboard = true
+emoji = true
+
+[[apps]]
+id = "firefox"
+name = "Firefox"
+
+[[apps]]
+id = "spotify"
+name = "Spotify"
+
+[[apps]]
+id = "org.gnome.Calculator"
+name = "Calculator"
+
+[[apps]]
+id = "obsidian"
+name = "Obsidian"
+
+[[apps]]
+id = "signal-desktop"
+name = "Signal"
+
+[[apps]]
+id = "org.gnome.Nautilus"
+name = "Files"
+
+[[apps]]
+id = "org.gnome.TextEditor"
+name = "Text Editor"
+
+[battery]
+present = true
+percent = 43
+state = "discharging"
+watts = 11.2
+
+[network]
+kind = "wifi"
+ssid = "HomeNet"
+signal = 72
+
+# Files under the person's home. A trailing slash is a folder.
+[files]
+paths = [
+  "Documents/Budget Notes 2026.md",
+  "Documents/Meeting Notes - Sept.md",
+  "Documents/Tax Return 2025.pdf",
+  "Documents/Recipes/",
+  "Documents/Recipes/Lasagna.md",
+  "Downloads/invoice-ACME-0921.pdf",
+  "Downloads/statement-october.pdf",
+  "Downloads/setup-guide.pdf",
+  "Projects/agavai-notes.txt",
+  "Work/Q4 Roadmap.docx",
+  "Pictures/holiday-2025.jpg",
+]
+
+[files.contents]
+"Documents/Budget Notes 2026.md" = "Rent: 1800\nGroceries: 400\nUtilities: 150"
+"Documents/Meeting Notes - Sept.md" = "Agreed to move the launch to November."
+
+# Everything below is reached by capabilities Agavai does not have yet.
+
+[mail]
+outbox = []
+drafts = []
+
+[[mail.inbox]]
+id = "m1"
+from = "First National Bank <alerts@fnb.example>"
+subject = "Your statement is ready"
+date = "2026-10-08"
+unread = true
+body = "Your October statement is ready to view."
+
+[[mail.inbox]]
+id = "m2"
+from = "Sara Kim <sara.kim@example.com>"
+subject = "Dinner on Saturday?"
+date = "2026-10-08"
+unread = true
+body = "Are you free for dinner Saturday at 7? Let me know."
+
+[[mail.inbox]]
+id = "m3"
+from = "Dana Wu <dana.wu@example.com>"
+subject = "Q4 budget"
+date = "2026-10-07"
+unread = false
+body = "Please review the attached budget by Monday."
+
+[[mail.inbox]]
+id = "m4"
+from = "ACME Billing <billing@acme.example>"
+subject = "Invoice 0921"
+date = "2026-10-06"
+unread = false
+body = "Invoice 0921 for 340 dollars is due on October 20."
+
+[[mail.inbox]]
+id = "m5"
+from = "Weekly Digest <digest@news.example>"
+subject = "Your weekly digest"
+date = "2026-10-05"
+unread = false
+body = "Top stories this week."
+
+[[calendar.events]]
+id = "ev1"
+title = "Design review"
+start = "2026-10-09T15:00"
+end = "2026-10-09T15:30"
+attendees = ["dana.wu@example.com"]
+
+[[calendar.events]]
+id = "ev2"
+title = "Dentist"
+start = "2026-10-13T10:00"
+end = "2026-10-13T11:00"
+attendees = []
+
+[[calendar.events]]
+id = "ev3"
+title = "Farmers market with Priya"
+start = "2026-10-10T10:00"
+end = "2026-10-10T11:00"
+attendees = ["priya@example.com"]
+
+[[calendar.events]]
+id = "ev4"
+title = "Sprint planning"
+start = "2026-10-12T11:00"
+end = "2026-10-12T12:00"
+attendees = ["dana.wu@example.com", "bob.lee@example.com"]
+
+[[contacts.people]]
+name = "Bob Lee"
+email = "bob.lee@example.com"
+phone = "555-0101"
+
+[[contacts.people]]
+name = "Priya Nair"
+email = "priya@example.com"
+phone = "555-0102"
+
+[[contacts.people]]
+name = "Sara Kim"
+email = "sara.kim@example.com"
+phone = "555-0103"
+
+[[contacts.people]]
+name = "Dana Wu"
+email = "dana.wu@example.com"
+phone = "555-0104"
+note = "manager"
+
+[messages]
+sent = []
+
+[notes]
+items = []
+shopping = ["eggs", "coffee beans"]
+
+[[tasks.items]]
+title = "File the tax return"
+done = false
+
+[[tasks.items]]
+title = "Book the car service"
+done = false
+
+[player]
+state = "playing"
+track = "Clair de Lune"
+artist = "Debussy"
+playlist = ""
+playlists = ["Focus", "Running"]
+
+[lookup]
+weather_today = "18 degrees and light rain"
+weather_tomorrow = "22 degrees and sunny"
+headline = "City council approves new bike lanes"
+eur_usd = 1.09
+
+# A made-up service that only a local MCP server would offer.
+[greenhouse]
+temperature = 24
+watered = []
+
+[greenhouse.moisture]
+basil = 22
+tomatoes = 31
+
+# A made-up application operated through its window.
+[editor]
+document = "draft.txt"
+saved = false
+title_bold = false
+
+[form]
+name = ""
+
+[memory]
+facts = []

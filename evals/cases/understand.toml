@@ -1,0 +1,801 @@
+# Understand: is a request turned into the right intent, however it is said?
+# Paraphrases of one intent share a cluster so the standard error treats them
+# as one sample. Clock: Friday 2026-10-09 16:45 unless a case says otherwise.
+
+# --- Phrasing ---------------------------------------------------------------
+
+[[case]]
+id = "phrasing.volume-down.loud"
+section = "phrasing"
+cluster = "volume_down"
+say = "it is a bit loud in here"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "phrasing.volume-down.quieter"
+section = "phrasing"
+cluster = "volume_down"
+say = "could you make it quieter please"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "phrasing.volume-down.notch"
+section = "phrasing"
+cluster = "volume_down"
+say = "turn it down a notch"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "phrasing.volume-down.music"
+section = "phrasing"
+cluster = "volume_down"
+say = "the music is way too loud"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "phrasing.volume-up.barely"
+section = "phrasing"
+cluster = "volume_up"
+say = "i can barely hear anything"
+kind = "act"
+checks = [{ path = "audio.volume", gt = 50 }]
+
+[[case]]
+id = "phrasing.volume-up.louder"
+section = "phrasing"
+cluster = "volume_up"
+say = "make it louder"
+kind = "act"
+checks = [{ path = "audio.volume", gt = 50 }]
+
+[[case]]
+id = "phrasing.volume-up.crank"
+section = "phrasing"
+cluster = "volume_up"
+say = "crank it up a bit"
+kind = "act"
+checks = [{ path = "audio.volume", gt = 50 }]
+
+[[case]]
+id = "phrasing.brightness-down.too-bright"
+section = "phrasing"
+cluster = "brightness_down"
+say = "the screen is too bright"
+kind = "act"
+checks = [{ path = "display.brightness", lt = 60 }]
+
+[[case]]
+id = "phrasing.brightness-down.eyes"
+section = "phrasing"
+cluster = "brightness_down"
+say = "my eyes hurt can you dim the display"
+kind = "act"
+checks = [{ path = "display.brightness", lt = 60 }]
+
+[[case]]
+id = "phrasing.nightlight.warmer"
+section = "phrasing"
+cluster = "nightlight"
+say = "make the screen warmer"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "phrasing.nightlight.blue-light"
+section = "phrasing"
+cluster = "nightlight"
+say = "switch on the blue light filter"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "phrasing.dnd.focus"
+section = "phrasing"
+cluster = "dnd"
+say = "i need to focus stop the notifications"
+kind = "act"
+checks = [{ path = "system.dnd", eq = true }]
+
+[[case]]
+id = "phrasing.dnd.silence"
+section = "phrasing"
+cluster = "dnd"
+say = "silence notifications for now"
+kind = "act"
+checks = [{ path = "system.dnd", eq = true }]
+
+[[case]]
+id = "phrasing.lock.stepping-away"
+section = "phrasing"
+cluster = "lock"
+say = "i am stepping away lock it up"
+kind = "act"
+checks = [{ path = "system.locked", eq = true }]
+
+[[case]]
+id = "phrasing.lock.secure"
+section = "phrasing"
+cluster = "lock"
+say = "secure the computer while i am gone"
+kind = "act"
+checks = [{ path = "system.locked", eq = true }]
+
+[[case]]
+id = "phrasing.browser.browse"
+section = "phrasing"
+cluster = "browser"
+say = "i want to browse the web"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["browser", "firefox"] }]
+
+[[case]]
+id = "phrasing.browser.get-me"
+section = "phrasing"
+cluster = "browser"
+say = "get me a web browser"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["browser", "firefox"] }]
+
+[[case]]
+id = "phrasing.screenshot.grab"
+section = "phrasing"
+cluster = "screenshot"
+say = "grab my screen"
+kind = "act"
+checks = [{ path = "screenshots", added = 1 }]
+
+[[case]]
+id = "phrasing.screenshot.capture"
+section = "phrasing"
+cluster = "screenshot"
+say = "capture a picture of the screen"
+kind = "act"
+checks = [{ path = "screenshots", added = 1 }]
+
+[[case]]
+id = "phrasing.theme.look-like"
+section = "phrasing"
+cluster = "theme"
+say = "make it look like gruvbox"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Gruvbox" }]
+
+[[case]]
+id = "phrasing.theme.colors"
+section = "phrasing"
+cluster = "theme"
+say = "i would like the nord colors"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Nord" }]
+
+[[case]]
+id = "phrasing.awake.sleep"
+section = "phrasing"
+cluster = "awake"
+say = "do not let the computer go to sleep"
+kind = "act"
+checks = [{ path = "system.stay_awake", eq = true }]
+
+[[case]]
+id = "phrasing.awake.reading"
+section = "phrasing"
+cluster = "awake"
+say = "keep the screen on while i read"
+kind = "act"
+checks = [{ path = "system.stay_awake", eq = true }]
+
+# --- Values -------------------------------------------------------------------
+
+[[case]]
+id = "values.reminder.clock-time"
+section = "values"
+cluster = "reminder_time"
+say = "remind me at half past five to call mom"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:30", text = "~mom" } }]
+
+[[case]]
+id = "values.reminder.ninety"
+section = "values"
+cluster = "reminder_time"
+say = "remind me in an hour and a half to stretch"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T18:15", text = "~stretch" } }]
+
+[[case]]
+id = "values.reminder.forty-five"
+section = "values"
+cluster = "reminder_time"
+say = "remind me in forty five minutes to move the laundry"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:30", text = "~laundry" } }]
+
+[[case]]
+id = "values.reminder.six-pm"
+section = "values"
+cluster = "reminder_time"
+say = "remind me at six pm to start dinner"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T18:00", text = "~dinner" } }]
+
+[[case]]
+id = "values.reminder.five-thirty"
+section = "values"
+cluster = "reminder_time"
+say = "set a reminder for five thirty to leave for the station"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:30", text = "~station" } }]
+
+[[case]]
+id = "values.reminder.tomorrow-nine"
+section = "values"
+cluster = "reminder_time"
+say = "remind me tomorrow at nine to call the dentist"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-10T09:00", text = "~dentist" } }]
+
+[[case]]
+id = "values.reminder.quarter-hour"
+section = "values"
+cluster = "reminder_time"
+say = "remind me in a quarter of an hour to check the rice"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T17:00", text = "~rice" } }]
+
+[[case]]
+id = "values.reminder.two-hours"
+section = "values"
+cluster = "reminder_time"
+say = "remind me in two hours to water the plants"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T18:45", text = "~plants" } }]
+
+[[case]]
+id = "values.reminder.next-friday"
+section = "values"
+cluster = "reminder_far"
+needs = ["long_reminders"]
+say = "remind me next friday to pay rent"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "~2026-10-16", text = "~rent" } }]
+
+[[case]]
+id = "values.reminder.two-days"
+section = "values"
+cluster = "reminder_far"
+needs = ["long_reminders"]
+say = "remind me in two days to renew my passport"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "~2026-10-11", text = "~passport" } }]
+
+[[case]]
+id = "values.brightness.forty"
+section = "values"
+cluster = "brightness_value"
+say = "set brightness to forty percent"
+kind = "act"
+checks = [{ path = "display.brightness", eq = 40 }]
+
+[[case]]
+id = "values.brightness.max"
+section = "values"
+cluster = "brightness_value"
+say = "turn the brightness all the way up"
+kind = "act"
+checks = [{ path = "display.brightness", eq = 100 }]
+
+[[case]]
+id = "values.brightness.seventy-five"
+section = "values"
+cluster = "brightness_value"
+say = "set the screen brightness to seventy five percent"
+kind = "act"
+checks = [{ path = "display.brightness", eq = 75 }]
+
+[[case]]
+id = "values.workspace.three"
+section = "values"
+cluster = "workspace_value"
+say = "switch to workspace three"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 3 }]
+allow = ["focus"]
+
+[[case]]
+id = "values.workspace.seven"
+section = "values"
+cluster = "workspace_value"
+say = "go to workspace number seven"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 7 }]
+allow = ["focus"]
+
+[[case]]
+id = "values.theme.catppuccin-latte"
+section = "values"
+cluster = "theme_name"
+say = "set the theme to catppuccin latte"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Catppuccin Latte" }]
+
+[[case]]
+id = "values.theme.rose-pine"
+section = "values"
+cluster = "theme_name"
+say = "switch to the rose pine theme"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Rose Pine" }]
+
+[[case]]
+id = "values.theme.osaka-jade"
+section = "values"
+cluster = "theme_name"
+say = "use the osaka jade theme"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Osaka Jade" }]
+
+[[case]]
+id = "values.wallpaper.neon"
+section = "values"
+cluster = "wallpaper_name"
+say = "set the wallpaper to neon city"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "neon city" }]
+
+[[case]]
+id = "values.wallpaper.desert"
+section = "values"
+cluster = "wallpaper_name"
+say = "use the desert dunes picture as my background"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "desert dunes" }]
+
+[[case]]
+id = "values.volume.thirty"
+section = "values"
+say = "set the volume to thirty percent"
+kind = "act"
+checks = [{ path = "audio.volume", eq = 30 }]
+exclude = "Product decision pending: say it can only step, or step toward thirty."
+
+# --- Messy speech ---------------------------------------------------------------
+
+[[case]]
+id = "messy.filler.volume"
+section = "messy_speech"
+say = "um can you like turn the volume down a little"
+kind = "act"
+checks = [{ path = "audio.volume", lt = 50 }]
+
+[[case]]
+id = "messy.selfcorrect.reminder"
+section = "messy_speech"
+say = "set a reminder for five no ten minutes to call the bank"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~bank" } }]
+
+[[case]]
+id = "messy.falsestart.browser"
+section = "messy_speech"
+say = "open the uh the terminal i mean the browser"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["browser", "firefox"] }]
+
+[[case]]
+id = "messy.selfcorrect.workspace"
+section = "messy_speech"
+say = "switch to workspace two sorry three"
+kind = "act"
+checks = [{ path = "workspace.active", eq = 3 }]
+allow = ["focus"]
+
+[[case]]
+id = "messy.hesitation.nightlight"
+section = "messy_speech"
+say = "turn on the um the night light"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "messy.selfcorrect.theme"
+section = "messy_speech"
+say = "set the theme to nord actually no gruvbox"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Gruvbox" }]
+
+[[case]]
+id = "messy.filler.lock"
+section = "messy_speech"
+say = "uh lock the uh screen"
+kind = "act"
+checks = [{ path = "system.locked", eq = true }]
+
+[[case]]
+id = "messy.misheard.bluetooth"
+section = "messy_speech"
+say = "turn on blue tooth"
+kind = "act"
+checks = [{ path = "bluetooth.power", eq = true }]
+
+[[case]]
+id = "messy.misheard.nightlight"
+section = "messy_speech"
+say = "turn on night lite"
+kind = "act"
+checks = [{ path = "display.nightlight", eq = true }]
+
+[[case]]
+id = "messy.misheard.wallpaper"
+section = "messy_speech"
+say = "set the wall paper to ship at sea"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "ship at sea" }]
+
+[[case]]
+id = "messy.misheard.set"
+section = "messy_speech"
+say = "said a reminder for ten minutes to drink water"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~water" } }]
+
+[[case]]
+id = "messy.misheard.screenshot"
+section = "messy_speech"
+say = "take a screen shot"
+kind = "act"
+checks = [{ path = "screenshots", added = 1 }]
+
+[[case]]
+id = "messy.misheard.dnd"
+section = "messy_speech"
+say = "turn on do not disturbed"
+kind = "act"
+checks = [{ path = "system.dnd", eq = true }]
+
+[[case]]
+id = "messy.cut.volume"
+section = "messy_speech"
+say = "turn the volume"
+kind = "ask"
+
+[[case]]
+id = "messy.cut.reminder"
+section = "messy_speech"
+say = "remind me to"
+kind = "ask"
+
+[[case]]
+id = "messy.cut.brightness"
+section = "messy_speech"
+say = "set the brightness to"
+kind = "ask"
+
+[[case]]
+id = "messy.cut.theme"
+section = "messy_speech"
+say = "switch the theme to the"
+kind = "ask"
+
+# --- Conversation -------------------------------------------------------------
+
+[[case]]
+id = "conversation.wallpaper.pick"
+section = "conversation"
+[[case.turns]]
+say = "show me my wallpapers"
+kind = "answer"
+shown = ["neon city"]
+[[case.turns]]
+say = "neon city"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "wallpaper.current", eq = "neon city" }]
+
+[[case]]
+id = "conversation.reminder.answer"
+section = "conversation"
+[[case.turns]]
+say = "set a reminder"
+kind = "ask"
+[[case.turns]]
+say = "in ten minutes to check the oven"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~oven" } }]
+
+[[case]]
+id = "conversation.volume.more"
+section = "conversation"
+[[case.turns]]
+say = "turn the volume up"
+kind = "act"
+checks = [{ path = "audio.volume", gt = 50 }]
+[[case.turns]]
+say = "a bit more"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "audio.volume", gt = 55 }]
+
+[[case]]
+id = "conversation.theme.choose"
+section = "conversation"
+[[case.turns]]
+say = "what themes do i have"
+kind = "answer"
+shown = ["Nord"]
+[[case.turns]]
+say = "use the nord one"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "theme.current", eq = "Nord" }]
+
+[[case]]
+id = "conversation.brightness.correct"
+section = "conversation"
+[[case.turns]]
+say = "set brightness to forty percent"
+kind = "act"
+checks = [{ path = "display.brightness", eq = 40 }]
+[[case.turns]]
+say = "no make it fifty"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "display.brightness", eq = 50 }]
+
+[[case]]
+id = "conversation.topic.time"
+section = "conversation"
+[[case.turns]]
+say = "show me my wallpapers"
+kind = "answer"
+shown = ["ship at sea"]
+[[case.turns]]
+say = "what time is it"
+kind = "answer"
+context = "new_conversation"
+reply_any = ['4:45', '16:45', 'four forty[- ]?five', 'quarter to five']
+
+[[case]]
+id = "conversation.launch.and"
+section = "conversation"
+[[case.turns]]
+say = "open the browser"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["browser", "firefox"] }]
+[[case.turns]]
+say = "and now the terminal"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "launched", added = 1, one_of = ["terminal"] }]
+
+[[case]]
+id = "conversation.status.and"
+section = "conversation"
+[[case.turns]]
+say = "what is my battery level"
+kind = "answer"
+number = 43
+[[case.turns]]
+say = "and the wifi"
+kind = "answer"
+context = "follow_up"
+reply_any = ['home ?net']
+
+[[case]]
+id = "conversation.files.other"
+section = "conversation"
+[[case.turns]]
+say = "find the budget notes"
+kind = "answer"
+shown = ["Budget Notes"]
+[[case.turns]]
+say = "what about the meeting notes"
+kind = "answer"
+context = "follow_up"
+shown = ["Meeting Notes"]
+
+[[case]]
+id = "conversation.reminder.change"
+section = "conversation"
+[[case.turns]]
+say = "remind me in ten minutes to stretch"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:55", text = "~stretch" } }]
+[[case.turns]]
+say = "actually make that twenty"
+kind = "act"
+context = "follow_up"
+checks = [
+  { path = "reminders", added = 1, match = { due = "2026-10-09T17:05", text = "~stretch" } },
+  { path = "reminders", lacks = { due = "2026-10-09T16:55" } },
+]
+
+[[case]]
+id = "conversation.window.too"
+section = "conversation"
+[[case.turns]]
+say = "close the downloads window"
+kind = "act"
+checks = [{ path = "windows", removed = 1, match = { address = "0x4" } }]
+allow = ["focus"]
+[[case.turns]]
+say = "and the signal one too"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "windows", removed = 1, match = { address = "0x3" } }]
+allow = ["focus"]
+
+[[case]]
+id = "conversation.wallpaper.change"
+section = "conversation"
+[[case.turns]]
+say = "what is my wallpaper"
+kind = "answer"
+reply_any = ['mountain dawn']
+[[case.turns]]
+say = "change it to ship at sea"
+kind = "act"
+context = "follow_up"
+checks = [{ path = "wallpaper.current", eq = "ship at sea" }]
+
+# --- Judgment -------------------------------------------------------------------
+
+[[case]]
+id = "judgment.act.lock"
+section = "judgment"
+say = "lock my screen now"
+kind = "act"
+checks = [{ path = "system.locked", eq = true }]
+
+[[case]]
+id = "judgment.act.spotify"
+section = "judgment"
+say = "open spotify"
+kind = "act"
+checks = [{ path = "launched", added = 1, one_of = ["spotify"] }]
+
+[[case]]
+id = "judgment.act.nord"
+section = "judgment"
+say = "set the theme to nord"
+kind = "act"
+checks = [{ path = "theme.current", eq = "Nord" }]
+
+[[case]]
+id = "judgment.act.tea"
+section = "judgment"
+say = "remind me in five minutes to check the tea"
+kind = "act"
+checks = [{ path = "reminders", added = 1, match = { due = "2026-10-09T16:50", text = "~tea" } }]
+
+[[case]]
+id = "judgment.act.dnd"
+section = "judgment"
+say = "turn on do not disturb please"
+kind = "act"
+checks = [{ path = "system.dnd", eq = true }]
+
+[[case]]
+id = "judgment.act.next-wallpaper"
+section = "judgment"
+say = "switch to the next wallpaper"
+kind = "act"
+checks = [{ path = "wallpaper.current", eq = "neon city" }]
+
+[[case]]
+id = "judgment.ask.reminder"
+section = "judgment"
+say = "set a reminder"
+kind = "ask"
+
+[[case]]
+id = "judgment.ask.theme"
+section = "judgment"
+say = "change the theme"
+kind = "ask"
+
+[[case]]
+id = "judgment.ask.open"
+section = "judgment"
+say = "open it"
+kind = "ask"
+
+[[case]]
+id = "judgment.ask.brightness"
+section = "judgment"
+say = "set the brightness"
+kind = "ask"
+
+[[case]]
+id = "judgment.ask.later"
+section = "judgment"
+say = "remind me later"
+kind = "ask"
+
+[[case]]
+id = "judgment.ask.notification"
+section = "judgment"
+say = "send a notification"
+kind = "ask"
+
+[[case]]
+id = "judgment.decline.font"
+section = "judgment"
+say = "change the font to jetbrains mono"
+kind = "decline"
+claims = "font"
+
+[[case]]
+id = "judgment.decline.shutdown"
+section = "judgment"
+say = "shut down the computer"
+kind = "decline"
+claims = "shut"
+
+[[case]]
+id = "judgment.decline.wifi"
+section = "judgment"
+say = "turn off the wifi"
+kind = "decline"
+claims = "wi-?fi"
+
+[[case]]
+id = "judgment.decline.delete"
+section = "judgment"
+say = "delete everything in my downloads folder"
+kind = "decline"
+claims = "delet"
+
+[[case]]
+id = "judgment.decline.shell"
+section = "judgment"
+say = "open a terminal and run sudo rm rf on my home folder"
+kind = "decline"
+claims = "rm|ran|run|delet"
+
+[[case]]
+id = "judgment.decline.pizza"
+section = "judgment"
+say = "order a pizza for dinner"
+kind = "decline"
+claims = "order"
+
+[[case]]
+id = "judgment.ignore.meeting"
+section = "judgment"
+say = "so anyway i told him the meeting got moved to thursday"
+kind = "ignore"
+
+[[case]]
+id = "judgment.ignore.never-mind"
+section = "judgment"
+say = "never mind"
+kind = "ignore"
+
+[[case]]
+id = "judgment.ignore.thanks"
+section = "judgment"
+say = "thanks that is all"
+kind = "ignore"
+
+[[case]]
+id = "judgment.ignore.um"
+section = "judgment"
+say = "um"
+kind = "ignore"
+
+[[case]]
+id = "judgment.ignore.hold-on"
+section = "judgment"
+say = "hold on a second"
+kind = "ignore"
+
+[[case]]
+id = "judgment.ignore.brother"
+section = "judgment"
+say = "no i was talking to my brother"
+kind = "ignore"
