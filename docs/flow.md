@@ -122,7 +122,7 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
 
-`agavai toggle` while listening does not signal ListenSession. It runs stop in the calling process. That can race the detached listener. `agavai stop` and `agavai cancel` do signal the published pid. Product entry points use invoke, stop, and cancel, not toggle. Stop during listening commits the current hypothesis. Cancel drops it.
+`agavai stop` and `agavai cancel` signal the published pid. Stop during listening commits the current hypothesis. Cancel drops it. With no live listener, stop exits 1 and cancel resets the snapshot and state to idle. Neither calls Voxtype.
 
 There is no retry of a llama HTTP error beyond the one head-attach pass. There is no queue. There is no lock that refuses to start while F9 dictation holds the microphone.
 
@@ -154,7 +154,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 
 ### Streaming ASR
 
-Transport in and the recognizer. The stage is specified in [audio.md](audio.md). The running timer and file transcript live in [src/agavai/meter.py](../src/agavai/meter.py) and [src/agavai/voxtype.py](../src/agavai/voxtype.py) until this replaces them. F9 keeps Voxtype.
+Transport in and the recognizer. The stage is specified in [audio.md](audio.md). F9 keeps Voxtype.
 
 - **Deploy.** In the listen process. One capture of the default source, 16 kHz, mono, 16-bit. The model is Parakeet-Realtime-EOU-120M, with a dynamic cache-aware encoder and full-precision decoder installed by `scripts/download-asr.sh`. Not a separate service.
 - **Lifecycle.** Each chunk updates a cache-aware hypothesis. Interim text is a partial. End of utterance clears that stream’s cache after the line is committed. End of boundary updates the partial and does not commit.
@@ -368,9 +368,9 @@ Rejected options named by the sources below, and why this design did not take th
 | All tool schemas on the 4B | [architecture.md](architecture.md) | Too many tokens for the useful budget. Heads cut that to at most eight. |
 | MCP inside the turn | [architecture.md](architecture.md), [src/agavai/mcp_server.py](../src/agavai/mcp_server.py) | Same allowlist, extra hop. MCP remains a side door. |
 | Streaming recognizer | [audio.md](audio.md) | Chosen. Parakeet-Realtime-EOU-120M. Partials are not turns. |
-| Silence-timer endpointer | [src/agavai/meter.py](../src/agavai/meter.py) | Replaced on the assistant path. It guessed the end of a sentence. |
-| Voxtype file transcript | [src/agavai/voxtype.py](../src/agavai/voxtype.py) | Stays on F9 dictation. The assistant does not use it. |
+| Silence-timer endpointer | [audio.md](audio.md) | Removed. It guessed the end of a sentence. |
+| Voxtype file transcript | [audio.md](audio.md) | Removed from the assistant. Stays on F9 dictation. |
 | eSpeak or a notification as the voice | [src/agavai/tts.py](../src/agavai/tts.py) | Fallbacks when Kokoro cannot play. Kokoro is preferred. |
 | Keyword-only routing | [src/agavai/router.py](../src/agavai/router.py) | Available as `backend = "keyword"` and as the fallback. Default is Jev. |
 
-Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/orchestrator.py](../src/agavai/orchestrator.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm). The running timer and file transcript, which this spec replaces, are [src/agavai/meter.py](../src/agavai/meter.py) and [src/agavai/voxtype.py](../src/agavai/voxtype.py).
+Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/orchestrator.py](../src/agavai/orchestrator.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm).

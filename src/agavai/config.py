@@ -128,29 +128,6 @@ class RouterConfig:
 
 
 @dataclass
-class VadConfig:
-    enabled: bool = True
-    backend: str = "energy"
-    rate: int = 16000
-    frame_ms: int = 20
-    open_threshold_dbfs: float = -35.0
-    close_threshold_dbfs: float = -42.0
-    noise_margin_db: float = 12.0
-    silence_ms: int = 900
-    min_speech_ms: int = 250
-    max_record_ms: int = 15000
-    start_timeout_ms: int = 5000
-    lead_in_ignore_ms: int = 300
-    model_path: Path = field(
-        default_factory=lambda: xdg_data() / "agavai/vad/silero_vad-v5.1.2.onnx"
-    )
-    threshold: float = 0.5
-    response_timeout_ms: int = 250
-    device: str = "cpu"
-    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/tts-venv")
-
-
-@dataclass
 class AsrConfig:
     """Streaming recognizer. device is cpu, or gpu when an NVIDIA GPU is present."""
 
@@ -180,7 +157,6 @@ class Config:
     files: FilesConfig = field(default_factory=FilesConfig)
     tts: TtsConfig = field(default_factory=TtsConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
-    vad: VadConfig = field(default_factory=VadConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
 
     @property
@@ -191,10 +167,6 @@ class Config:
     config_dir: Path = field(default_factory=lambda: xdg_config() / "agavai")
     config_path: Path = field(default_factory=lambda: xdg_config() / "agavai" / "config.toml")
     a2a_dir: Path = field(default_factory=lambda: xdg_config() / "agavai/a2a")
-
-    @property
-    def prompt_file(self) -> Path:
-        return self.runtime_dir / "prompt.txt"
 
     @property
     def state_file(self) -> Path:
@@ -333,41 +305,6 @@ def load_config(path: Path | None = None) -> Config:
         cfg.router.jev_model = str(jev["model"])
     if "api_key_env" in jev:
         cfg.router.api_key_env = str(jev["api_key_env"])
-    vad = data.get("vad") or {}
-    if "enabled" in vad:
-        cfg.vad.enabled = bool(vad["enabled"])
-    if "backend" in vad:
-        cfg.vad.backend = str(vad["backend"])
-    if "rate" in vad:
-        cfg.vad.rate = int(vad["rate"])
-    if "frame_ms" in vad:
-        cfg.vad.frame_ms = int(vad["frame_ms"])
-    if "open_threshold_dbfs" in vad:
-        cfg.vad.open_threshold_dbfs = float(vad["open_threshold_dbfs"])
-    if "close_threshold_dbfs" in vad:
-        cfg.vad.close_threshold_dbfs = float(vad["close_threshold_dbfs"])
-    if "noise_margin_db" in vad:
-        cfg.vad.noise_margin_db = float(vad["noise_margin_db"])
-    if "silence_ms" in vad:
-        cfg.vad.silence_ms = int(vad["silence_ms"])
-    if "min_speech_ms" in vad:
-        cfg.vad.min_speech_ms = int(vad["min_speech_ms"])
-    if "max_record_ms" in vad:
-        cfg.vad.max_record_ms = int(vad["max_record_ms"])
-    if "start_timeout_ms" in vad:
-        cfg.vad.start_timeout_ms = int(vad["start_timeout_ms"])
-    if "lead_in_ignore_ms" in vad:
-        cfg.vad.lead_in_ignore_ms = int(vad["lead_in_ignore_ms"])
-    if "model_path" in vad:
-        cfg.vad.model_path = _expand(str(vad["model_path"]))
-    if "threshold" in vad:
-        cfg.vad.threshold = float(vad["threshold"])
-    if "response_timeout_ms" in vad:
-        cfg.vad.response_timeout_ms = int(vad["response_timeout_ms"])
-    if "device" in vad:
-        cfg.vad.device = str(vad["device"])
-    if "venv" in vad:
-        cfg.vad.venv = _expand(str(vad["venv"]))
     asr = data.get("asr") or {}
     if "device" in asr:
         cfg.asr.device = str(asr["device"])

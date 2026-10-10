@@ -5,7 +5,7 @@ Canvas {
     property string phase: "idle"
     property real strength: 0
     readonly property bool listening: phase === "listening"
-    readonly property bool working: phase === "thinking" || phase === "speaking" || phase === "transcribing"
+    readonly property bool working: phase === "thinking" || phase === "speaking"
     property real spin: 0
     property real breath: 0
 

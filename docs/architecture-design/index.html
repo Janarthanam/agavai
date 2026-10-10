@@ -106,7 +106,7 @@
       <p>The worker keeps one continuous signal and recurrent state across microphone packets. Packet ends are not word or sentence boundaries. Every 16 new mel frames advances the cache-aware encoder; a greedy RNN-T decoder emits text and learned markers.</p>
       <figure id="audio-figure" class="interactive-figure"><figcaption>Inside <code>parakeet_worker.py</code>. Hover for the exact transforms, tensors and reset behavior.</figcaption><div class="diagram-scroll"><div class="diagram" data-diagram="audio"></div></div><div class="contract" hidden></div></figure>
       <div class="marker-grid"><p><strong>Interim / EOB</strong><br>Replace the partial line. Keep listening. Do not call a model or tool.</p><p><strong>Nonempty EOU / Enter</strong><br>Commit once. Reset the recognizer, pause capture, and run the turn engine.</p><p><strong>Empty EOU / cancel</strong><br>Empty EOU leaves capture open. Cancel drops the hypothesis and exits.</p></div>
-      <p class="caption">The orb's RMS meter reads the same PCM and never decides a turn. Energy VAD, Silero and Voxtype file capture remain legacy/experimental code; F9 dictation is separate from the automatic assistant path.</p>
+      <p class="caption">The orb's RMS meter reads the same PCM and never decides a turn. F9 dictation is separate from the automatic assistant path.</p>
     </section>
 
     <section id="deployment">

@@ -1,7 +1,7 @@
 [project]
 name = "agavai"
 version = "0.1.0"
-description = "Local voice assistant for Omarchy: Voxtype + llama-server + MCP tools"
+description = "Local voice assistant for Omarchy: streaming ASR + llama-server + MCP tools"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }

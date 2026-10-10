@@ -41,7 +41,7 @@ BarWidget {
     bar: root.bar
     text: ""
     iconComponent: mark
-    active: root.phase === "listening" || root.phase === "thinking" || root.phase === "transcribing" || root.phase === "speaking"
+    active: root.phase === "listening" || root.phase === "thinking" || root.phase === "speaking"
     tooltipText: root.phase === "idle" ? "Agavai · Click to speak · Super+M" : ("Agavai · " + root.phase + " · Right-click to cancel")
     onPressed: function(b) {
       if (!root.bar)
