@@ -48,12 +48,15 @@ ShellRoot {
                 var stage = find(chat, "agavaiStage");
                 var details = find(chat, "agavaiDetails");
                 var orb = find(chat, "agavaiCompactOrb");
+                var closeButton = find(chat, "agavaiCompactClose");
                 if (step === 0) {
                     chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", transcript: {text: "find notes"}, level_db: -25}));
                 } else if (step === 1 || step === 4) {
                     check(chat.opened && chat.compact && !chat.wantsKeyboardFocus, "Compact mode must keep the session open without keyboard focus");
                     check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.None, "Compact layer must release compositor keyboard focus");
                     check(orb.visible && !details.visible, "Compact mode must show only the orb");
+                    check(closeButton.visible && closeButton.Accessible.name === "Dismiss assistant", "Compact mode must expose a named close button");
+                    check(closeButton.x >= 0 && closeButton.y >= 0 && closeButton.x + closeButton.width <= orb.width && closeButton.y + closeButton.height <= orb.height, "Close button must stay inside the compact input region");
                     check(stage.width === Style.space(80) && stage.height === Style.space(80), "Compact input region must stay small: step " + step + ", " + stage.width + "x" + stage.height);
                     checkPosition(stage, panel);
                     if (step === 1) {
@@ -76,8 +79,8 @@ ShellRoot {
                     check(chat.compact && !chat.wantsKeyboardFocus && !details.visible, "Replies and errors must not expand or steal focus");
                     // Idle dismissal avoids launching the real capture cancellation command.
                     chat.phase = "idle";
-                    input.mouseClick(find(chat, "agavaiCompactPointer"), 40, 40, Qt.RightButton);
-                    check(!chat.opened && chat.compact, "Dismissal must reset the default mode");
+                    input.mouseClick(closeButton, closeButton.width / 2, closeButton.height / 2, Qt.LeftButton);
+                    check(!chat.opened && chat.compact && !chat.wantsKeyboardFocus, "Close button must dismiss directly without expanding or taking keyboard focus");
                     chat.applySnapshot(JSON.stringify({session_id: "test", phase: "speaking"}));
                     check(!chat.opened, "Late snapshots must not reopen a dismissed session");
                     chat.applySnapshot(JSON.stringify({session_id: "next", phase: "listening"}));

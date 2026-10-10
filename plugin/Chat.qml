@@ -484,6 +484,16 @@ Item {
                             root.compact = false;
                     }
                 }
+                NativeButton {
+                    objectName: "agavaiCompactClose"
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    width: Style.space(32)
+                    height: Style.space(32)
+                    text: "×"
+                    accessibleName: "Dismiss assistant"
+                    onClicked: root.dismiss()
+                }
             }
         }
     }
