@@ -59,7 +59,7 @@ def repeated_tool(context):
     context.first_canvas = context.ui.data["display"]
     context.ui.continue_listening()
     context.ui.partial("show those again")
-    context.ui.level(-20, "off", "off")
+    context.ui.level(-20)
     context.retained_id = context.ui.data["display"]["id"]
     context.ui.tool_done("search_files", payload)
     context.second_canvas = context.ui.data["display"]

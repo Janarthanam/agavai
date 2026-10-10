@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 import signal
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from behave import when, then
 
 from agavai.__main__ import _cancel_path, listen_session
+from agavai.asr import PAREC_ARGV, rms_dbfs
 
 
 WORKER = """
@@ -51,9 +53,9 @@ def capture(context, *, cancel=False, empty=False):
     spawn = subprocess.Popen
     publish_level = context.ui.level
 
-    def level(db, vad_state, vad_backend):
+    def level(db):
         context.levels.append((time.monotonic(), db))
-        publish_level(db, vad_state, vad_backend)
+        publish_level(db)
         if cancel and len(context.levels) == 3:
             _cancel_path(context.cfg).touch()
             os.kill(os.getpid(), signal.SIGTERM)
@@ -93,7 +95,6 @@ def levels(context):
     assert context.levels[-1][1] == -100.0, context.levels
     assert all(b[0] - a[0] >= 0.099 for a, b in zip(context.levels, context.levels[1:])), context.levels
     assert context.ui.data["transcript"]["text"] == ""
-    assert context.ui.data["vad_backend"] == "off"
 
 
 @then("recognition and metering use one unchanged audio stream")
@@ -105,6 +106,29 @@ def same_capture(context):
 @then("no microphone levels are published")
 def no_levels(context):
     assert context.levels == [], context.levels
+
+
+@when("I convert PCM to dBFS")
+def pcm_dbfs(context):
+    sine = b"".join(struct.pack("<h", int(32767 * math.sin(2 * math.pi * i / 32))) for i in range(320))
+    context.silence_db = rms_dbfs(bytes(640))
+    context.sine_db = rms_dbfs(sine)
+
+
+@then("silence should be -100 dBFS")
+def silence_db(context):
+    assert context.silence_db == -100.0, context.silence_db
+
+
+@then("a full-scale sine should be near -3 dBFS")
+def sine_db(context):
+    assert -3.2 < context.sine_db < -2.8, context.sine_db
+
+
+@then('the parec argv should use "{flag}" for "{target}"')
+def parec_argv(context, flag, target):
+    assert flag in PAREC_ARGV and target in PAREC_ARGV, PAREC_ARGV
+    assert "--target=@DEFAULT_SOURCE@" not in " ".join(PAREC_ARGV), PAREC_ARGV
 
 
 @when("I check the native orb animation without desktop capture")

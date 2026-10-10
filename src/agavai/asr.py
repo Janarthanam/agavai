@@ -9,6 +9,7 @@ this module only delivers interim, end-of-boundary, and end-of-utterance events.
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import select
@@ -21,13 +22,40 @@ import time
 from pathlib import Path
 
 from agavai.config import Config
-from agavai.meter import ParecSource, rms_dbfs
 
 MIC_ERROR = "Microphone input is unavailable. Check your input device and try again."
+PAREC_ARGV = [
+    "parec",
+    "--raw",
+    "--format=s16le",
+    "--rate=16000",
+    "--channels=1",
+    "--latency-msec=20",
+    "-d",
+    "@DEFAULT_SOURCE@",
+]
+CLAMP_DBFS = -100.0
+_REF = 32768.0
 
 
 class AsrError(RuntimeError):
     pass
+
+
+def rms_dbfs(frame: bytes) -> float:
+    """s16le PCM → dBFS, clamped to −100. Pure; no I/O."""
+    if len(frame) % 2:
+        frame = frame[:-1]
+    n = len(frame) // 2
+    if not n:
+        return CLAMP_DBFS
+    total = 0.0
+    for (sample,) in struct.iter_unpack("<h", frame):
+        total += sample * sample
+    rms = math.sqrt(total / n)
+    if rms <= 0:
+        return CLAMP_DBFS
+    return max(CLAMP_DBFS, 20.0 * math.log10(rms / _REF))
 
 
 def resolve_device(requested: str) -> str:
@@ -104,7 +132,7 @@ class StreamingRecognizer:
         self._stop_pump.clear()
         self._level_db = None
         next_level_at = 0.0
-        self._parec = subprocess.Popen(ParecSource.ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._parec = subprocess.Popen(PAREC_ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self._pump = threading.Thread(target=self._pump_audio, args=(should_stop,), daemon=True)
         self._pump.start()
         try:

@@ -54,20 +54,7 @@ Feature: Configurable on-device model
     When I load the config
     Then the asr device should be "gpu"
 
-  Scenario: VAD defaults to the energy backend with a 900 ms silence window
-    Given an empty agavai config
+  Scenario: Retired [vad] and [voxtype] sections still load
+    Given a config with retired vad and voxtype sections and asr device "gpu"
     When I load the config
-    Then vad should be enabled
-    And the vad backend should be "energy"
-    And the vad silence window should be 900 ms
-
-  Scenario: VAD keys are configurable
-    Given a config with vad backend "silero" and silence window 600 ms
-    When I load the config
-    Then the vad backend should be "silero"
-    And the vad silence window should be 600 ms
-
-  Scenario: Unknown vad keys are tolerated
-    Given a config with an unknown vad key
-    When I load the config
-    Then the vad backend should be "energy"
+    Then the asr device should be "gpu"

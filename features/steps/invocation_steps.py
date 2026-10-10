@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 from behave import when, then
 from agavai import app
-from agavai.__main__ import _cancel_path, listen_session, start_session
+from agavai.__main__ import _cancel_path, listen_session, main, start_session
 from agavai.asr import AsrError
+from agavai.state import read_state
 from agavai.ui import summon_overlay
-from agavai.meter import _select_read
 
 
 class _Scripted:
@@ -57,7 +57,7 @@ def shared(context):
 
 @then("one automatic listening session is requested")
 def automatic(context):
-    assert len(context.start_calls) == 1 and context.start_calls[0].kwargs == {"automatic": True}
+    assert len(context.start_calls) == 1, context.start_calls
 
 
 @then("no new listening session is requested")
@@ -82,17 +82,44 @@ def once(context):
     assert context.shell_calls == 1
 
 
-@when("I launch an automatic session with manual capture configured")
-def auto_manual(context):
-    context.cfg.vad.enabled = False
+@when('I run "{cmd}" with no live listener')
+def run_without_listener(context, cmd):
+    context.started = []
+
+    def record(argv, *args, **kwargs):
+        context.started.append(argv)
+        raise AssertionError(f"unexpected program: {argv}")
+
+    # finish() restores the mic and OSD; it is not the code under test.
+    with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), patch("agavai.__main__.finish"), patch("subprocess.Popen", side_effect=record):
+        context.exit_code = main([cmd])
+
+
+@then("the command exits with {code:d}")
+def exits_with(context, code):
+    assert context.exit_code == code, context.exit_code
+
+
+@then("no other program is started")
+def nothing_started(context):
+    assert context.started == [], context.started
+
+
+@then('the assistant state is "{state}"')
+def assistant_state(context, state):
+    assert read_state(context.cfg) == state, read_state(context.cfg)
+
+
+@when("I launch a detached listening session")
+def detached(context):
     with patch("agavai.__main__.read_listener", return_value=None), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.subprocess.Popen", return_value=SimpleNamespace(pid=987654)) as spawn:
-        assert start_session(context.cfg, automatic=True)
-        context.auto_command = spawn.call_args.args[0]
+        assert start_session(context.cfg)
+        context.detached_command = spawn.call_args.args[0]
 
 
-@then("the detached command uses automatic listening")
-def command(context):
-    assert context.auto_command[-1] == "listen"
+@then('the detached command is "{cmd}"')
+def command(context, cmd):
+    assert context.detached_command[-1] == cmd, context.detached_command
 
 
 def session(context, sequences, stop_body=None):
@@ -242,16 +269,3 @@ def kept_images(context):
 def continued_as(context):
     expected = [row["continued"] == "true" for row in context.table]
     assert context.continued == expected, context.continued
-
-
-@when("the microphone stream stalls")
-def stall(context):
-    stream = SimpleNamespace(fileno=lambda: 123)
-    with patch("agavai.meter.time.monotonic", side_effect=[0, 2]), patch("agavai.meter.select.select") as select:
-        context.stalled_result = _select_read(stream, 20)(640)
-        assert not select.called
-
-
-@then("the source ends rather than waiting for another shortcut")
-def ends(context):
-    assert context.stalled_result == b""
