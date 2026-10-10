@@ -4,7 +4,7 @@ Local voice assistant for [Omarchy](https://omarchy.org/). CLI package name: `ag
 
 Local Siri-style loop for Omarchy. **v1 talks to no remote model.**
 
-End-to-end voice loop (the design spec): [`docs/flow.md`](docs/flow.md). Decision record: [`docs/v2.md`](docs/v2.md). Audio stages: [`docs/audio.md`](docs/audio.md). Process split and **how the on-device GGUF is selected**: [`docs/architecture.md`](docs/architecture.md).
+End-to-end voice loop (the design spec): [`docs/flow.md`](docs/flow.md). Audio stages: [`docs/audio.md`](docs/audio.md). Process split and **how the on-device GGUF is selected**: [`docs/architecture.md`](docs/architecture.md).
 
 One native overlay starts as an orb at the bottom right, without taking keyboard focus or showing text. Click it to expand the transcript and result browser at the same bottom-right corner; use − to minimize without stopping listening, or click the orb’s × button to close directly. Right-clicking the orb also cancels. In the expanded view: the orb follows the microphone level, and the same surface shows the current request, formatted answers, selectable file/folder rows, image previews, and video controls. Results stay open until dismissed. Use arrows to browse and Enter or Open to open a supported item. The [UI design](docs/ui-design.md) and [interactive prototype](docs/ui-prototype/index.html) document the interaction. Words appear in the expanded view while you are still talking. New canvas results open the expanded view at the bottom right. Microphone updates and ordinary replies respect manual minimization. Clicking another window minimizes the expanded view and keeps listening.
 
