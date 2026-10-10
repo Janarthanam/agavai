@@ -5,7 +5,6 @@ import os
 import signal
 import subprocess
 import sys
-import time
 import traceback
 from pathlib import Path
 
@@ -151,8 +150,6 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
 
 def _pid_marker(pid: int) -> str:
     try:
-        for field in Path(f"/proc/{pid}/stat").read_text().split(" ", 22):
-            pass
         return Path(f"/proc/{pid}/stat").read_text().split(" ", 22)[21]
     except (OSError, IndexError):
         return ""
