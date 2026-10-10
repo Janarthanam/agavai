@@ -2,7 +2,7 @@
 
 Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The assistant listen path follows this spec: streaming ASR, then end of utterance, then the existing tool loop. Visual layout stays in [ui-design.md](ui-design.md). Model selection and the full config key list stay in [architecture.md](architecture.md) and [share/config.example.toml](share/config.example.toml).
 
-This file wins on runtime behavior where those documents disagree. [architecture.md](architecture.md) still describes a GTK window, a Super+Ctrl+M toggle, and a two-second grace window. [README.md](README.md) says v1 talks to no remote model. None of those three claims match the code. The surface is the Quickshell overlay. Super+M starts a session that stays listening. Head selection may call OpenRouter.
+This file wins on runtime behavior where those documents disagree. [README.md](../README.md) says v1 talks to no remote model. That does not match the code: head selection may call OpenRouter.
 
 ## Requirements
 
@@ -76,7 +76,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 ### Decisions
 
-**One overlay, not a second window.** [ui-design.md](ui-design.md) rejects a GTK window: the launcher is an invocation of the same Quickshell layer. A separate window would still work if the layer failed to appear, which is what [architecture.md](architecture.md) still describes, and it would split focus, results, and cancel across two surfaces. The choice stands only while the Omarchy shell can summon `janar.agavai`. If summon fails, ListenSession is not started.
+**One overlay, not a second window.** [ui-design.md](ui-design.md) rejects a GTK window: the launcher is an invocation of the same Quickshell layer. A separate window would still work if the layer failed to appear, but it would split focus, results, and cancel across two surfaces. The choice stands only while the Omarchy shell can summon `janar.agavai`. If summon fails, ListenSession is not started.
 
 **One process per session, not a resident agent.** ListenSession exits when the user dismisses it, capture fails, or the mic stream ends. A daemon could keep the model transcript across dismissals. It would also hold the microphone and race F9. The transcript lives in that process only. Assumption: a follow-up happens before dismiss. After exit, the next invoke is a blank session.
 
@@ -363,7 +363,8 @@ Rejected options named by the sources below, and why this design did not take th
 
 | Option | Where it is named | Why it is not the voice path |
 |---|---|---|
-| GTK window | [architecture.md](architecture.md), rejected in [ui-design.md](ui-design.md) | Second surface. The launcher summons the overlay instead. |
+| GTK window | Rejected in [ui-design.md](ui-design.md) | Second surface. The launcher summons the overlay instead. |
+| One speech-and-tools model | Earlier decision record, `docs/v2.md` in git history | Does not fit the 8 GB RX 590. Qwen3-Omni-30B-A3B needs about 79 GB at BF16 and about 19 GB at a third-party Q4 estimate. Qwen2.5-Omni GGUF has no audio output in upstream llama.cpp and no tool contract this loop uses. Ultravox, Moshi, GLM-4-Voice, and Mini-Omni still need an end-of-speech detector or do not call tools. The voice path stays a cascade: streaming ASR, the Qwen tool loop, Kokoro. |
 | Sanitizer model on port 18765 | [architecture.md](architecture.md) | Different job and a different cgroup. Reusing it hangs a Voxtype restart. |
 | All tool schemas on the 4B | [architecture.md](architecture.md) | Too many tokens for the useful budget. Heads cut that to at most eight. |
 | MCP inside the turn | [architecture.md](architecture.md), [src/agavai/mcp_server.py](../src/agavai/mcp_server.py) | Same allowlist, extra hop. MCP remains a side door. |
