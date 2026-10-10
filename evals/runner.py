@@ -337,7 +337,8 @@ def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
     cpu = next((line.split(":", 1)[1].strip() for line in Path("/proc/cpuinfo").read_text().splitlines() if line.startswith("model name")), platform.processor())
     return {
         "git_commit": _git("rev-parse", "HEAD"),
-        "git_dirty": bool(_git("status", "--porcelain", "--", "src", "evals")),
+        # A run writes into evals/results while it runs; that is not a change to what is measured.
+        "git_dirty": bool(_git("status", "--porcelain", "--", "src", "evals", ":(exclude)evals/results")),
         "model_path": str(model_path),
         "model_sha256": _sha256(model_path) if model_path.is_file() else "",
         "llama_server_build": props.get("build_info", ""),
