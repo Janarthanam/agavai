@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Agavai — architecture and implementation design</title>
+  <link rel="stylesheet" href="architecture.css">
+  <script src="architecture.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#system">Skip to architecture</a>
+  <header>
+    <p class="eyebrow">AGGAWAII / Agavai · technical design · 09 October 2026</p>
+    <h1>Design of a voice turn</h1>
+    <p class="lead">Agavai turns speech into actions on an Omarchy desktop. A session controller owns the conversation, Parakeet turns audio into text, Qwen chooses actions, and Kokoro speaks the result.</p>
+    <p class="document-meta">Current implementation at <code>48f49b3</code> · <a href="design.md">Markdown design document</a> · models and actions are simulated in this page</p>
+    <nav aria-label="Reading order"><a href="#system">1. System</a><a href="#ownership">2. Ownership</a><a href="#algorithm">3. Turn algorithm</a><a href="#recognition">4. Recognition</a><a href="#deployment">5. Deployment</a><a href="#failures">6. Failure behavior</a></nav>
+  </header>
+  <main>
+    <section class="requirements">
+      <h2>What the design must preserve</h2>
+      <ul>
+        <li><strong>Show speech before acting.</strong> Partial recognition updates the screen. Only end of utterance or Enter starts a model turn.</li>
+        <li><strong>Act through named tools.</strong> Qwen proposes a function and arguments; the executor decides whether that function exists and runs its implementation.</li>
+        <li><strong>Keep a conversation while listening.</strong> Related requests retain context and results; a new topic clears them; dismissal ends the session.</li>
+        <li><strong>Keep inference and execution local.</strong> The optional Jev router can send committed text to OpenRouter. Keyword routing removes that model hop.</li>
+      </ul>
+    </section>
+
+    <section id="system">
+      <p class="eyebrow">1 / High-level design</p>
+      <h2>One controller coordinates the whole turn</h2>
+      <p>The microphone and recognizer produce events; they do not run desktop actions. The <strong>Session controller</strong> accepts a finished sentence and invokes the <strong>Turn engine</strong>. That engine asks Qwen for a next step, executes any tool calls, and asks again with the results. When Qwen returns an answer, the controller speaks it and reopens capture.</p>
+      <figure id="system-figure" class="interactive-figure">
+        <figcaption>Logical responsibilities. Hover or focus a box for its job and deployment; inspect an arrow for its payload and protocol. Click to keep the contract open.</figcaption>
+        <div class="diagram-scroll"><div class="diagram" data-diagram="system"></div></div>
+        <div class="contract" hidden></div>
+      </figure>
+      <p class="invariant"><strong>The execution boundary:</strong> Qwen never gets a shell and never executes an action. Every proposed call passes through <code>call_tool()</code> and the global <code>DISPATCH</code> allowlist.</p>
+      <details><summary>Why these boundaries?</summary><div class="table-scroll"><table><thead><tr><th>Decision</th><th>Reason</th><th>Tradeoff</th></tr></thead><tbody>
+        <tr><td>Separate ASR, Qwen and TTS</td><td>Each model has one job; the cascade fits the documented desktop budget.</td><td>Stages add latency. A single speech-and-tools model would remove handoffs, but the v2 evaluation did not find a fitting replacement.</td></tr>
+        <tr><td>One process per listening session</td><td>Clear microphone/context ownership; dismissing ends that conversation.</td><td>ASR loads for each new session. A persistent agent would require broader lifecycle and microphone coordination.</td></tr>
+        <tr><td>Direct tool functions; MCP is an adapter</td><td>The voice loop uses the existing allowlist without a second protocol hop.</td><td>Tools share caller trust. They are not isolated workers or transactions.</td></tr>
+        <tr><td>Selected heads instead of every schema</td><td>Less tool-schema context for the small local model.</td><td>Routing can omit a needed tool; the engine supports one head-attachment retry.</td></tr>
+        <tr><td>Latest UI snapshot</td><td>Atomic JSON replacement gives QML one complete current view.</td><td>No event replay; separate typed and voice processes can contend for the file.</td></tr>
+      </tbody></table></div></details>
+    </section>
+
+    <section id="ownership">
+      <p class="eyebrow">2 / Module boundaries</p>
+      <h2>State ownership tells you where code belongs</h2>
+      <p>A <strong>session</strong> runs from invocation to dismissal. A <strong>turn</strong> is one committed utterance and its reply. A <strong>conversation</strong> can reset inside the same session when the topic changes. Mixing these lifetimes would either erase follow-up context or allow cancelled work to reopen the UI.</p>
+      <div class="table-scroll"><table><thead><tr><th>Owner</th><th>State it owns</th><th>Code and boundary</th></tr></thead><tbody>
+        <tr><td>Session controller</td><td>Listener identity, cancellation, current hypothesis, turn ordering; owns the ChatUi instance.</td><td><code>__main__.py: listen_session, _await_utterance</code>. Starts/stops capture and calls the turn engine.</td></tr>
+        <tr><td>Recognizer</td><td>PCM overlap, mel buffers, encoder caches, decoder state and provisional tokens.</td><td><code>asr.py / parakeet_worker.py</code>. Clears state on an acknowledged reset.</td></tr>
+        <tr><td>Turn engine + ChatUi</td><td>Conversation messages, inherited heads, displayed results and final answers.</td><td><code>orchestrator.py / ui.py</code>. Retain for a follow-up; clear for a new topic.</td></tr>
+        <tr><td>Native UI</td><td>Compact/expanded presentation, selected item and preview; reads the snapshot.</td><td><code>Chat.qml / ResultBrowser.qml</code>. Sends CLI controls; does not mutate model history.</td></tr>
+      </tbody></table></div>
+      <div class="state-line" aria-label="Session state transitions"><span>Listening</span><b aria-hidden="true">→</b><span>Reasoning</span><b aria-hidden="true">⇄</b><span>Executing tools</span><b aria-hidden="true">→</b><span>Speaking</span><b aria-hidden="true">→</b><span>Listening again</span></div>
+      <p class="caption">These are explanatory states. Runtime <code>thinking</code> covers both reasoning and tool execution. Capture pauses during model work and speech; there is no microphone barge-in. Cancel leads to cleanup and exit from any phase.</p>
+    </section>
+
+    <section id="algorithm">
+      <p class="eyebrow">3 / Low-level design</p>
+      <h2>How one committed sentence is processed</h2>
+      <div class="algorithm-layout"><ol class="algorithm-list">
+        <li><strong>Resolve the conversation.</strong> With prior history, ask local Qwen for exactly <code>follow_up</code> or <code>new_conversation</code>, using no tools. Keep prior state for a follow-up; clear it for a new topic. First turns skip this call.</li>
+        <li><strong>Select the available actions.</strong> The router chooses tool <em>heads</em> such as files or wallpaper. A head is a schema group, not another agent. Merge relevant prior heads and advertise up to eight schemas by default.</li>
+        <li><strong>Run the model/tool loop.</strong> Send system prompt, history, user text and schemas to local Qwen. For tool calls, dispatch each call in order, append matching tool-result messages, and request the next completion. A missing head gets one retry; default limit is six model rounds.</li>
+        <li><strong>Publish and speak the answer.</strong> Full results become typed canvas items. Model results are shortened; speech uses readable names without paths or extensions. Remember the conversation, speak the reply, and return to listening.</li>
+      </ol><pre class="pseudocode"><code>on committed_text:
+  check local model health
+  if history exists:
+    classify follow_up / new_conversation
+    clear conversation if new
+  schemas = route(text) + relevant prior heads
+  messages = system + history + text
+  repeat up to max_tool_rounds:
+    response = Qwen(messages, schemas)
+    if response has no tool calls:
+      remember and return spoken answer
+    attach missing head once, if needed
+    otherwise run each allowlisted call
+    publish full results to canvas
+    append short results to messages</code></pre></div>
+      <p class="caption">The wallpaper “show me” path also ensures <code>wallpaper_list</code> produces a gallery, including when Qwen only asks the user to choose an image. This is an existing special case, not a general tool planner.</p>
+      <div class="walkthrough">
+        <div class="walkthrough-heading"><h3>Follow an actual use case through those boundaries</h3><label for="scenario">Example <select id="scenario"><option value="search">Find the budget notes</option><option value="followup">Choose wallpaper, then change topic</option><option value="cancel">Cancel while speaking</option></select></label></div>
+        <div class="walkthrough-controls"><button id="previous" type="button">← Previous</button><span id="step-count"></span><button id="next" type="button">Next →</button></div>
+        <ol id="step-list" class="step-list"></ol>
+        <div id="step-detail" aria-live="polite"></div>
+      </div>
+      <h3>The same result has two representations</h3>
+      <div class="representation-grid"><article><h4>Canvas: actionable local data</h4><pre><code>{kind: "file", title: "budget_notes.md",
+ path: "/home/user/Documents/budget_notes.md",
+ uri: "file:///home/user/Documents/budget_notes.md",
+ openable: true, preview_html: "…"}</code></pre><p>The UI needs a path to preview or open the file. Explicit <code>ui-open</code> validates session id, selected item and supported type before calling <code>xdg-open</code>.</p></article><article><h4>Model and speech: readable names</h4><pre><code>{type: "Files", count: 1,
+ items: [{kind: "file", name: "budget notes"}]}</code></pre><p>Typed results enter model context as kind/name, clipped to 500 characters. The spoken reply summarizes a list and points to the canvas.</p></article></div>
+      <p><strong>UI identity matters:</strong> <code>session_id</code> controls dismissal; a new <code>display.id</code> identifies newly published results and opens their canvas. Returning to listening or retaining a display does not undo manual minimization.</p>
+    </section>
+
+    <section id="recognition">
+      <p class="eyebrow">4 / Recognition algorithm</p>
+      <h2>Parakeet emits the boundary that commits the turn</h2>
+      <p>The worker keeps one continuous signal and recurrent state across microphone packets. Packet ends are not word or sentence boundaries. Every 16 new mel frames advances the cache-aware encoder; a greedy RNN-T decoder emits text and learned markers.</p>
+      <figure id="audio-figure" class="interactive-figure"><figcaption>Inside <code>parakeet_worker.py</code>. Hover for the exact transforms, tensors and reset behavior.</figcaption><div class="diagram-scroll"><div class="diagram" data-diagram="audio"></div></div><div class="contract" hidden></div></figure>
+      <div class="marker-grid"><p><strong>Interim / EOB</strong><br>Replace the partial line. Keep listening. Do not call a model or tool.</p><p><strong>Nonempty EOU / Enter</strong><br>Commit once. Reset the recognizer, pause capture, and run the turn engine.</p><p><strong>Empty EOU / cancel</strong><br>Empty EOU leaves capture open. Cancel drops the hypothesis and exits.</p></div>
+      <p class="caption">The orb's RMS meter reads the same PCM and never decides a turn. Energy VAD, Silero and Voxtype file capture remain legacy/experimental code; F9 dictation is separate from the automatic assistant path.</p>
+    </section>
+
+    <section id="deployment">
+      <p class="eyebrow">5 / Physical design</p>
+      <h2>Logical modules share a process; models do not</h2>
+      <p>The session controller, context decision, router, turn engine, tool dispatcher, canvas and snapshot writer are functions in <strong>one Python process</strong>. ASR and speech use a separate Python environment for inference dependencies. Qwen stays loaded in an independently supervised service.</p>
+      <figure id="deployment-figure" class="interactive-figure"><figcaption>Process boundaries on the user's computer. Only the dashed Jev interaction crosses machines.</figcaption><div class="diagram-scroll"><div class="diagram" data-diagram="deployment"></div></div><div class="contract" hidden></div></figure>
+      <p><strong>Startup order:</strong> review TOML → validate llama-server → download chosen models → register plugin/launcher/service → start Qwen. On invocation: summon the existing plugin → create the guarded listener → load ASR → begin capture and warm Kokoro. Dismissal ends the listener and ASR; the plugin and Qwen remain, and Kokoro can remain warm.</p>
+      <details><summary>Configuration, paths and deployment contracts</summary><div class="table-scroll"><table><thead><tr><th>Concern</th><th>Location / setting</th><th>Effect on code</th></tr></thead><tbody>
+        <tr><td>Configuration</td><td><code>~/.config/agavai/config.toml</code>; <code>AGAVAI_CONFIG</code> overrides it.</td><td>New CLI processes load TOML through <code>load_config()</code>. Model path/binary also accept environment overrides.</td></tr>
+        <tr><td>Local Qwen</td><td><code>[llm]</code>: model, host/port, timeout, token and round limits; per-model context and GPU layers.</td><td>Default :18766, CPU, Qwen3-4B Q4_K_M (~2.5 GB). Model changes require a service restart.</td></tr>
+        <tr><td>ASR / speech</td><td><code>[asr]</code>, <code>[tts]</code>; weights/runtime under <code>~/.local/share/agavai/</code>.</td><td>ASR CPU by default, optional NVIDIA CUDA. Kokoro CPU. Model/device settings are independent.</td></tr>
+        <tr><td>Routing / file search</td><td><code>[router]</code>, <code>[router.jev]</code>, <code>[files]</code>.</td><td>keyword avoids remote routing; roots constrain file search, not every possible filesystem read.</td></tr>
+        <tr><td>Runtime / native plugin</td><td><code>$XDG_RUNTIME_DIR/agavai/</code>; <code>~/.config/omarchy/plugins/janar.agavai/</code>.</td><td>PID/lock/cancel and snapshot are transient files. CLI launchers symlink to a permanent source/bundle directory.</td></tr>
+      </tbody></table></div></details>
+      <details><summary>Auxiliary interfaces and extension points</summary><p><code>agavai ask</code> starts a blank, one-shot turn with no microphone and blocking speech. It shares the snapshot path with listening; those writers are not coordinated.</p><p><code>agavai mcp</code> is a separate stdio JSON-RPC 2.0 adapter: initialize, tools/list, tools/call. It exposes the same 35-tool global registry and calls the same dispatcher. The built-in voice loop bypasses MCP. The A2A card is local discovery metadata, not an agent RPC service.</p><p>To add a desktop capability, add its named function, schema and <code>DISPATCH</code> entry in <code>tools.py</code>, associate it with a head in <code>heads.py</code>, and add a canvas normalization only if it produces a new result type. Keep timing policy in the session and recognition state in the worker. Changing a model/provider belongs in configuration and the model runner.</p><p>Mail, calendar, persistent memory, external MCP tool consumption and pixel-based computer use are not implemented by this runtime. <a href="../eval.md">The proposed evaluation design</a> includes those future capabilities; it is not the current component architecture.</p></details>
+    </section>
+
+    <section id="failures">
+      <p class="eyebrow">6 / Reliability</p>
+      <h2>Recover at the boundary that owns the failure</h2>
+      <div class="table-scroll"><table><thead><tr><th>Failure</th><th>Result</th><th>Owner / implication</th></tr></thead><tbody>
+        <tr><td>Shell, microphone or ASR startup fails</td><td>No turn is fabricated. Summon failure prevents listener start; capture/ASR failures show an error and end listening.</td><td>Entry / session. No automatic legacy voice fallback.</td></tr>
+        <tr><td>Context decision is invalid</td><td>Keep earlier results/history and surface the error. Do not route or execute this request.</td><td>Turn engine. Clearing state must follow a valid decision.</td></tr>
+        <tr><td>Jev is unavailable</td><td>Use keywords unless fallback=none. Empty remote choices can also use keywords.</td><td>Router. Remote routing is optional.</td></tr>
+        <tr><td>Qwen or a tool fails</td><td>HTTP errors surface; tool failures return strings to the next model step. Exhausted rounds return an explicit failure.</td><td>Turn engine / executor. No HTTP retry or action rollback.</td></tr>
+        <tr><td>Kokoro fails</td><td>Try eSpeak, then a notification, following configured preference.</td><td>Speech controller. Preserve a response path.</td></tr>
+        <tr><td>User cancels</td><td>Mark dismissed session, create cancel marker, signal listener, stop owned Kokoro playback and discard later snapshots.</td><td>Session + snapshot. Blocking HTTP/tools/synthesis can delay cleanup; already finished actions stay finished.</td></tr>
+      </tbody></table></div>
+      <p><strong>Performance contract:</strong> one user, serial voice turns, llama-server <code>--parallel 1</code>. Defaults bound routing to 2 s and each completion to 120 s, with six model rounds; they are failure limits, not acceptable response-time targets. No measured end-to-end SLA is established. F9 microphone exclusion and typed/voice writer exclusion are also not enforced.</p>
+      <p><strong>Diagnostics:</strong> <code>agavai status</code> for state/model health, the user-service journal for Qwen, <code>ui.json</code> for the latest transcript/tool/phase, and <code>kokoro-serve.log</code> for speech. Detached listener stderr is discarded and route/context verdicts are not traced.</p>
+    </section>
+
+    <section id="references">
+      <p class="eyebrow">Conclusion & references</p><h2>Implementation map</h2>
+      <p>Design around three rules: only committed text enters reasoning; only allowlisted functions act; session identity survives a topic change and blocks cancelled writes. Those rules connect the algorithms, process boundaries and UI behavior.</p>
+      <ul class="source-list"><li><a href="../flow.md">Runtime authority</a> · <a href="../audio.md">Audio contract</a> · <a href="../ui-design.md">Native UI contract</a></li><li><a href="../../src/agavai/__main__.py">Session</a> · <a href="../../src/agavai/orchestrator.py">Turn engine</a> · <a href="../../src/agavai/router.py">Router</a> · <a href="../../src/agavai/heads.py">Heads</a> · <a href="../../src/agavai/tools.py">Tools</a></li><li><a href="../../src/agavai/asr.py">ASR transport</a> · <a href="../../src/agavai/parakeet_worker.py">Recognizer algorithm</a> · <a href="../../src/agavai/ui.py">Snapshot</a> · <a href="../../src/agavai/canvas.py">Canvas</a> · <a href="../../src/agavai/tts.py">Speech</a></li><li><a href="../../share/config.example.toml">Config reference</a> · <a href="../install-bundle.md">Installation</a> · <a href="../v2.md">Historical cascade/model decision</a> · <a href="../../tests/README.md">Behavioral validation</a></li></ul>
+      <p class="caption">Describes source at 48f49b3, not the installed desktop. Where older architecture notes disagree, flow.md governs runtime behavior. Hover contracts link to their implementation.</p>
+    </section>
+  </main>
+  <footer>Agavai / AGGAWAII · <a href="design.md">Read the Markdown design</a></footer>
+  <div id="tooltip" role="tooltip" hidden></div>
+  <p id="selection-status" class="sr-only" aria-live="polite"></p>
+  <noscript><p>Interactive details require JavaScript. <a href="design.md">The Markdown document</a> contains the complete design.</p></noscript>
+</body>
+</html>
