@@ -1,0 +1,248 @@
+{
+  "clean.af_bella.00-6690e7075d.wav": {
+    "duration_s": 9.631,
+    "id": "clean.af_bella.00",
+    "speech_end_s": 1.631,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.01-d20d041b3e.wav": {
+    "duration_s": 10.505,
+    "id": "clean.af_bella.01",
+    "speech_end_s": 2.505,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.02-b1e161e57e.wav": {
+    "duration_s": 10.057,
+    "id": "clean.af_bella.02",
+    "speech_end_s": 2.057,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.03-43badd9ee9.wav": {
+    "duration_s": 9.993,
+    "id": "clean.af_bella.03",
+    "speech_end_s": 1.993,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.04-82f175b2c5.wav": {
+    "duration_s": 9.567,
+    "id": "clean.af_bella.04",
+    "speech_end_s": 1.567,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.05-d08506ca2c.wav": {
+    "duration_s": 9.631,
+    "id": "clean.af_bella.05",
+    "speech_end_s": 1.631,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.06-d7c778c84c.wav": {
+    "duration_s": 9.887,
+    "id": "clean.af_bella.06",
+    "speech_end_s": 1.887,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.07-aca87d4ed5.wav": {
+    "duration_s": 10.335,
+    "id": "clean.af_bella.07",
+    "speech_end_s": 2.335,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.08-1bedc4d91c.wav": {
+    "duration_s": 10.079,
+    "id": "clean.af_bella.08",
+    "speech_end_s": 2.079,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.09-2885c1f5d5.wav": {
+    "duration_s": 9.673,
+    "id": "clean.af_bella.09",
+    "speech_end_s": 1.673,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.10-c161c21766.wav": {
+    "duration_s": 9.972,
+    "id": "clean.af_bella.10",
+    "speech_end_s": 1.972,
+    "speech_start_s": 0.5
+  },
+  "clean.af_bella.11-8c4457e94b.wav": {
+    "duration_s": 10.207,
+    "id": "clean.af_bella.11",
+    "speech_end_s": 2.207,
+    "speech_start_s": 0.5
+  },
+  "fast.00-6408834fb8.wav": {
+    "duration_s": 9.417,
+    "id": "fast.00",
+    "speech_end_s": 1.417,
+    "speech_start_s": 0.5
+  },
+  "fast.01-65d6a990b0.wav": {
+    "duration_s": 10.207,
+    "id": "fast.01",
+    "speech_end_s": 2.207,
+    "speech_start_s": 0.5
+  },
+  "fast.02-c241219feb.wav": {
+    "duration_s": 9.716,
+    "id": "fast.02",
+    "speech_end_s": 1.716,
+    "speech_start_s": 0.5
+  },
+  "fast.03-a610477e2e.wav": {
+    "duration_s": 9.695,
+    "id": "fast.03",
+    "speech_end_s": 1.695,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.00-aa0c1b4342.wav": {
+    "duration_s": 9.631,
+    "id": "noise.10db.00",
+    "speech_end_s": 1.631,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.01-68c9eaeed6.wav": {
+    "duration_s": 10.505,
+    "id": "noise.10db.01",
+    "speech_end_s": 2.505,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.02-4e19468b09.wav": {
+    "duration_s": 10.057,
+    "id": "noise.10db.02",
+    "speech_end_s": 2.057,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.03-a7f498b403.wav": {
+    "duration_s": 9.993,
+    "id": "noise.10db.03",
+    "speech_end_s": 1.993,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.04-cf0613888c.wav": {
+    "duration_s": 9.567,
+    "id": "noise.10db.04",
+    "speech_end_s": 1.567,
+    "speech_start_s": 0.5
+  },
+  "noise.10db.05-b699a45c0a.wav": {
+    "duration_s": 9.631,
+    "id": "noise.10db.05",
+    "speech_end_s": 1.631,
+    "speech_start_s": 0.5
+  },
+  "turn.hesitation-75d6078809.wav": {
+    "duration_s": 10.877,
+    "id": "turn.hesitation",
+    "speech_end_s": 2.877,
+    "speech_start_s": 0.5
+  },
+  "turn.long-request-2731b3d8bc.wav": {
+    "duration_s": 12.831,
+    "id": "turn.long-request",
+    "speech_end_s": 4.831,
+    "speech_start_s": 0.5
+  },
+  "turn.noise-f0c7e7d39e.wav": {
+    "duration_s": 12.5,
+    "id": "turn.noise",
+    "speech_end_s": 4.5,
+    "speech_start_s": 0.5
+  },
+  "turn.pause.1200ms-f78173ec86.wav": {
+    "duration_s": 11.62,
+    "id": "turn.pause.1200ms",
+    "speech_end_s": 3.62,
+    "speech_start_s": 0.5
+  },
+  "turn.pause.700ms-a55453934c.wav": {
+    "duration_s": 11.76,
+    "id": "turn.pause.700ms",
+    "speech_end_s": 3.76,
+    "speech_start_s": 0.5
+  },
+  "turn.silence-c6b76fe03a.wav": {
+    "duration_s": 12.5,
+    "id": "turn.silence",
+    "speech_end_s": 4.5,
+    "speech_start_s": 0.5
+  },
+  "turn.two-requests-407274d299.wav": {
+    "duration_s": 13.197,
+    "id": "turn.two-requests",
+    "speech_end_s": 5.197,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.00-db749f8304.wav": {
+    "duration_s": 10.079,
+    "id": "voice.am_michael.00",
+    "speech_end_s": 2.079,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.02-6f91225304.wav": {
+    "duration_s": 10.399,
+    "id": "voice.am_michael.02",
+    "speech_end_s": 2.399,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.04-0f6cda0b3d.wav": {
+    "duration_s": 9.865,
+    "id": "voice.am_michael.04",
+    "speech_end_s": 1.865,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.06-b629380f1d.wav": {
+    "duration_s": 10.121,
+    "id": "voice.am_michael.06",
+    "speech_end_s": 2.121,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.08-fa9f99c1ac.wav": {
+    "duration_s": 10.463,
+    "id": "voice.am_michael.08",
+    "speech_end_s": 2.463,
+    "speech_start_s": 0.5
+  },
+  "voice.am_michael.10-da9e63d16f.wav": {
+    "duration_s": 10.335,
+    "id": "voice.am_michael.10",
+    "speech_end_s": 2.335,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.01-fd11c7faaa.wav": {
+    "duration_s": 10.633,
+    "id": "voice.bf_emma.01",
+    "speech_end_s": 2.633,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.03-0460aabf6b.wav": {
+    "duration_s": 10.079,
+    "id": "voice.bf_emma.03",
+    "speech_end_s": 2.079,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.05-7a3ec1e49e.wav": {
+    "duration_s": 9.929,
+    "id": "voice.bf_emma.05",
+    "speech_end_s": 1.929,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.07-da95c46203.wav": {
+    "duration_s": 10.441,
+    "id": "voice.bf_emma.07",
+    "speech_end_s": 2.441,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.09-5e44cc9e40.wav": {
+    "duration_s": 9.951,
+    "id": "voice.bf_emma.09",
+    "speech_end_s": 1.951,
+    "speech_start_s": 0.5
+  },
+  "voice.bf_emma.11-c51bfbafc7.wav": {
+    "duration_s": 10.399,
+    "id": "voice.bf_emma.11",
+    "speech_end_s": 2.399,
+    "speech_start_s": 0.5
+  }
+}
