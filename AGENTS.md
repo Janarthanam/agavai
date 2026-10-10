@@ -193,6 +193,9 @@ A change is done when:
 6. You've reviewed your own diff once, as if reviewing someone else's PR, before calling
    it finished.
 
+Every pull request must include screenshots or captured test-run output as proof for the
+human reviewer. Include the commands and results for test runs; a statement that tests
+passed is not sufficient evidence.
 
 
 If a task's requirements are ambiguous or contradictory, don't guess broadly and ship your
