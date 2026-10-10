@@ -1,0 +1,2584 @@
+{
+  "clips": [
+    {
+      "id": "clean.af_bella.00",
+      "group": "clean",
+      "text": "turn the volume up",
+      "snr_db": 45,
+      "duration_s": 9.631,
+      "speech_end_s": 1.631,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn the volume up",
+          "t": 7.36
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0543,
+      "step_max_s": 0.0587
+    },
+    {
+      "id": "voice.am_michael.00",
+      "group": "voices",
+      "text": "turn the volume up",
+      "snr_db": 45,
+      "duration_s": 10.079,
+      "speech_end_s": 2.079,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn the volume up",
+          "t": 5.12
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0537,
+      "step_max_s": 0.0579
+    },
+    {
+      "id": "noise.10db.00",
+      "group": "noise",
+      "text": "turn the volume up",
+      "snr_db": 10,
+      "duration_s": 9.631,
+      "speech_end_s": 1.631,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn the volume",
+          "t": 4.96
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0535,
+      "step_max_s": 0.0573
+    },
+    {
+      "id": "fast.00",
+      "group": "fast",
+      "text": "turn the volume up",
+      "snr_db": 45,
+      "duration_s": 9.417,
+      "speech_end_s": 1.417,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn the volume up",
+          "t": 7.52
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.0537,
+      "step_max_s": 0.0568
+    },
+    {
+      "id": "clean.af_bella.01",
+      "group": "clean",
+      "text": "remind me in ten minutes to check the oven",
+      "snr_db": 45,
+      "duration_s": 10.505,
+      "speech_end_s": 2.505,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "remind me in ten minutes to check the oven",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.0547,
+      "step_max_s": 0.0581
+    },
+    {
+      "id": "voice.bf_emma.01",
+      "group": "voices",
+      "text": "remind me in ten minutes to check the oven",
+      "snr_db": 45,
+      "duration_s": 10.633,
+      "speech_end_s": 2.633,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "remind me in ten minutes to check the oven",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0545,
+      "step_max_s": 0.0574
+    },
+    {
+      "id": "noise.10db.01",
+      "group": "noise",
+      "text": "remind me in ten minutes to check the oven",
+      "snr_db": 10,
+      "duration_s": 10.505,
+      "speech_end_s": 2.505,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "remind me in ten minutes to check the animals",
+          "t": 5.44
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.0535,
+      "step_max_s": 0.0587
+    },
+    {
+      "id": "fast.01",
+      "group": "fast",
+      "text": "remind me in ten minutes to check the oven",
+      "snr_db": 45,
+      "duration_s": 10.207,
+      "speech_end_s": 2.207,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "remind the in ten minutes to check the oven",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0545,
+      "step_max_s": 0.058
+    },
+    {
+      "id": "clean.af_bella.02",
+      "group": "clean",
+      "text": "set the theme to gruvbox",
+      "snr_db": 45,
+      "duration_s": 10.057,
+      "speech_end_s": 2.057,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "it's not the theme to gravbox",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0541,
+      "step_max_s": 0.0578
+    },
+    {
+      "id": "voice.am_michael.02",
+      "group": "voices",
+      "text": "set the theme to gruvbox",
+      "snr_db": 45,
+      "duration_s": 10.399,
+      "speech_end_s": 2.399,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "set the theme to grav box",
+          "t": 4.48
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0568
+    },
+    {
+      "id": "noise.10db.02",
+      "group": "noise",
+      "text": "set the theme to gruvbox",
+      "snr_db": 10,
+      "duration_s": 10.057,
+      "speech_end_s": 2.057,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "such a thing to grab box",
+          "t": 3.36
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.6,
+      "step_mean_s": 0.0535,
+      "step_max_s": 0.0579
+    },
+    {
+      "id": "fast.02",
+      "group": "fast",
+      "text": "set the theme to gruvbox",
+      "snr_db": 45,
+      "duration_s": 9.716,
+      "speech_end_s": 1.716,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "",
+      "first_interim_t": null,
+      "step_mean_s": 0.054,
+      "step_max_s": 0.0555
+    },
+    {
+      "id": "clean.af_bella.03",
+      "group": "clean",
+      "text": "switch to workspace three",
+      "snr_db": 45,
+      "duration_s": 9.993,
+      "speech_end_s": 1.993,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "switch to workspace three",
+          "t": 7.68
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0581
+    },
+    {
+      "id": "voice.bf_emma.03",
+      "group": "voices",
+      "text": "switch to workspace three",
+      "snr_db": 45,
+      "duration_s": 10.079,
+      "speech_end_s": 2.079,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "switch to workspace three",
+          "t": 7.68
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0568
+    },
+    {
+      "id": "noise.10db.03",
+      "group": "noise",
+      "text": "switch to workspace three",
+      "snr_db": 10,
+      "duration_s": 9.993,
+      "speech_end_s": 1.993,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "switch to work space",
+          "t": 4.32
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0535,
+      "step_max_s": 0.0579
+    },
+    {
+      "id": "fast.03",
+      "group": "fast",
+      "text": "switch to workspace three",
+      "snr_db": 45,
+      "duration_s": 9.695,
+      "speech_end_s": 1.695,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "switch to workspace three",
+          "t": 7.36
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0587
+    },
+    {
+      "id": "clean.af_bella.04",
+      "group": "clean",
+      "text": "lock the screen",
+      "snr_db": 45,
+      "duration_s": 9.567,
+      "speech_end_s": 1.567,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "lock the screen",
+          "t": 5.44
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0575
+    },
+    {
+      "id": "voice.am_michael.04",
+      "group": "voices",
+      "text": "lock the screen",
+      "snr_db": 45,
+      "duration_s": 9.865,
+      "speech_end_s": 1.865,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "lock the screen",
+          "t": 3.68
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0532,
+      "step_max_s": 0.0566
+    },
+    {
+      "id": "noise.10db.04",
+      "group": "noise",
+      "text": "lock the screen",
+      "snr_db": 10,
+      "duration_s": 9.567,
+      "speech_end_s": 1.567,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "lock the swim",
+          "t": 5.28
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.44,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0566
+    },
+    {
+      "id": "clean.af_bella.05",
+      "group": "clean",
+      "text": "open the browser",
+      "snr_db": 45,
+      "duration_s": 9.631,
+      "speech_end_s": 1.631,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "open the browser",
+          "t": 9.6
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0593
+    },
+    {
+      "id": "voice.bf_emma.05",
+      "group": "voices",
+      "text": "open the browser",
+      "snr_db": 45,
+      "duration_s": 9.929,
+      "speech_end_s": 1.929,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "open the brown",
+          "t": 9.6
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0531,
+      "step_max_s": 0.0567
+    },
+    {
+      "id": "noise.10db.05",
+      "group": "noise",
+      "text": "open the browser",
+      "snr_db": 10,
+      "duration_s": 9.631,
+      "speech_end_s": 1.631,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "open the browser",
+          "t": 3.52
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0567
+    },
+    {
+      "id": "clean.af_bella.06",
+      "group": "clean",
+      "text": "find the budget notes",
+      "snr_db": 45,
+      "duration_s": 9.887,
+      "speech_end_s": 1.887,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "find the budget note",
+          "t": 7.84
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.053,
+      "step_max_s": 0.0574
+    },
+    {
+      "id": "voice.am_michael.06",
+      "group": "voices",
+      "text": "find the budget notes",
+      "snr_db": 45,
+      "duration_s": 10.121,
+      "speech_end_s": 2.121,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "find the budget notes",
+          "t": 5.12
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0529,
+      "step_max_s": 0.056
+    },
+    {
+      "id": "clean.af_bella.07",
+      "group": "clean",
+      "text": "set brightness to forty percent",
+      "snr_db": 45,
+      "duration_s": 10.335,
+      "speech_end_s": 2.335,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "that brightness to forty percent",
+          "t": 5.92
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.44,
+      "step_mean_s": 0.0531,
+      "step_max_s": 0.058
+    },
+    {
+      "id": "voice.bf_emma.07",
+      "group": "voices",
+      "text": "set brightness to forty percent",
+      "snr_db": 45,
+      "duration_s": 10.441,
+      "speech_end_s": 2.441,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "that brightness to forty percent",
+          "t": 10.4
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.44,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.058
+    },
+    {
+      "id": "clean.af_bella.08",
+      "group": "clean",
+      "text": "turn on do not disturb",
+      "snr_db": 45,
+      "duration_s": 10.079,
+      "speech_end_s": 2.079,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "",
+      "first_interim_t": null,
+      "step_mean_s": 0.0538,
+      "step_max_s": 0.0553
+    },
+    {
+      "id": "voice.am_michael.08",
+      "group": "voices",
+      "text": "turn on do not disturb",
+      "snr_db": 45,
+      "duration_s": 10.463,
+      "speech_end_s": 2.463,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn on do not disturb",
+          "t": 5.28
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0571
+    },
+    {
+      "id": "clean.af_bella.09",
+      "group": "clean",
+      "text": "take a screenshot",
+      "snr_db": 45,
+      "duration_s": 9.673,
+      "speech_end_s": 1.673,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "take a screenshot",
+          "t": 6.72
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0532,
+      "step_max_s": 0.0589
+    },
+    {
+      "id": "voice.bf_emma.09",
+      "group": "voices",
+      "text": "take a screenshot",
+      "snr_db": 45,
+      "duration_s": 9.951,
+      "speech_end_s": 1.951,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "take a screenshot",
+          "t": 6.24
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0531,
+      "step_max_s": 0.0572
+    },
+    {
+      "id": "clean.af_bella.10",
+      "group": "clean",
+      "text": "what is my battery level",
+      "snr_db": 45,
+      "duration_s": 9.972,
+      "speech_end_s": 1.972,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "what is my battery level",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.0539,
+      "step_max_s": 0.0585
+    },
+    {
+      "id": "voice.am_michael.10",
+      "group": "voices",
+      "text": "what is my battery level",
+      "snr_db": 45,
+      "duration_s": 10.335,
+      "speech_end_s": 2.335,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "what is my battery level",
+          "t": 6.56
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.053,
+      "step_max_s": 0.0565
+    },
+    {
+      "id": "clean.af_bella.11",
+      "group": "clean",
+      "text": "set the wallpaper to ship at sea",
+      "snr_db": 45,
+      "duration_s": 10.207,
+      "speech_end_s": 2.207,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "shut the wallpaper to ship at sea",
+          "t": 3.84
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0576
+    },
+    {
+      "id": "voice.bf_emma.11",
+      "group": "voices",
+      "text": "set the wallpaper to ship at sea",
+      "snr_db": 45,
+      "duration_s": 10.399,
+      "speech_end_s": 2.399,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "set the wallpaper to ship at sea",
+          "t": 4.64
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0535,
+      "step_max_s": 0.0597
+    },
+    {
+      "id": "turn.pause.700ms",
+      "group": "turn",
+      "text": "remind me in ten minutes  to check the oven",
+      "snr_db": 45,
+      "duration_s": 11.76,
+      "speech_end_s": 3.76,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "remind me in ten minutes to check the oven",
+          "t": 11.2
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 0.96,
+      "step_mean_s": 0.0536,
+      "step_max_s": 0.0585
+    },
+    {
+      "id": "turn.pause.1200ms",
+      "group": "turn",
+      "text": "set the theme to  gruvbox",
+      "snr_db": 45,
+      "duration_s": 11.62,
+      "speech_end_s": 3.62,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "not the theme too glove box",
+          "t": 7.68
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.28,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.057
+    },
+    {
+      "id": "turn.hesitation",
+      "group": "turn",
+      "text": "turn the um  volume up",
+      "snr_db": 45,
+      "duration_s": 10.877,
+      "speech_end_s": 2.877,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "turn the um volume up",
+          "t": 5.76
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.053,
+      "step_max_s": 0.0566
+    },
+    {
+      "id": "turn.long-request",
+      "group": "turn",
+      "text": "find the budget notes from last year and the meeting notes from september please",
+      "snr_db": 45,
+      "duration_s": 12.831,
+      "speech_end_s": 4.831,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "find the budget notes from last year and the meeting notes from september please",
+          "t": 5.92
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0533,
+      "step_max_s": 0.0569
+    },
+    {
+      "id": "turn.two-requests",
+      "group": "turn",
+      "text": "open the browser  lock the screen",
+      "snr_db": 45,
+      "duration_s": 13.197,
+      "speech_end_s": 5.197,
+      "speech_start_s": 0.5,
+      "commits": [
+        {
+          "text": "open the browser lock the screen",
+          "t": 10.88
+        }
+      ],
+      "uncommitted": "",
+      "first_interim_t": 1.12,
+      "step_mean_s": 0.0534,
+      "step_max_s": 0.0564
+    },
+    {
+      "id": "turn.silence",
+      "group": "turn",
+      "text": "",
+      "snr_db": 45,
+      "duration_s": 12.5,
+      "speech_end_s": 4.5,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "",
+      "first_interim_t": null,
+      "step_mean_s": 0.0536,
+      "step_max_s": 0.0552
+    },
+    {
+      "id": "turn.noise",
+      "group": "turn",
+      "text": "",
+      "snr_db": 45,
+      "duration_s": 12.5,
+      "speech_end_s": 4.5,
+      "speech_start_s": 0.5,
+      "commits": [],
+      "uncommitted": "",
+      "first_interim_t": null,
+      "step_mean_s": 0.0539,
+      "step_max_s": 0.0568
+    }
+  ],
+  "recognizer": {
+    "load_s": 1.16,
+    "peak_rss_mb": 774.7
+  },
+  "hearing": [
+    {
+      "id": "clean.af_bella.00",
+      "group": "clean",
+      "text": "turn the volume up",
+      "transcript": "turn the volume up",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "voice.am_michael.00",
+      "group": "voices",
+      "text": "turn the volume up",
+      "transcript": "turn the volume up",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "noise.10db.00",
+      "group": "noise",
+      "text": "turn the volume up",
+      "transcript": "turn the volume",
+      "outcome": "honest",
+      "reason": "lost up",
+      "word_errors": 1,
+      "words": 4
+    },
+    {
+      "id": "fast.00",
+      "group": "fast",
+      "text": "turn the volume up",
+      "transcript": "turn the volume up",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "clean.af_bella.01",
+      "group": "clean",
+      "text": "remind me in ten minutes to check the oven",
+      "transcript": "remind me in ten minutes to check the oven",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 9
+    },
+    {
+      "id": "voice.bf_emma.01",
+      "group": "voices",
+      "text": "remind me in ten minutes to check the oven",
+      "transcript": "remind me in ten minutes to check the oven",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 9
+    },
+    {
+      "id": "noise.10db.01",
+      "group": "noise",
+      "text": "remind me in ten minutes to check the oven",
+      "transcript": "remind me in ten minutes to check the animals",
+      "outcome": "honest",
+      "reason": "lost oven",
+      "word_errors": 1,
+      "words": 9
+    },
+    {
+      "id": "fast.01",
+      "group": "fast",
+      "text": "remind me in ten minutes to check the oven",
+      "transcript": "remind the in ten minutes to check the oven",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 1,
+      "words": 9
+    },
+    {
+      "id": "clean.af_bella.02",
+      "group": "clean",
+      "text": "set the theme to gruvbox",
+      "transcript": "it's not the theme to gravbox",
+      "outcome": "honest",
+      "reason": "lost gruvbox",
+      "word_errors": 4,
+      "words": 5
+    },
+    {
+      "id": "voice.am_michael.02",
+      "group": "voices",
+      "text": "set the theme to gruvbox",
+      "transcript": "set the theme to grav box",
+      "outcome": "honest",
+      "reason": "lost gruvbox",
+      "word_errors": 2,
+      "words": 5
+    },
+    {
+      "id": "noise.10db.02",
+      "group": "noise",
+      "text": "set the theme to gruvbox",
+      "transcript": "such a thing to grab box",
+      "outcome": "honest",
+      "reason": "lost theme, gruvbox",
+      "word_errors": 5,
+      "words": 5
+    },
+    {
+      "id": "fast.02",
+      "group": "fast",
+      "text": "set the theme to gruvbox",
+      "transcript": "",
+      "outcome": "honest",
+      "reason": "lost theme, gruvbox",
+      "word_errors": 5,
+      "words": 5
+    },
+    {
+      "id": "clean.af_bella.03",
+      "group": "clean",
+      "text": "switch to workspace three",
+      "transcript": "switch to workspace three",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "voice.bf_emma.03",
+      "group": "voices",
+      "text": "switch to workspace three",
+      "transcript": "switch to workspace three",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "noise.10db.03",
+      "group": "noise",
+      "text": "switch to workspace three",
+      "transcript": "switch to work space",
+      "outcome": "honest",
+      "reason": "lost three",
+      "word_errors": 2,
+      "words": 4
+    },
+    {
+      "id": "fast.03",
+      "group": "fast",
+      "text": "switch to workspace three",
+      "transcript": "switch to workspace three",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "clean.af_bella.04",
+      "group": "clean",
+      "text": "lock the screen",
+      "transcript": "lock the screen",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "voice.am_michael.04",
+      "group": "voices",
+      "text": "lock the screen",
+      "transcript": "lock the screen",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "noise.10db.04",
+      "group": "noise",
+      "text": "lock the screen",
+      "transcript": "lock the swim",
+      "outcome": "honest",
+      "reason": "lost screen",
+      "word_errors": 1,
+      "words": 3
+    },
+    {
+      "id": "clean.af_bella.05",
+      "group": "clean",
+      "text": "open the browser",
+      "transcript": "open the browser",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "voice.bf_emma.05",
+      "group": "voices",
+      "text": "open the browser",
+      "transcript": "open the brown",
+      "outcome": "honest",
+      "reason": "lost browser",
+      "word_errors": 1,
+      "words": 3
+    },
+    {
+      "id": "noise.10db.05",
+      "group": "noise",
+      "text": "open the browser",
+      "transcript": "open the browser",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "clean.af_bella.06",
+      "group": "clean",
+      "text": "find the budget notes",
+      "transcript": "find the budget note",
+      "outcome": "honest",
+      "reason": "lost notes",
+      "word_errors": 1,
+      "words": 4
+    },
+    {
+      "id": "voice.am_michael.06",
+      "group": "voices",
+      "text": "find the budget notes",
+      "transcript": "find the budget notes",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 4
+    },
+    {
+      "id": "clean.af_bella.07",
+      "group": "clean",
+      "text": "set brightness to forty percent",
+      "transcript": "that brightness to forty percent",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 1,
+      "words": 5
+    },
+    {
+      "id": "voice.bf_emma.07",
+      "group": "voices",
+      "text": "set brightness to forty percent",
+      "transcript": "that brightness to forty percent",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 1,
+      "words": 5
+    },
+    {
+      "id": "clean.af_bella.08",
+      "group": "clean",
+      "text": "turn on do not disturb",
+      "transcript": "",
+      "outcome": "honest",
+      "reason": "lost disturb",
+      "word_errors": 5,
+      "words": 5
+    },
+    {
+      "id": "voice.am_michael.08",
+      "group": "voices",
+      "text": "turn on do not disturb",
+      "transcript": "turn on do not disturb",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 5
+    },
+    {
+      "id": "clean.af_bella.09",
+      "group": "clean",
+      "text": "take a screenshot",
+      "transcript": "take a screenshot",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "voice.bf_emma.09",
+      "group": "voices",
+      "text": "take a screenshot",
+      "transcript": "take a screenshot",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 3
+    },
+    {
+      "id": "clean.af_bella.10",
+      "group": "clean",
+      "text": "what is my battery level",
+      "transcript": "what is my battery level",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 5
+    },
+    {
+      "id": "voice.am_michael.10",
+      "group": "voices",
+      "text": "what is my battery level",
+      "transcript": "what is my battery level",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 5
+    },
+    {
+      "id": "clean.af_bella.11",
+      "group": "clean",
+      "text": "set the wallpaper to ship at sea",
+      "transcript": "shut the wallpaper to ship at sea",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 1,
+      "words": 7
+    },
+    {
+      "id": "voice.bf_emma.11",
+      "group": "voices",
+      "text": "set the wallpaper to ship at sea",
+      "transcript": "set the wallpaper to ship at sea",
+      "outcome": "done",
+      "reason": "done",
+      "word_errors": 0,
+      "words": 7
+    }
+  ],
+  "turn_taking": [
+    {
+      "id": "clean.af_bella.00",
+      "group": "clean",
+      "text": "turn the volume up",
+      "commits": [
+        {
+          "text": "turn the volume up",
+          "t": 7.36
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.01",
+      "group": "clean",
+      "text": "remind me in ten minutes to check the oven",
+      "commits": [],
+      "outcome": "honest",
+      "reason": "0 commits, expected 1"
+    },
+    {
+      "id": "clean.af_bella.02",
+      "group": "clean",
+      "text": "set the theme to gruvbox",
+      "commits": [],
+      "outcome": "honest",
+      "reason": "0 commits, expected 1"
+    },
+    {
+      "id": "clean.af_bella.03",
+      "group": "clean",
+      "text": "switch to workspace three",
+      "commits": [
+        {
+          "text": "switch to workspace three",
+          "t": 7.68
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.04",
+      "group": "clean",
+      "text": "lock the screen",
+      "commits": [
+        {
+          "text": "lock the screen",
+          "t": 5.44
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.05",
+      "group": "clean",
+      "text": "open the browser",
+      "commits": [
+        {
+          "text": "open the browser",
+          "t": 9.6
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.06",
+      "group": "clean",
+      "text": "find the budget notes",
+      "commits": [
+        {
+          "text": "find the budget note",
+          "t": 7.84
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.07",
+      "group": "clean",
+      "text": "set brightness to forty percent",
+      "commits": [
+        {
+          "text": "that brightness to forty percent",
+          "t": 5.92
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.08",
+      "group": "clean",
+      "text": "turn on do not disturb",
+      "commits": [],
+      "outcome": "honest",
+      "reason": "0 commits, expected 1"
+    },
+    {
+      "id": "clean.af_bella.09",
+      "group": "clean",
+      "text": "take a screenshot",
+      "commits": [
+        {
+          "text": "take a screenshot",
+          "t": 6.72
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "clean.af_bella.10",
+      "group": "clean",
+      "text": "what is my battery level",
+      "commits": [],
+      "outcome": "honest",
+      "reason": "0 commits, expected 1"
+    },
+    {
+      "id": "clean.af_bella.11",
+      "group": "clean",
+      "text": "set the wallpaper to ship at sea",
+      "commits": [
+        {
+          "text": "shut the wallpaper to ship at sea",
+          "t": 3.84
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.pause.700ms",
+      "group": "turn",
+      "text": "remind me in ten minutes  to check the oven",
+      "commits": [
+        {
+          "text": "remind me in ten minutes to check the oven",
+          "t": 11.2
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.pause.1200ms",
+      "group": "turn",
+      "text": "set the theme to  gruvbox",
+      "commits": [
+        {
+          "text": "not the theme too glove box",
+          "t": 7.68
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.hesitation",
+      "group": "turn",
+      "text": "turn the um  volume up",
+      "commits": [
+        {
+          "text": "turn the um volume up",
+          "t": 5.76
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.long-request",
+      "group": "turn",
+      "text": "find the budget notes from last year and the meeting notes from september please",
+      "commits": [
+        {
+          "text": "find the budget notes from last year and the meeting notes from september please",
+          "t": 5.92
+        }
+      ],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.two-requests",
+      "group": "turn",
+      "text": "open the browser  lock the screen",
+      "commits": [
+        {
+          "text": "open the browser lock the screen",
+          "t": 10.88
+        }
+      ],
+      "outcome": "honest",
+      "reason": "1 commits, expected 2"
+    },
+    {
+      "id": "turn.silence",
+      "group": "turn",
+      "text": "",
+      "commits": [],
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "turn.noise",
+      "group": "turn",
+      "text": "",
+      "commits": [],
+      "outcome": "done",
+      "reason": "done"
+    }
+  ],
+  "spoken_tasks": [
+    {
+      "id": "spoken.desktop.volume.up",
+      "case": "desktop.volume.up",
+      "heard": "turn the volume up",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Volume has been raised.",
+      "result": {
+        "id": "desktop.volume.up",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.volume.up",
+        "note": "",
+        "says": [
+          "turn the volume up"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 13.7,
+        "turns": [
+          {
+            "say": "turn the volume up",
+            "heard": "turn the volume up",
+            "reply": "Volume has been raised.",
+            "seconds": 13.697,
+            "first_change_s": 7.294,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "set_volume",
+                  "mute_microphone",
+                  "bluetooth"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "set_volume",
+                    "arguments": "{\"action\": \"raise\"}"
+                  }
+                ],
+                "seconds": 7.293
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "set_volume",
+                  "mute_microphone",
+                  "bluetooth"
+                ],
+                "content": "Volume has been raised.",
+                "tool_calls": [],
+                "seconds": 6.402
+              }
+            ],
+            "tools": [
+              {
+                "name": "set_volume",
+                "arguments": "{\"action\": \"raise\"}",
+                "result": "ok"
+              }
+            ],
+            "heads": [
+              [
+                "audio"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "audio.volume",
+                "before": 50,
+                "after": 55,
+                "severity": "state"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.reminder",
+      "case": "desktop.reminder",
+      "heard": "remind me in ten minutes to check the oven",
+      "committed_by": "Enter",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Reminder set: Check the oven in 10 minutes.",
+      "result": {
+        "id": "desktop.reminder",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.reminder",
+        "note": "",
+        "says": [
+          "remind me in ten minutes to check the oven"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 17.0,
+        "turns": [
+          {
+            "say": "remind me in ten minutes to check the oven",
+            "heard": "remind me in ten minutes to check the oven",
+            "reply": "Reminder set: Check the oven in 10 minutes.",
+            "seconds": 16.997,
+            "first_change_s": 8.997,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "reminder",
+                  "list_reminders",
+                  "clear_reminders",
+                  "send_notification",
+                  "clock_now"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "reminder",
+                    "arguments": "{\"minutes\": 10, \"message\": \"Check the oven\"}"
+                  }
+                ],
+                "seconds": 8.996
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "reminder",
+                  "list_reminders",
+                  "clear_reminders",
+                  "send_notification",
+                  "clock_now"
+                ],
+                "content": "Reminder set: Check the oven in 10 minutes.",
+                "tool_calls": [],
+                "seconds": 8.0
+              }
+            ],
+            "tools": [
+              {
+                "name": "reminder",
+                "arguments": "{\"minutes\": 10, \"message\": \"Check the oven\"}",
+                "result": "reminder in 10 minutes: Check the oven"
+              }
+            ],
+            "heads": [
+              [
+                "reminders"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "reminders",
+                "before": [],
+                "after": [
+                  {
+                    "minutes": 10,
+                    "due": "2026-10-09T16:55",
+                    "text": "Check the oven"
+                  }
+                ],
+                "severity": "state"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.theme.set",
+      "case": "desktop.theme.set",
+      "heard": "it's not the theme to gravbox",
+      "committed_by": "Enter",
+      "outcome": "honest",
+      "reason": "asked instead of acting",
+      "reply": "I see Gravbox isn't listed. Let me check if you meant Gruvbox, which is available. Would you like to switch to Gruvbox instead?",
+      "result": {
+        "id": "desktop.theme.set",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.theme.set",
+        "note": "",
+        "says": [
+          "set the theme to gruvbox"
+        ],
+        "outcome": "honest",
+        "reason": "asked instead of acting",
+        "seconds": 20.13,
+        "turns": [
+          {
+            "say": "set the theme to gruvbox",
+            "heard": "it's not the theme to gravbox",
+            "reply": "I see Gravbox isn't listed. Let me check if you meant Gruvbox, which is available. Would you like to switch to Gruvbox instead?",
+            "seconds": 20.131,
+            "first_change_s": null,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "list_themes",
+                  "set_theme",
+                  "toggle_nightlight"
+                ],
+                "content": "I see. Let me check the current theme and help you switch to Gravbox if needed.  \n",
+                "tool_calls": [
+                  {
+                    "name": "list_themes",
+                    "arguments": "{}"
+                  }
+                ],
+                "seconds": 9.053
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "list_themes",
+                  "set_theme",
+                  "toggle_nightlight"
+                ],
+                "content": "I see Gravbox isn't listed. Let me check if you meant Gruvbox, which is available. Would you like to switch to Gruvbox instead?",
+                "tool_calls": [],
+                "seconds": 11.077
+              }
+            ],
+            "tools": [
+              {
+                "name": "list_themes",
+                "arguments": "{}",
+                "result": "{\"current\": \"Tokyo Night\", \"available\": [\"Catppuccin\", \"Catppuccin Latte\", \"Everforest\", \"Gruvbox\", \"Kanagawa\", \"Matte Black\", \"Nord\", \"Osaka Jade\", \"Ristretto\", \"Rose Pine\", \"Tokyo Night\"]}"
+              }
+            ],
+            "heads": [
+              [
+                "appearance"
+              ]
+            ],
+            "context": null,
+            "changes": [],
+            "shown": [
+              "Themes",
+              "Catppuccin",
+              "Theme",
+              "Catppuccin Latte",
+              "Theme",
+              "Everforest",
+              "Theme",
+              "Gruvbox",
+              "Theme",
+              "Kanagawa",
+              "Theme",
+              "Matte Black",
+              "Theme",
+              "Nord",
+              "Theme",
+              "Osaka Jade",
+              "Theme",
+              "Ristretto",
+              "Theme",
+              "Rose Pine",
+              "Theme",
+              "Tokyo Night",
+              "Current theme"
+            ],
+            "outbound": [],
+            "rules": {
+              "two_sentences": false,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "honest",
+              "reason": "asked instead of acting",
+              "failed": [
+                "theme.current = 'Gruvbox' (is 'Tokyo Night')"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.values.workspace.three",
+      "case": "values.workspace.three",
+      "heard": "switch to workspace three",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Switched to workspace 3. Everything should be ready for you.",
+      "result": {
+        "id": "values.workspace.three",
+        "section": "values",
+        "area": "understand",
+        "needs": [],
+        "shipped": true,
+        "cluster": "workspace_value",
+        "note": "",
+        "says": [
+          "switch to workspace three"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 18.13,
+        "turns": [
+          {
+            "say": "switch to workspace three",
+            "heard": "switch to workspace three",
+            "reply": "Switched to workspace 3. Everything should be ready for you.",
+            "seconds": 18.131,
+            "first_change_s": 9.144,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "list_windows",
+                  "focus_window",
+                  "close_window",
+                  "to_workspace",
+                  "workspace_step",
+                  "toggle_fullscreen"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "to_workspace",
+                    "arguments": "{\"workspace\": 3}"
+                  }
+                ],
+                "seconds": 9.143
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "list_windows",
+                  "focus_window",
+                  "close_window",
+                  "to_workspace",
+                  "workspace_step",
+                  "toggle_fullscreen"
+                ],
+                "content": "Switched to workspace 3. Everything should be ready for you.",
+                "tool_calls": [],
+                "seconds": 8.987
+              }
+            ],
+            "tools": [
+              {
+                "name": "to_workspace",
+                "arguments": "{\"workspace\": 3}",
+                "result": "switched to workspace 3"
+              }
+            ],
+            "heads": [
+              [
+                "windows"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "focus.window",
+                "before": "0x1",
+                "after": "0x4",
+                "severity": "view"
+              },
+              {
+                "path": "workspace.active",
+                "before": 1,
+                "after": 3,
+                "severity": "view"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.lock",
+      "case": "desktop.lock",
+      "heard": "lock the screen",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Screen locked. Stay safe.",
+      "result": {
+        "id": "desktop.lock",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.lock",
+        "note": "",
+        "says": [
+          "lock the screen"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 20.12,
+        "turns": [
+          {
+            "say": "lock the screen",
+            "heard": "lock the screen",
+            "reply": "Screen locked. Stay safe.",
+            "seconds": 20.116,
+            "first_change_s": 10.4,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness",
+                  "screenshot",
+                  "screen_context"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "lock_screen",
+                    "arguments": "{}"
+                  }
+                ],
+                "seconds": 10.398
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness",
+                  "screenshot",
+                  "screen_context"
+                ],
+                "content": "Screen locked. Stay safe.",
+                "tool_calls": [],
+                "seconds": 9.716
+              }
+            ],
+            "tools": [
+              {
+                "name": "lock_screen",
+                "arguments": "{}",
+                "result": "locked"
+              }
+            ],
+            "heads": [
+              [
+                "system",
+                "capture"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "system.locked",
+                "before": false,
+                "after": true,
+                "severity": "state"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.launch.browser",
+      "case": "desktop.launch.browser",
+      "heard": "open the browser",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Browser opened successfully.",
+      "result": {
+        "id": "desktop.launch.browser",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.launch.browser",
+        "note": "",
+        "says": [
+          "open the browser"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 15.03,
+        "turns": [
+          {
+            "say": "open the browser",
+            "heard": "open the browser",
+            "reply": "Browser opened successfully.",
+            "seconds": 15.031,
+            "first_change_s": 8.067,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "launch",
+                  "open_app",
+                  "play_url"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "launch",
+                    "arguments": "{\"target\": \"browser\"}"
+                  }
+                ],
+                "seconds": 8.066
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "launch",
+                  "open_app",
+                  "play_url"
+                ],
+                "content": "Browser opened successfully.",
+                "tool_calls": [],
+                "seconds": 6.964
+              }
+            ],
+            "tools": [
+              {
+                "name": "launch",
+                "arguments": "{\"target\": \"browser\"}",
+                "result": "launched browser"
+              }
+            ],
+            "heads": [
+              [
+                "launch"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "launched",
+                "before": [],
+                "after": [
+                  "browser"
+                ],
+                "severity": "view"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.files.find.budget",
+      "case": "files.find.budget",
+      "heard": "find the budget note",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "I found your budget note: \"Budget Notes 2026\". Would you like me to open it for you?",
+      "result": {
+        "id": "files.find.budget",
+        "section": "files",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "files.find.budget",
+        "note": "",
+        "says": [
+          "find the budget notes"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 13.92,
+        "turns": [
+          {
+            "say": "find the budget notes",
+            "heard": "find the budget note",
+            "reply": "I found your budget note: \"Budget Notes 2026\". Would you like me to open it for you?",
+            "seconds": 13.913,
+            "first_change_s": null,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "search_files"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "search_files",
+                    "arguments": "{\"query\": \"budget\"}"
+                  }
+                ],
+                "seconds": 6.261
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "search_files"
+                ],
+                "content": "I found your budget note: \"Budget Notes 2026\". Would you like me to open it for you?",
+                "tool_calls": [],
+                "seconds": 7.594
+              }
+            ],
+            "tools": [
+              {
+                "name": "search_files",
+                "arguments": "{\"query\": \"budget\"}",
+                "result": "[\"/tmp/agavai-eval-home-an9z4tii/Documents/Budget Notes 2026.md\"]"
+              }
+            ],
+            "heads": [
+              [
+                "files"
+              ]
+            ],
+            "context": null,
+            "changes": [],
+            "shown": [
+              "Files",
+              "Budget Notes 2026.md",
+              "/tmp/agavai-eval-home-an9z4tii/Documents/Budget Notes 2026.md",
+              "/tmp/agavai-eval-home-an9z4tii/Documents"
+            ],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.values.brightness.forty",
+      "case": "values.brightness.forty",
+      "heard": "that brightness to forty percent",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Brightness set to 40%.",
+      "result": {
+        "id": "values.brightness.forty",
+        "section": "values",
+        "area": "understand",
+        "needs": [],
+        "shipped": true,
+        "cluster": "brightness_value",
+        "note": "",
+        "says": [
+          "set brightness to forty percent"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 18.82,
+        "turns": [
+          {
+            "say": "set brightness to forty percent",
+            "heard": "that brightness to forty percent",
+            "reply": "Brightness set to 40%.",
+            "seconds": 18.815,
+            "first_change_s": 10.135,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "set_brightness",
+                    "arguments": "{\"action\": \"set\", \"percent\": 40}"
+                  }
+                ],
+                "seconds": 10.134
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness"
+                ],
+                "content": "Brightness set to 40%.",
+                "tool_calls": [],
+                "seconds": 8.68
+              }
+            ],
+            "tools": [
+              {
+                "name": "set_brightness",
+                "arguments": "{\"action\": \"set\", \"percent\": 40}",
+                "result": "ok"
+              }
+            ],
+            "heads": [
+              [
+                "system"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "display.brightness",
+                "before": 60,
+                "after": 40,
+                "severity": "state"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.dnd.on",
+      "case": "desktop.dnd.on",
+      "heard": "",
+      "committed_by": "Enter",
+      "outcome": "honest",
+      "reason": "system.dnd = True (is False)",
+      "reply": "I did not hear anything.",
+      "result": {
+        "id": "desktop.dnd.on",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.dnd.on",
+        "note": "",
+        "says": [
+          "turn on do not disturb"
+        ],
+        "outcome": "honest",
+        "reason": "system.dnd = True (is False)",
+        "seconds": 0.0,
+        "turns": [
+          {
+            "say": "turn on do not disturb",
+            "heard": "",
+            "reply": "I did not hear anything.",
+            "seconds": 0.0,
+            "first_change_s": null,
+            "model": [],
+            "tools": [],
+            "heads": [],
+            "context": null,
+            "changes": [],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "honest",
+              "reason": "system.dnd = True (is False)",
+              "failed": [
+                "system.dnd = True (is False)"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.screenshot",
+      "case": "desktop.screenshot",
+      "heard": "take a screenshot",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Full-screen screenshot saved successfully.",
+      "result": {
+        "id": "desktop.screenshot",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.screenshot",
+        "note": "",
+        "says": [
+          "take a screenshot"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 14.09,
+        "turns": [
+          {
+            "say": "take a screenshot",
+            "heard": "take a screenshot",
+            "reply": "Full-screen screenshot saved successfully.",
+            "seconds": 14.088,
+            "first_change_s": 7.817,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "screenshot",
+                  "screen_context"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "screenshot",
+                    "arguments": "{\"mode\": \"fullscreen\", \"dest\": \"save\"}"
+                  }
+                ],
+                "seconds": 7.816
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "screenshot",
+                  "screen_context"
+                ],
+                "content": "Full-screen screenshot saved successfully.",
+                "tool_calls": [],
+                "seconds": 6.27
+              }
+            ],
+            "tools": [
+              {
+                "name": "screenshot",
+                "arguments": "{\"mode\": \"fullscreen\", \"dest\": \"save\"}",
+                "result": "ok"
+              }
+            ],
+            "heads": [
+              [
+                "capture"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "screenshots",
+                "before": [],
+                "after": [
+                  {
+                    "mode": "fullscreen",
+                    "dest": "save"
+                  }
+                ],
+                "severity": "view"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.battery",
+      "case": "desktop.battery",
+      "heard": "what is my battery level",
+      "committed_by": "Enter",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Battery is at 43% and currently discharging at 11.2 watts.",
+      "result": {
+        "id": "desktop.battery",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.battery",
+        "note": "",
+        "says": [
+          "what is my battery level"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 19.16,
+        "turns": [
+          {
+            "say": "what is my battery level",
+            "heard": "what is my battery level",
+            "reply": "Battery is at 43% and currently discharging at 11.2 watts.",
+            "seconds": 19.153,
+            "first_change_s": null,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "battery_status",
+                    "arguments": "{}"
+                  }
+                ],
+                "seconds": 9.149
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "lock_screen",
+                  "stay_awake",
+                  "dnd",
+                  "battery_status",
+                  "network_status",
+                  "set_brightness"
+                ],
+                "content": "Battery is at 43% and currently discharging at 11.2 watts.",
+                "tool_calls": [],
+                "seconds": 10.002
+              }
+            ],
+            "tools": [
+              {
+                "name": "battery_status",
+                "arguments": "{}",
+                "result": "43% discharging (11.2 W)"
+              }
+            ],
+            "heads": [
+              [
+                "system"
+              ]
+            ],
+            "context": null,
+            "changes": [],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "spoken.desktop.wallpaper.set",
+      "case": "desktop.wallpaper.set",
+      "heard": "shut the wallpaper to ship at sea",
+      "committed_by": "end of utterance",
+      "outcome": "done",
+      "reason": "done",
+      "reply": "Desktop background set to Ship At Sea.",
+      "result": {
+        "id": "desktop.wallpaper.set",
+        "section": "desktop",
+        "area": "do",
+        "needs": [],
+        "shipped": true,
+        "cluster": "desktop.wallpaper.set",
+        "note": "",
+        "says": [
+          "set the wallpaper to ship at sea"
+        ],
+        "outcome": "done",
+        "reason": "done",
+        "seconds": 16.92,
+        "turns": [
+          {
+            "say": "set the wallpaper to ship at sea",
+            "heard": "shut the wallpaper to ship at sea",
+            "reply": "Desktop background set to Ship At Sea.",
+            "seconds": 16.917,
+            "first_change_s": 8.917,
+            "model": [
+              {
+                "kind": "action",
+                "offered": [
+                  "wallpaper_current",
+                  "wallpaper_list",
+                  "wallpaper_set",
+                  "wallpaper_next",
+                  "wallpaper_picker"
+                ],
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "wallpaper_set",
+                    "arguments": "{\"name\": \"Ship At Sea\"}"
+                  }
+                ],
+                "seconds": 8.916
+              },
+              {
+                "kind": "action",
+                "offered": [
+                  "wallpaper_current",
+                  "wallpaper_list",
+                  "wallpaper_set",
+                  "wallpaper_next",
+                  "wallpaper_picker"
+                ],
+                "content": "Desktop background set to Ship At Sea.",
+                "tool_calls": [],
+                "seconds": 7.999
+              }
+            ],
+            "tools": [
+              {
+                "name": "wallpaper_set",
+                "arguments": "{\"name\": \"Ship At Sea\"}",
+                "result": "wallpaper set to ship at sea"
+              }
+            ],
+            "heads": [
+              [
+                "wallpaper"
+              ]
+            ],
+            "context": null,
+            "changes": [
+              {
+                "path": "wallpaper.current",
+                "before": "mountain dawn",
+                "after": "ship at sea",
+                "severity": "state"
+              }
+            ],
+            "shown": [],
+            "outbound": [],
+            "rules": {
+              "two_sentences": true,
+              "no_markdown": true,
+              "no_path": true,
+              "no_extension": true,
+              "no_url": true,
+              "no_iso_date": true
+            },
+            "grade": {
+              "outcome": "done",
+              "reason": "done",
+              "failed": []
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "speech_output": [
+    {
+      "id": "reply.across.parking",
+      "text": "Got it, you're on level three. Is there anything specific you'd like to do there?",
+      "transcript": "got it you're on love three is there anything specific you'd like to do there",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.across.yesterday",
+      "text": "Reminder set: Check the oven in 10 minutes.",
+      "transcript": "reminder set check the oven in ten minutes",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.computer.close.signal",
+      "text": "Signal window closed.",
+      "transcript": "signal window closed",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.brightness.correct",
+      "text": "Brightness set to 40%.",
+      "transcript": "brightness set to forty percent",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.files.other",
+      "text": "I found your budget notes: \"Budget Notes 2026\". Would you like to view or edit it?",
+      "transcript": "i found your budget notes budget note two thousand and twenty six would you like to view or edit it",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.reminder.change",
+      "text": "Reminder set: stretch in 10 minutes.",
+      "transcript": "reminder set stretch in ten minutes",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.status.and",
+      "text": "Battery is at 43% and currently discharging at 11.2 watts.",
+      "transcript": "battery is at forty three percent and currently discharging at eleven",
+      "outcome": "honest",
+      "reason": "lost 11.2"
+    },
+    {
+      "id": "reply.conversation.theme.choose",
+      "text": "You have 11 themes available: Catppuccin, Catppuccin Latte, Everforest, Gruvbox, Kanagawa, Matte Black, Nord, Osaka Jade, and a few more. What theme would you like to try?",
+      "transcript": "you have eleven themes available cat puchin cat poochin latte ever forest gruv box canagawa matte black nord asaka jade and a few more what theme would you like to try",
+      "outcome": "honest",
+      "reason": "lost catppuccin"
+    },
+    {
+      "id": "reply.conversation.topic.time",
+      "text": "Here are your wallpapers: desert dunes, forest path, mountain dawn, neon city, ship at sea, and holiday 2025. Which one would you like to set as your desktop background?",
+      "transcript": "here are your wall papers desert dunes forest path mountain dawn neon city ship at sea and holiday two thousand and twenty five which one would you like to set as your desktop background",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.wallpaper.change",
+      "text": "Your current wallpaper is Mountain Dawn.",
+      "transcript": "your current wallpaper is mountain dawn",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.wallpaper.pick",
+      "text": "Desktop background changed to neon city. Enjoy the vibrant lights!",
+      "transcript": "desktop background change to neon city enjoy the vibrant lights",
+      "outcome": "done",
+      "reason": "done"
+    },
+    {
+      "id": "reply.conversation.window.too",
+      "text": "Signal window closed too.",
+      "transcript": "signal window closed too",
+      "outcome": "done",
+      "reason": "done"
+    }
+  ]
+}

@@ -14,3 +14,7 @@ Microphone feedback scenarios replay isolated PCM into the parent capture
 path without opening a live microphone. Orb animation checks use Qt's
 `qmltestrunner` with an offscreen software renderer; on Omarchy it lives at
 `/usr/lib/qt6/bin/qmltestrunner`.
+
+`report/` holds the latest published eval report, not a test. `report.html`
+opens in a browser and carries the data in `report.json`; both are copied from
+a run under `evals/results/`. See [`docs/eval.md`](../docs/eval.md).
