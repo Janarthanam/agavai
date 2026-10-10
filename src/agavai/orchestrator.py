@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import replace
 from datetime import datetime
 from typing import Any
@@ -12,7 +13,7 @@ from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import select_head_ids
 from agavai.canvas import model_view, read_aloud
 from agavai.tools import DISPATCH, call_tool
-from agavai.ui import ChatUi
+from agavai.ui import ChatUi, PendingAction
 
 SYSTEM = """You are Agavai, a local Omarchy Linux voice assistant.
 Your final message is spoken aloud automatically. Always answer in one or two short spoken sentences. No markdown, no code fences, no lists.
@@ -20,6 +21,7 @@ Never say you cannot speak, talk, generate voice, or say a word. If asked to say
 Desktop actions exist only through the tools you were given this turn. Never claim you launched an app, changed a setting, or clicked something unless a tool result says so.
 Do not call remote models or coding agents. Do not ask for a shell.
 If a needed desktop action is not among the tools you were given, say you cannot do that action — still in a spoken sentence.
+When a desktop action needs the user's confirmation, call request_confirmation alone with the exact tool name, fully resolved arguments, and one short confirmation question. Do not execute the action yet or ask for confirmation only in prose. Use this only when the user asks to confirm first or you need their permission; ordinary direct commands still execute normally. If request_confirmation is unavailable, explain that you cannot prepare a confirmation in this turn. Do not prepare an action whose arguments still need a choice or clarification.
 When the user asks to see wallpaper, background, or screensaver images, call wallpaper_list before you answer so the pictures appear. Then ask which image they want, in one short question.
 Later messages are the same person continuing. Use the earlier list and call wallpaper_set with the image they name. Do not ask them to pick an image that was not listed.
 When a tool succeeds, say exactly what finished in one sentence, naming the wallpaper, reminder, or other change.
@@ -38,6 +40,96 @@ Answer new_conversation if the request starts an unrelated task or subject, or e
 For example, after a wallpaper gallery and a choice question, 'ship at sea' is follow_up; 'what time is it?' is new_conversation.
 Reply with exactly follow_up or new_conversation. Do not answer the request or call tools.
 """
+
+
+def control_command(text: str) -> str | None:
+    """Recognize only isolated controls in an already committed utterance."""
+    word = text.strip().rstrip(".!?…").rstrip().casefold()
+    return word if word in {"yes", "no", "continue", "agavai"} else None
+
+
+def _turn_tools(head_ids: list[str], cfg: Config, ui: ChatUi | None) -> list[dict[str, Any]]:
+    can_confirm = ui is not None and cfg.router.max_tools > 1
+    selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools - int(can_confirm))
+    if can_confirm and selected:
+        selected.append({
+            "type": "function",
+            "function": {
+                "name": "request_confirmation",
+                "description": "Prepare one action for Yes or Continue; do not execute it. Call this alone when confirmation is needed.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "enum": [item["function"]["name"] for item in selected]},
+                        "arguments": {"type": "object", "description": "Fully resolved arguments for that tool."},
+                        "question": {"type": "string", "description": "One short question naming the action to confirm."},
+                    },
+                    "required": ["name", "arguments", "question"],
+                    "additionalProperties": False,
+                },
+            },
+        })
+    return selected
+
+
+def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi) -> str:
+    raw = (call.get("function") or {}).get("arguments")
+    try:
+        proposal = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError as exc:
+        raise LlmError("Invalid confirmation arguments JSON.") from exc
+    if not isinstance(proposal, dict):
+        raise LlmError("Confirmation arguments must be an object.")
+    name = proposal.get("name")
+    arguments = proposal.get("arguments")
+    question = proposal.get("question")
+    if not isinstance(name, str) or name not in selected_names or name not in DISPATCH:
+        raise LlmError("That action is not available for confirmation in this turn.")
+    if not isinstance(arguments, dict) or not isinstance(question, str) or not question.strip():
+        raise LlmError("Confirmation needs resolved arguments and a question.")
+    ui.pending_action = PendingAction(str(ui.data["session_id"]), name, arguments)
+    return read_aloud(question, ui.data.get("display"))
+
+
+def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation: bool) -> str | None:
+    command = control_command(text)
+    if command == "agavai":
+        ui.clear_conversation()
+        ui.continue_listening()
+        return ""
+    pending = ui.pending_action if continue_conversation else None
+    if pending and pending.session_id != ui.data.get("session_id"):
+        pending = None
+    if command not in {"yes", "no"} and not (command == "continue" and pending):
+        return None
+    messages = list(ui.model_messages) if continue_conversation else []
+    heads = list(ui.model_heads) if messages else []
+    ui.pending_action = None
+    ui.user(text, keep_display=continue_conversation)
+    messages.append({"role": "user", "content": text})
+    if command == "no":
+        reply = "Cancelled the pending action." if pending else "There is no pending action to cancel."
+    elif not pending:
+        reply = "What would you like me to confirm?"
+    else:
+        call = {
+            "id": uuid.uuid4().hex,
+            "type": "function",
+            "function": {"name": pending.name, "arguments": json.dumps(pending.arguments, ensure_ascii=False)},
+        }
+        messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
+        result = _execute_tool_call(call, cfg, ui, messages)
+        if result is None:
+            return ""
+        reply = read_aloud(result, ui.data.get("display"))
+        if not reply:
+            reply = "The action returned no result."
+        elif reply.startswith(("{", "[")) or len(reply) > 280 or len(re.split(r"(?<=[.!?])\s+", reply)) > 2:
+            reply = "The tool returned a result. See the details on screen."
+    messages.append({"role": "assistant", "content": reply})
+    _remember(ui, messages, heads)
+    ui.assistant(reply)
+    return reply
 
 
 def _continues_conversation(text: str, prior_messages: list[dict[str, Any]], cfg: Config) -> bool:
@@ -60,6 +152,31 @@ def _model_tool_text(name: str, result: str) -> str:
     if len(text) > _RESULT_LIMIT:
         text = text[: _RESULT_LIMIT - 1] + "…"
     return text
+
+
+def _execute_tool_call(
+    call: dict[str, Any], cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]],
+) -> str | None:
+    fn = call.get("function") or {}
+    name = fn.get("name") or ""
+    raw_args = fn.get("arguments") or "{}"
+    if ui:
+        if ui.cancelled():
+            return None
+        ui.tool_start(name, raw_args)
+        if ui.cancelled():
+            return None
+    result = call_tool(name, raw_args, cfg)
+    if ui:
+        if ui.cancelled():
+            return None
+        ui.tool_done(name, result)
+    messages.append({
+        "role": "tool",
+        "tool_call_id": call.get("id") or name,
+        "content": _model_tool_text(name, result),
+    })
+    return result
 
 
 def wants_followup(reply: str) -> bool:
@@ -151,6 +268,12 @@ def run_turn(
         return "I did not hear anything."
     if ui and ui.cancelled():
         return ""
+    if ui:
+        reply = _handle_control(text, cfg, ui, continue_conversation=continue_conversation)
+        if reply is not None:
+            return reply
+        # A new committed request replaces any proposal; partials never reach here.
+        ui.pending_action = None
     prior_messages = list(ui.model_messages) if ui and continue_conversation else []
     prior_heads = list(ui.model_heads) if prior_messages else []
     if ui:
@@ -173,7 +296,7 @@ def run_turn(
                 prior_heads = []
                 ui.user(text)
         head_ids = _merge_heads(select_head_ids(text, cfg), prior_heads)
-        selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools)
+        selected = _turn_tools(head_ids, cfg, ui)
         selected_names = {item["function"]["name"] for item in selected}
         messages: list[dict[str, Any]] = [
             {
@@ -209,6 +332,19 @@ def run_turn(
             message = chat(cfg.llm, messages, tools=selected)
             calls = parse_tool_calls(message)
             content = (message.get("content") or "").strip()
+            if ui and ui.cancelled():
+                return ""
+            confirmations = [call for call in calls if (call.get("function") or {}).get("name") == "request_confirmation"]
+            if confirmations:
+                if len(calls) != 1 or "request_confirmation" not in selected_names:
+                    raise LlmError("A confirmation must be requested alone in an interactive turn.")
+                reply = _prepare_confirmation(confirmations[0], selected_names, ui)
+                messages.append({"role": "assistant", "content": None, "tool_calls": calls})
+                messages.append({"role": "tool", "tool_call_id": confirmations[0].get("id") or "request_confirmation", "content": "Awaiting user confirmation. No action has executed."})
+                messages.append({"role": "assistant", "content": reply})
+                _remember(ui, messages, head_ids)
+                ui.assistant(reply)
+                return reply
             if not calls:
                 _list_images(text, cfg, ui, messages)
                 reply = read_aloud(_strip_think(content) or "Done.", ui.data.get("display") if ui else None)
@@ -227,7 +363,7 @@ def run_turn(
             if extra_heads and not retried:
                 retried = True
                 head_ids.extend(extra_heads)
-                selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools)
+                selected = _turn_tools(head_ids, cfg, ui)
                 selected_names = {item["function"]["name"] for item in selected}
                 continue
             messages.append(
@@ -238,23 +374,8 @@ def run_turn(
                 }
             )
             for call in calls:
-                fn = call.get("function") or {}
-                if ui and ui.cancelled():
+                if _execute_tool_call(call, cfg, ui, messages) is None:
                     return ""
-                name = fn.get("name") or ""
-                raw_args = fn.get("arguments") or "{}"
-                if ui:
-                    ui.tool_start(name, raw_args)
-                result = call_tool(name, raw_args, cfg)
-                if ui:
-                    ui.tool_done(name, result)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.get("id") or name,
-                        "content": _model_tool_text(name, result),
-                    }
-                )
         msg = "I ran out of tool steps before finishing."
         if ui:
             ui.error(msg)

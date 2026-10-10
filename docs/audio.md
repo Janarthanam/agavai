@@ -53,6 +53,8 @@ Turn taking is the only stage that may decide the user has finished. It reads th
 - Escape drops the stream, clears the hypothesis, and does not commit.
 - An end-of-boundary marker does not commit.
 
+Isolated controls use this same commit boundary. A partial `yes` may grow into `yes, show me the wallpaper`; neither that partial nor an EOB triggers confirmation. Only the entire EOU/Enter-committed text is checked for an exact control phrase. No new silence timer is used. A falsely early EOU remains an ASR endpointing error, not something the text handler can detect.
+
 Nothing else in the listen session may commit a turn. If the end-of-utterance token is late or missing, that is something to measure. It is not a reason to put the 900 ms timer back in front of the model.
 
 ## User context
@@ -65,7 +67,9 @@ The LLM sees the finished sentence. It does not see the audio, and it does not s
 
 This stage starts only after turn taking commits. It is the current tool loop.
 
-The router picks at most two tool heads from the finished sentence. Qwen, on llama-server, sees only those tools. The allowlist runs locally. The spoken reply is one or two sentences, without filesystem paths. Nothing here runs on a partial.
+Before the model path, the turn engine handles isolated `Agavai`, `Yes` and `No`, plus `Continue` when a concrete action is pending. These skip model health, classification, routing and inference. `Agavai` clears conversation within the same listening session and returns no speech. Other controls use session state and the existing allowlisted dispatcher; unbound `Continue` still needs Qwen. See [flow.md](flow.md) for the confirmation contract.
+
+For ordinary turns, the router picks at most two tool heads from the finished sentence. Qwen, on llama-server, sees only those tools plus an explicit confirmation schema when available, all within the configured schema budget. The allowlist runs locally. The spoken reply is one or two sentences, without filesystem paths. Nothing here runs on a partial.
 
 ## TTS
 

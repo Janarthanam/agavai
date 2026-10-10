@@ -14,7 +14,7 @@ contracts supersede older Voxtype/GTK descriptions in architecture.md.
 ## Requirements
 
 1. Show revisable speech before acting. Only nonempty end of utterance (EOU) or
-   Enter commits a model turn; partials, silence and end of boundary (EOB) do not.
+   Enter commits a turn; partials, silence and end of boundary (EOB) do not.
 2. Execute only named desktop functions. The model proposes calls; the dispatcher
    runs them and returns results. Never infer action success from model intent.
 3. Keep a listening session until dismissal. Related requests retain conversation
@@ -23,6 +23,8 @@ contracts supersede older Voxtype/GTK descriptions in architecture.md.
    focus. A newly published canvas opens; retained snapshots preserve minimization.
 5. Keep recognition, the assistant GGUF, speech and execution local. Default Jev
    routing can send committed text to OpenRouter; keyword routing removes that hop.
+6. Resolve isolated finalized session controls locally. Prepared actions bind one
+   allowlisted name and argument object to the session; prose alone is not a plan.
 
 The workload is one person and serial voice turns. There is no measured end-to-end
 latency SLA. Request timeouts are failure limits, not response-time objectives.
@@ -92,6 +94,7 @@ exits after its 600-second idle accept timeout. There are no application contain
 | Session-scoped controller | Clear microphone/context lifetime and cleanup. | ASR loads per new session. A resident agent needs broader ownership/coordination. |
 | Selected tool heads | Limit schema context for the small GGUF. | Routing can miss a capability. Keyword routing is local but lexical; Jev adds a remote text hop. |
 | Direct tool functions | Reuse the allowlist with no MCP hop inside voice turns. | Caller and tools share trust; no isolation or transaction rollback. MCP remains an external adapter. |
+| Whole-utterance controls with explicit pending actions | Yes/No and prepared Continue need zero inference calls; isolated Agavai resets silently. | Requires a structured confirmation proposal. Substring matching can mistake ordinary speech for a command; an early ASR EOU remains a boundary error. |
 | Atomic latest snapshot | One complete current view for QML. | No event replay; typed and voice writers can collide. |
 
 Assumptions: the configured GGUF can emit OpenAI tool calls (or Qwen `<tool_call>`
@@ -108,6 +111,7 @@ fabricating speech or successful actions.
 | Session: listener identity, cancellation and ordering | `listen_session`; ChatUi session UUID | Dismissal, capture failure or session exit |
 | Utterance: overlap, caches, decoder tokens and current hypothesis | ASR worker; parent hypothesis | Acknowledged worker reset after commitment/stop |
 | Conversation: model messages, inherited heads and results | Turn engine + ChatUi memory | Valid `new_conversation`, fresh session or process exit |
+| Pending action: one name and resolved argument object, bound to session id | Turn engine + ChatUi memory | Yes/Continue consumption, No, other committed input, isolated Agavai, fresh conversation/session, cancellation or process exit |
 | Presentation: compact state, selection and preview | QML | New session/display or explicit UI interaction |
 
 `session_id` survives a topic change so dismissal remains authoritative.
@@ -152,18 +156,30 @@ canvas opens even when the new result contents resemble the previous ones.
 **Code:** [orchestrator.py](../../src/agavai/orchestrator.py),
 [router.py](../../src/agavai/router.py), [heads.py](../../src/agavai/heads.py).
 
-- **Deployment/lifecycle:** in caller process. Health → context → heads → bounded
+- **Deployment/lifecycle:** in caller process. Isolated controls → health → context → heads → bounded
   completion/dispatch loop → final reply. Keep up to 24 non-system messages.
 - **Protocol/configuration:** `run_turn(text,cfg,ui)` returns text. Context uses
   local no-tools completion, temperature 0, maximum 16 tokens; require exactly
   `follow_up`/`new_conversation`. `[router]` chooses Jev/keyword/local (local is
   currently keywords) and fallback. Jev uses HTTPS and a configured secret.
+  The orchestration-only `request_confirmation(name,arguments,question)` must be
+  called alone and target an advertised allowlisted tool; it stores one
+  session-bound action rather than execute. Whole finalized Yes/No are local;
+  Continue is local only with that action. Isolated Agavai clears conversation
+  and returns an empty reply while preserving the listening session.
 - **Performance/throughput:** default 2 s routing timeout; two initial merged
   heads, eight advertised schemas, six model rounds; tools run sequentially.
   One missing-head retry can extend heads, still subject to the schema cap.
+  Interactive turns reserve one schema slot for confirmation when the budget
+  permits. Handled controls make zero Qwen/router/health calls; no latency SLA
+  is claimed for ASR, tool execution or speech startup.
 - **Observability:** tool/answer/error snapshot rows; no structured context or
   router verdict trace. Invalid context decision preserves earlier state and
-  prevents action execution for that request.
+    prevents action execution for that request.
+  Confirmation questions use existing answer rows; confirmed actions publish
+  normal tool/result/completion rows and matching model history. Malformed or
+  combined proposals surface errors without execution. Pending state is in-memory
+  only and cannot be recovered by loading a prior snapshot.
 
 ### Local Qwen
 
@@ -252,6 +268,13 @@ capability.
 ### Committed-turn algorithm
 
 ```text
+match whole finalized text, ignoring case/outer whitespace/terminal punctuation
+if isolated Agavai: clear conversation and pending action; listen; return no speech
+if Yes/No, or Continue with a current-session pending action:
+    if no action is pending: return a local clarification
+    otherwise consume once; cancel or dispatch the stored name/arguments
+    publish actual results and remember the local exchange; return without Qwen
+otherwise invalidate any pending proposal
 check local Qwen health
 if previous messages exist:
     classify request + history with local Qwen, no tools
@@ -262,6 +285,9 @@ select current heads; merge relevant prior heads; cap schemas
 build system + prior messages + committed user message
 repeat up to max_tool_rounds:
     complete with local Qwen
+    if request_confirmation is the only call and targets an advertised tool:
+        store one session-bound action; publish question; return without execution
+    if confirmation is invalid or mixed with other calls: report; execute nothing
     if no tool calls: remember, publish and return readable answer
     if missing head and retry unused: attach head and retry
     otherwise execute calls sequentially
@@ -272,6 +298,40 @@ report exhausted rounds
 Wallpaper gallery requests have a special `wallpaper_list` path before completion
 or on finalization so images appear even if the model only asks which to choose.
 This is existing product behavior, not a general planning stage.
+
+### Isolated confirmation and reset
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Session as Session controller
+    participant Engine as Turn engine
+    participant Qwen as Local Qwen
+    participant Tools as Tool executor
+    participant UI as Native UI & snapshot
+    User->>Session: Open the browser, but confirm first (EOU)
+    Session->>Engine: committed request
+    Engine->>Qwen: routed schemas including request_confirmation
+    Qwen-->>Engine: request_confirmation(launch, target=browser, question)
+    Engine->>UI: store session-bound proposal; publish question
+    Engine-->>Session: question to speak; return to listening
+    User->>Session: Yes! (EOU)
+    Session->>Engine: committed Yes
+    Engine->>Engine: consume proposal before execution
+    Engine->>Tools: launch(target=browser)
+    Tools-->>Engine: actual result
+    Engine->>UI: tool/result/completion and remembered exchange
+    Engine-->>Session: short result; no Qwen call
+    User->>Session: Agavai (EOU)
+    Session->>Engine: committed Agavai
+    Engine->>UI: clear conversation/results/proposal, keep session id
+    Engine-->>Session: empty reply; listen without speech
+```
+
+Partials such as `yes` and pauses marked EOB never enter this flow. A committed
+`yes, show me the wallpaper` invalidates the proposal and follows the normal model
+turn. Continue without a proposal also follows that path, since generating more
+explanation needs inference. This adds no wake-word detector or microphone barge-in.
 
 ### Recognition algorithm
 

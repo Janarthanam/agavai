@@ -26,11 +26,11 @@ const components = {
     files: ["src/agavai/__main__.py", "src/agavai/app.py", "src/agavai/state.py"]
   },
   engine: {
-    name: "Turn engine", label: "Context → route → tool loop", kind: "In the session process",
+    name: "Turn engine", label: "Controls → context → tool loop", kind: "In the session process",
     purpose: "Convert one committed sentence into a verified action/result and short answer. It coordinates Qwen; it does not implement inference.",
     deployment: "run_turn() in orchestrator.py, called in the listener or a separate one-shot agavai ask process.",
-    contract: "Health check; strict local context label when history exists; choose heads; chat with selected schemas; execute calls in order; feed results back until final text.",
-    lifecycle: "Six model rounds default; one missing-head attachment retry. Keep up to 24 non-system messages. The advertised subset guides Qwen; DISPATCH is the global execution allowlist.",
+    contract: "Match isolated finalized controls first: Agavai silently clears conversation; Yes/No and prepared Continue use session state with no health, routing or inference calls. Otherwise check health, classify context, choose heads and run the model/tool loop.",
+    lifecycle: "Six model rounds default; one missing-head attachment retry. Keep up to 24 non-system messages. request_confirmation alone stores one session-bound advertised action, reserving a schema slot; consume once or clear on other committed input/reset/cancel. DISPATCH remains the execution allowlist.",
     files: ["src/agavai/orchestrator.py", "src/agavai/router.py", "src/agavai/heads.py", "src/agavai/llm.py"]
   },
   model: {
@@ -123,19 +123,19 @@ const edges = {
   commit: {
     from: "session", to: "engine", label: "committed text", protocol: "In-process Python function call; return value is the final reply",
     payload: "run_turn(text, cfg, ui, continue_conversation=...). Text is a completed utterance; subsequent turns can use ChatUi's remembered model_messages/model_heads.",
-    effect: "No audio or partial text enters reasoning. First turn has blank history; later turns classify topic continuity. The returned reply is spoken by the controller.",
+    effect: "No partial text triggers controls or reasoning. Whole finalized controls can bypass Qwen; ordinary later turns classify topic continuity. Nonempty replies are spoken; isolated Agavai reopens listening without a thinking cue or speech.",
     example: 'run_turn("find the budget notes", cfg, ui)\n→ "I found your notes. They are on the canvas."', files: ["src/agavai/__main__.py", "src/agavai/orchestrator.py"], reply: true
   },
   chat: {
     from: "engine", to: "model", label: "HTTP", protocol: "Default loopback HTTP POST /v1/chat/completions; JSON, stream:false",
     payload: "model alias, messages, temperature, max_tokens, and selected function schemas with tool_choice:auto. Response choices[0].message has content and/or tool_calls with id, name and arguments.",
-    effect: "A proposal, not execution. Subsequent requests include assistant tool_calls and role:tool results with matching tool_call_id. Context classification uses the same endpoint, no tools, temperature 0, max_tokens 16.",
+    effect: "A proposal, not execution. request_confirmation(name, arguments, question) alone stores an action without dispatch. Later Yes/Continue executes locally. Subsequent model requests retain matching calls/results. Ordinary context classification uses this endpoint, no tools, temperature 0, max_tokens 16.",
     example: '{model:"agavai", messages:[system,user],\n tools:[search_files_schema], stream:false}\n→ tool_calls:[{id:"c1", function:{name:"search_files",\n arguments:"{\\"query\\":\\"budget\\"}"}}]', files: ["src/agavai/llm.py", "src/agavai/orchestrator.py"], reply: true
   },
   action: {
     from: "engine", to: "tools", label: "call / result", protocol: "In-process call_tool(name, arguments, cfg) → string",
     payload: "Allowlisted name and argument object/JSON string. Return raw JSON or plain text; validation, unknown names and timeout/exception failures return error strings.",
-    effect: "Calls within one completion execute sequentially. A missing head is attached once and completion retried before execution. Per-turn schemas are not an independent permission layer.",
+    effect: "Model calls execute sequentially; confirmed actions dispatch stored arguments once without Qwen. A missing head is attached once before execution. Confirmation targets must be currently advertised; DISPATCH remains the global allowlist.",
     example: 'call_tool("search_files", {"query":"budget"}, cfg)\n→ ["/home/user/Documents/budget_notes.md"]', files: ["src/agavai/orchestrator.py", "src/agavai/tools.py"], reply: true
   },
   snapshot: {

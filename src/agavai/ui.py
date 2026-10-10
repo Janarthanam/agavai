@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -47,12 +48,20 @@ def _clip(text: str, limit: int = RESULT_CHARS) -> str:
     return text[: limit - 1] + "…"
 
 
+@dataclass(frozen=True)
+class PendingAction:
+    session_id: str
+    name: str
+    arguments: dict[str, Any]
+
+
 class ChatUi:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.path = cfg.runtime_dir / "ui.json"
         self.model_messages: list[dict[str, Any]] = []
         self.model_heads: list[str] = []
+        self.pending_action: PendingAction | None = None
         self.data: dict[str, Any] = {
             "phase": "idle",
             "phase_label": "Idle",
@@ -91,6 +100,7 @@ class ChatUi:
         self.data.pop("completion", None)
         self.model_messages = []
         self.model_heads = []
+        self.pending_action = None
 
     def listening(self) -> None:
         self.begin_session()
@@ -106,7 +116,10 @@ class ChatUi:
 
     def cancelled(self) -> bool:
         try:
-            return (self.cfg.runtime_dir / "dismissed-session").read_text() == self.data.get("session_id")
+            cancelled = (self.cfg.runtime_dir / "dismissed-session").read_text() == self.data.get("session_id")
+            if cancelled:
+                self.pending_action = None
+            return cancelled
         except OSError:
             return False
 

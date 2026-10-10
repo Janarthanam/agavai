@@ -1,0 +1,21 @@
+# Handle isolated voice controls locally
+
+## Surface
+
+- [~] P1 voice Bypass Qwen for finalized session controls and prepared action confirmations
+
+### Acceptance
+
+- Match only whole finalized utterances, ignoring case, surrounding whitespace and terminal punctuation; partials and EOB never act.
+- Isolated Agavai clears conversation, canvas and pending actions without ending the listening session or playing a reply.
+- Store one explicit, session-bound allowlisted action through a model confirmation tool; Yes or Continue consumes it once, No discards it.
+- Without a pending action, Yes/No explain locally; Continue uses the normal model turn.
+- Mixed utterances use Qwen and invalidate the prior pending action. Reset, fresh sessions and dismissal cannot execute stale actions.
+- Preserve tool validation, snapshot results, cancellation and model history; work without Qwen for handled controls.
+
+### Log
+
+- 2026-10-10T12:48:23+05:30 — Codex session voice-controls — in progress. User authorized end-to-end implementation of the agreed finalized-utterance fast path. Starting commit `657a6c0`; existing unrelated changes in README, config/LLM, install/eval tasks and eval files will be preserved. Reviewed runtime authority `docs/flow.md`, audio/UI specs, architecture design, session/ASR/orchestrator/dispatcher and Behave patterns. Pending confirmations do not currently exist; add an explicit model protocol rather than infer actions from prose. Continue means proceed with a stored action; generative continuation stays on Qwen.
+- Planned files: `src/agavai/orchestrator.py`, `src/agavai/ui.py`, `src/agavai/__main__.py`, `features/voice_controls.feature`, `features/steps/voice_control_steps.py`, `docs/flow.md`, `docs/audio.md`, `docs/ui-design.md`, `docs/architecture-design/design.md`, and this task. Reuse `call_tool`, `_remember`, `read_aloud`, snapshot writes and existing EOU/Enter commitment.
+- 2026-10-10T12:59:25+05:30 — Codex session voice-controls — progress. Implemented session-bound confirmation proposals, whole-utterance dispatch, silent reset, local result/history/UI updates and cancellation checks. All 90 focused scenarios (781 steps) pass, including scripted ASR through the real listen loop. Real running Qwen prepared `launch(target=browser)` in one inference call; no desktop tool ran before confirmation, and Yes executed the mocked action with zero additional inference or health calls. Updated the governing specs and architecture diagram contracts (`docs/architecture-design/architecture.js` added to changed files). Concurrent eval commits advanced HEAD to `0f46ec6`; those changes are preserved and outside this task. Full non-model suite and final edge-case review remain.
+- 2026-10-10T13:04:49+05:30 — Codex session voice-controls — implementation validated, awaiting commit. Final suite: `PYTHONPATH=src .venv/bin/behave --tags=-asr_model -f progress` with an isolated repository-local temporary XDG runtime — 243 scenarios and 1,367 steps passed; three ASR model replays excluded. Includes 54 new scenarios for whole-utterance matching, partial/EOB/EOU/Enter, single consumption, stale/fresh sessions, cancellation before/during execution, malformed/combined/unadvertised proposals, unavailable Qwen, schema budgets, dispatcher validation and local spoken results. `node --check docs/architecture-design/architecture.js` and `git diff --check` passed. Reviewed the diff; both ordinary model calls and confirmed actions share one executor to preserve dispatcher validation, UI/canvas results and cancellation. Kept microphone cleanup on silent reset and omitted its thinking cue/playback. No acoustic endpointing or ASR model changes. Changed files are the planned files plus the architecture JS contracts above; no unrelated task or eval changes belong to this commit.

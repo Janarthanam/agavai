@@ -15,7 +15,7 @@ from agavai.config import dump_llm_env, load_config, set_model_id
 from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
-from agavai.orchestrator import run_turn
+from agavai.orchestrator import control_command, run_turn
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
@@ -436,14 +436,17 @@ def _run_stop_body(
 
     if aborted():
         return None
+    resetting = control_command(text) == "agavai"
     hide_listen(cfg)
-    cue_think(cfg)
+    if not resetting:
+        cue_think(cfg)
     if aborted():
         return None
     if not text.strip():
         speak("I did not hear anything.", cfg)
         return ""
-    write_state(cfg, "thinking")
+    if not resetting:
+        write_state(cfg, "thinking")
     try:
         reply = run_turn(text, cfg, ui, continue_conversation=continue_conversation)
     except Exception:
@@ -452,6 +455,10 @@ def _run_stop_body(
         ui.error(reply)
     if aborted():
         return None
+    if not reply:
+        finish(cfg)
+        write_state(cfg, "listening")
+        return reply
     write_state(cfg, "speaking")
     finish(cfg)
     from agavai.tts import _interruptible_speak
