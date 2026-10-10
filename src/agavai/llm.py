@@ -36,6 +36,10 @@ def chat(
         "max_tokens": cfg.max_tokens,
         "stream": False,
     }
+    if cfg.seed is not None:
+        payload["seed"] = cfg.seed
+    if cfg.cache_prompt is not None:
+        payload["cache_prompt"] = cfg.cache_prompt
     # The caller routes the tools (see agavai.router).
     if tools:
         payload["tools"] = tools

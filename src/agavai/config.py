@@ -88,6 +88,10 @@ class LlmConfig:
     max_tokens: int = 512
     max_tool_rounds: int = 6
     timeout_secs: int = 120
+    # Unset leaves the server's sampling seed and prompt cache alone. The eval
+    # pins both so a score repeats exactly.
+    seed: int | None = None
+    cache_prompt: bool | None = None
     models: dict[str, ModelSpec] = field(default_factory=dict)
     path_overridden: bool = False
 

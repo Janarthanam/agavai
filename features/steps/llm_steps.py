@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from behave import then, when
 
-from agavai.llm import parse_tool_calls
+from agavai.config import LlmConfig
+from agavai.llm import chat, parse_tool_calls
 
 
 @when('I parse an OpenAI tool call named "{name}"')
@@ -54,3 +56,50 @@ def step_n(context, n):
 def step_ws(context, n):
     args = json.loads(context.calls[0]["function"]["arguments"])
     assert args["workspace"] == n
+
+
+def _send(context, cfg):
+    sent = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
+
+    def fake_urlopen(req, timeout):
+        sent.update(json.loads(req.data))
+        return Response()
+
+    with patch("agavai.llm.urllib.request.urlopen", side_effect=fake_urlopen):
+        chat(cfg, [{"role": "user", "content": "hi"}], tools=[])
+    context.sent = sent
+
+
+@when("I send a chat request with default sampling")
+def step_default_sampling(context):
+    _send(context, LlmConfig())
+
+
+@when("I send a chat request with seed {seed:d} and the prompt cache off")
+def step_pinned_sampling(context, seed):
+    _send(context, LlmConfig(seed=seed, cache_prompt=False))
+
+
+@then('the request should not contain "{key}"')
+def step_absent(context, key):
+    assert key not in context.sent, context.sent
+
+
+@then('the request "{key}" should be {value:d}')
+def step_int_value(context, key, value):
+    assert context.sent[key] == value, context.sent
+
+
+@then('the request "{key}" should be false')
+def step_false_value(context, key):
+    assert context.sent[key] is False, context.sent

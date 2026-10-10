@@ -14,3 +14,11 @@ Feature: Parsing model tool calls
   Scenario: Plain assistant text is not a tool call
     When I parse plain assistant text "hello"
     Then there should be 0 parsed tool calls
+
+  Scenario: Pinned sampling is sent only when configured
+    When I send a chat request with default sampling
+    Then the request should not contain "seed"
+    And the request should not contain "cache_prompt"
+    When I send a chat request with seed 42 and the prompt cache off
+    Then the request "seed" should be 42
+    And the request "cache_prompt" should be false
