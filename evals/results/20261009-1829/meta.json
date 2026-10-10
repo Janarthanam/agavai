@@ -1,0 +1,33 @@
+{
+  "started": "2026-10-09T20:08:27",
+  "fingerprint": {
+    "git_commit": "48f49b3b0125bb606d81291a36d1b0fba3309bb8",
+    "git_dirty": true,
+    "model_path": "/home/janar/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    "model_sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+    "llama_server_build": "b1-1844325",
+    "router": "keyword (fallback keyword)",
+    "bindings": {
+      "desktop": {
+        "ok": true,
+        "problems": []
+      }
+    },
+    "max_tool_rounds": 6,
+    "max_tools": 8,
+    "max_tokens": 512,
+    "sampling": {
+      "temperature": 0,
+      "seed": 42,
+      "cache_prompt": false
+    },
+    "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+    "python": "3.13.15"
+  },
+  "canary": {
+    "ok": true,
+    "problems": []
+  },
+  "shipped_capabilities": [],
+  "finished_cases": "2026-10-09T20:09:29"
+}
