@@ -179,6 +179,11 @@ Treat all of the following as defects to avoid introducing, not stylistic prefer
   adjacent — even correctly — has made a decision that belongs to whoever assigned the
   task, not to itself.
 
+## Tests
+
+- Only tests you will write for verification will be E2E. You will never write unit tests. Its just slop.
+- You will only use BDD for verification.
+
 ## 5. Definition of done
 
 A change is done when:
