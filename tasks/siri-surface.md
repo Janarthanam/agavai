@@ -6,7 +6,7 @@ Listening-orb and canvas status: waiting for input. Implementation is committed 
 
 ## Surface
 
-- [~] P1 ui Add a visible direct close button to the minimized orb
+- [x] P1 ui Add a visible direct close button to the minimized orb
 - [~] P0 ui Replace the top menu popup with a bottom-centered voice orb, and show results on that same surface without menu chrome
 - [x] P0 ui Keep listening in an orb-only corner mode without taking desktop focus
 - [~] P0 ui Show microphone listening and live input through orb motion
@@ -46,3 +46,4 @@ Listening-orb and canvas status: waiting for input. Implementation is committed 
 
 - 2026-10-10T19:43:12+05:30 — Codex session compact-close — in progress. User requests direct closing from the minimized orb. Starting commit `92dcd94`; unrelated untracked `:memory:.ses` is preserved. Reuse `NativeButton` and `dismiss()` inside the existing compact input region, keeping expansion and right-click dismissal. Scope: `plugin/Chat.qml`, `features/support/compact-ui.qml`, `README.md`, `docs/ui-design.md`, and this task. Live plugin installation remains awaiting approval because it changes files outside the repository.
 - 2026-10-10T19:44:29+05:30 — Codex session compact-close — validated. Added the always-visible × using the existing native button and dismissal path. Native regression passed direct left-click close, no expansion/focus, compact hit bounds, late snapshot suppression, existing right-click dismissal, geometry, canvas and real window focus switching. The stock isolated runner initially lost access to the Hyprland socket; reran the same script with only a temporary `hypr` socket-directory symlink into its isolated runtime, and all checks passed. Behave UI design/result canvas: 11 scenarios / 42 steps passed. Diff reviewed; `git diff --check` passed. Changed files match the scope above. Production plugin remains untouched, awaiting approved installation.
+- 2026-10-10T19:45:00+05:30 — Codex session compact-close — complete in repository. Committed as `183d74f`; validation and changed files recorded above. Inspect with `git show 183d74f`. Live deployment remains waiting for approval under the existing installation boundary.
