@@ -15,10 +15,9 @@ Feature: Invoke one voice widget and speak without a second shortcut
 
     Examples:
       | phase        |
-      | listening    |
-      | transcribing |
-      | thinking     |
-      | speaking     |
+      | listening |
+      | thinking  |
+      | speaking  |
 
   Scenario: An unavailable widget does not start invisible microphone capture
     Given a chat UI in a temp runtime dir
@@ -30,10 +29,23 @@ Feature: Invoke one voice widget and speak without a second shortcut
     When the Omarchy shell accepts the overlay invocation
     Then the shell invocation launches exactly once
 
-  Scenario: Automatic invocation chooses a pause-detecting listener even in manual config
+  Scenario: Stop without a listener fails and leaves F9 dictation alone
     Given a chat UI in a temp runtime dir
-    When I launch an automatic session with manual capture configured
-    Then the detached command uses automatic listening
+    When I run "stop" with no live listener
+    Then the command exits with 1
+    And no other program is started
+
+  Scenario: Cancel without a listener returns to idle and leaves F9 dictation alone
+    Given a chat UI in a temp runtime dir
+    When I run "cancel" with no live listener
+    Then the command exits with 0
+    And no other program is started
+    And the assistant state is "idle"
+
+  Scenario: A detached session runs the streaming listener
+    Given a chat UI in a temp runtime dir
+    When I launch a detached listening session
+    Then the detached command is "listen"
 
   Scenario: End of utterance completes the command without another key press
     Given a chat UI in a temp runtime dir
@@ -66,7 +78,3 @@ Feature: Invoke one voice widget and speak without a second shortcut
       | continued |
       | false     |
       | true      |
-
-  Scenario: A stalled source ends automatically
-    When the microphone stream stalls
-    Then the source ends rather than waiting for another shortcut

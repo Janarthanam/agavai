@@ -7,7 +7,7 @@ const components = {
     deployment: "A parec subprocess owned by the listener, opened for each utterance. No recording service or second VAD stream.",
     contract: "Raw signed 16-bit little-endian PCM, 16,000 samples/s. Parent frames bytes for the ASR child; levels reach ChatUi at most 10 Hz.",
     lifecycle: "Capture starts while listening and stops before reasoning/playback. A session-unmuted source is restored when leaving listening.",
-    files: ["src/agavai/asr.py", "src/agavai/meter.py", "src/agavai/feedback.py"]
+    files: ["src/agavai/asr.py", "src/agavai/feedback.py"]
   },
   recognizer: {
     name: "Streaming recognizer", label: "Parakeet: text + EOU", kind: "Model child process",

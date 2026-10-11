@@ -24,6 +24,14 @@ Feature: The orb reveals microphone listening
     And the snapshot phase should be "error"
     And the voice request is not submitted
 
+  Scenario: Silence meters at the floor and a full-scale sine near -3 dBFS
+    When I convert PCM to dBFS
+    Then silence should be -100 dBFS
+    And a full-scale sine should be near -3 dBFS
+
+  Scenario: Capture selects the default source with -d
+    Then the parec argv should use "-d" for "@DEFAULT_SOURCE@"
+
   Scenario: The listening ring moves during silence and settles after listening
     When I check the native orb animation without desktop capture
     Then the native orb animation check passes

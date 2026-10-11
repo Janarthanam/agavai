@@ -129,14 +129,9 @@ def step_dump(context):
     context.llm_env = dump_llm_env(context.cfg)
 
 
-@given('a config with vad backend "{backend}" and silence window {ms:d} ms')
-def step_vad(context, backend, ms):
-    _write(context, f'[vad]\nbackend = "{backend}"\nsilence_ms = {ms}\n')
-
-
-@given("a config with an unknown vad key")
-def step_vad_unknown(context):
-    _write(context, "[vad]\nquantum_flux = 42\n")
+@given('a config with retired vad and voxtype sections and asr device "{device}"')
+def step_retired(context, device):
+    _write(context, f'[voxtype]\nprompt_file = "auto"\n\n[vad]\nenabled = false\nbackend = "silero"\n\n[asr]\ndevice = "{device}"\n')
 
 
 @then('the model id should be "{mid}"')
@@ -200,18 +195,3 @@ def step_asr(context, device):
 @then('the asr device should be "{device}"')
 def step_asr_device(context, device):
     assert context.cfg.asr.device == device, context.cfg.asr.device
-
-
-@then("vad should be enabled")
-def step_vad_enabled(context):
-    assert context.cfg.vad.enabled is True, context.cfg.vad
-
-
-@then('the vad backend should be "{backend}"')
-def step_vad_backend(context, backend):
-    assert context.cfg.vad.backend == backend, context.cfg.vad.backend
-
-
-@then("the vad silence window should be {ms:d} ms")
-def step_vad_silence(context, ms):
-    assert context.cfg.vad.silence_ms == ms, context.cfg.vad.silence_ms

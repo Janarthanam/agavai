@@ -1,54 +1,49 @@
 # agavai architecture
 
-Runtime behavior of a voice session — invoke, pause detection, follow-up turns, cancel, and the overlay contract — is specified in [`flow.md`](flow.md). This file covers process split, model selection, and the tool allowlist.
+Runtime behavior of a voice session — invoke, end of utterance, follow-up turns, cancel, and the overlay contract — is specified in [`flow.md`](flow.md). The audio stages are in [`audio.md`](audio.md). This file covers process split, model selection, and the tool allowlist.
 
-Local voice control for Omarchy. Voxtype is the microphone. A **configurable on-device GGUF** (default: Qwen3-4B Instruct, ~2.5 GB) is the brain. Allowlisted tools are the hands. Nothing in v1 leaves the machine.
+Local voice control for Omarchy. Streaming ASR (Parakeet-Realtime-EOU-120M) is the ear. A **configurable on-device GGUF** (default: Qwen3-4B Instruct, ~2.5 GB) is the brain. Allowlisted tools are the hands. Head selection may call OpenRouter (Jev, below); everything else stays on the machine.
 
-Two voice products share one Voxtype daemon:
+Two voice products run on this machine:
 
 | Mode | Binding | Output |
 |---|---|---|
-| Dictation | F9 (push-to-talk) / Super+Ctrl+X | Types into the focused window |
-| Assistant | Super+Ctrl+M (toggle) | Tools + spoken/notification reply |
+| Dictation (Voxtype, not this repo) | F9 (push-to-talk) / Super+Ctrl+X | Types into the focused window |
+| Assistant | Super+M (Super+Ctrl+M alias) | Tools, spoken reply, overlay results |
 
-They must not run at the same time. They share the mic and the Voxtype state machine.
+They share the microphone and should not run at the same time. Agavai does not enforce that, and it never starts, stops, or cancels a Voxtype recording.
 
 ---
 
 ## System diagram
 
 ```
-                    Super+Ctrl+M
+                       Super+M
                           │
                           ▼
-                   agavai toggle
+                    agavai invoke ─────────► overlay (janar.agavai)
+                          │                  watches ui.json
+                          ▼
+           agavai listen (detached, one per session)
                           │
           ┌───────────────┴────────────────┐
-          │  voxtype record start --file=  │
-          │  $XDG_RUNTIME_DIR/agavai/   │
-          │  prompt.txt                    │
+          │  parec 16 kHz mono → Parakeet  │
+          │  worker (streaming ASR)        │
           └───────────────┬────────────────┘
-                          │ WAV (local Whisper)
-                          ▼
-                    Voxtype daemon
-                    (systemd --user voxtype)
-                          │
-                          ▼
-                    transcript file
-                          │
+                          │ end of utterance or Enter
                           ▼
                     orchestrator
-                    (agavai, one shot)
+                (in the listen process)
                           │
           ┌───────────────┼────────────────┐
           ▼               ▼                ▼
-   llama-server     tool dispatch      Piper/espeak
+   llama-server     tool dispatch      Kokoro/espeak
    :18766           allowlist          or notification
    [llm] model      omarchy/hyprctl
    from config.toml fd / grim / tesseract
 ```
 
-Typed path skips Voxtype: `agavai ask "open the browser"`.
+Typed path skips the microphone: `agavai ask "open the browser"`.
 
 ---
 
@@ -63,7 +58,7 @@ Keep **two** `llama-server` processes. They are different models and different j
 
 `agavai-llm.service` is a user unit under `graphical-session.target`, in its **own cgroup**. A leftover llama-server inside the Voxtype cgroup hangs `systemctl --user restart voxtype`.
 
-The orchestrator is **not** a daemon. Each Super+Ctrl+M stop (or `ask`) is one process: read transcript → POST `/v1/chat/completions` with `tools` → run tool results → speak.
+The orchestrator is **not** a daemon. It runs inside the listen process, one turn per committed line, until the session is dismissed; `ask` is one process per request. A turn is: committed text → POST `/v1/chat/completions` with `tools` → run tool results → speak.
 
 MCP stdio (`agavai mcp`) exposes the same allowlist for other clients. The voice loop calls tools in-process so the 4B does not need a second MCP stack.
 
@@ -124,9 +119,9 @@ The on-device GGUF never changes because of the router (below). A future “thin
 Download the default id:
 
 ```bash
-~/Projects/agavai/scripts/download-model.sh
+scripts/download-model.sh
 # or a named id from the catalog:
-~/Projects/agavai/scripts/download-model.sh qwen3-4b-instruct
+scripts/download-model.sh qwen3-4b-instruct
 ```
 
 ---
@@ -157,7 +152,10 @@ roots = ["~/Documents", "~/Downloads", "~/Projects", "~/Work"]
 max_results = 20
 
 [tts]
-prefer = "espeak"   # piper | espeak | notify
+prefer = "kokoro"   # kokoro | espeak | notify
+
+[asr]
+device = "cpu"      # gpu is used only when an NVIDIA GPU is present
 ```
 
 `agavai status` prints the resolved `model_id` and `model_path`.
@@ -232,15 +230,11 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 ## Voice I/O
 
-The assistant microphone path is [audio.md](audio.md). What follows is the earlier silence-timer capture, which the listen path no longer uses.
+**In:** streaming ASR, specified in [audio.md](audio.md). One `parec` capture feeds the Parakeet worker; end of utterance or Enter commits the line. The same samples drive the orb's level meter, which never decides a turn.
 
-**In:** Super+Ctrl+M (toggle). First press unmutes the default mic if it was muted (same idea as F9 `ptt.sh`) and opens the **bottom voice overlay** (`janar.agavai`), then starts a blocking VAD session: a parallel `parec` capture meters the mic (live `level_db`/`vad_state` in `ui.json`) and after **900 ms of silence** (`[vad] silence_ms`) the turn runs automatically — no second press. Second press force-stops and runs the turn now; during `transcribing`/`thinking` a press within 2 s of the phase change is a no-op (grace window). Meter failure falls back to the old manual mode (`vad_state: "manual"`); `[vad] enabled = false` restores push-to-toggle. Opt-in `backend = "silero"` replaces the energy gate with the pinned Silero VAD v5.1.2 model (`scripts/download-vad.sh`; missing model/runtime → energy).
+**Overlay:** the Omarchy shell plugin `janar.agavai` (`plugin/`). It starts as an orb at the bottom right and expands in place for transcripts and results. The listen process writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, partial and committed transcript, each tool start/result, assistant text), and QML `FileView` watches it. The launcher entry **Agavai** (`agavai app`) summons the same overlay; there is no second window. Layout and interaction are in [ui-design.md](ui-design.md).
 
-**Chat overlay:** a keep-loaded Omarchy overlay. Listening is a borderless orb at the bottom center of the active monitor; results grow upward on that same surface. The orchestrator writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, user transcript, each tool start/result, assistant text). QML `FileView` watches that file, so you can see the two (or more) tool calls as they happen — name, args, truncated result — then Agavai’s spoken reply. The overlay stays until dismissed or replaced.
-
-**Desktop app:** `agavai app` / launcher entry **Agavai**. GTK4 + libadwaita window that reads the same `ui.json`, with Listen, Send, Cancel, and a typed Ask box. Prefer this if the overlay does not appear. `~/.local/share/applications/agavai.desktop`.
-
-Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
+Voxtype’s waveform OSD stays off so it does not stack with the overlay.
 
 **Out:** Instant Siri-style earcon on listen, then a second cue while the LLM thinks. A background Kokoro process is started at listen/ask so the model is already loaded when the reply is ready. Final speech is Kokoro-82M on CPU (`kokoro-onnx` + onnxruntime CPU EP). eSpeak-ng is G2P and a robotic fallback. Whisper is never used for speech.
 
@@ -252,7 +246,7 @@ Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 - No `--tools all` on llama-server (that would give the inference process a shell).
 - No `bypassPermissions` coding agent in v1.
 - File search is rooted. URLs must be `http(s)`. Launch targets are an enum.
-- Omarchy plugins are unsandboxed if you add a QML overlay later; v1’s orchestrator is a CLI.
+- The QML overlay runs as an unsandboxed Omarchy plugin. The orchestrator is a CLI process.
 
 ---
 
@@ -260,12 +254,16 @@ Voxtype’s waveform OSD stays off so it does not stack with the chat HUD.
 
 | Path | Role |
 |---|---|
+| `src/agavai/__main__.py` | CLI and listen session |
 | `src/agavai/config.py` | TOML + builtin catalog + model id |
+| `src/agavai/asr.py` | Microphone capture and streaming ASR client |
+| `src/agavai/parakeet_worker.py` | Recognizer, run in the ASR venv |
 | `src/agavai/orchestrator.py` | Tool loop |
 | `src/agavai/llm.py` | llama-server HTTP client |
 | `src/agavai/tools.py` | Allowlist |
-| `src/agavai/voxtype.py` | `--file` record/stop |
+| `src/agavai/ui.py` | `ui.json` snapshot |
 | `src/agavai/mcp_server.py` | MCP stdio |
+| `plugin/` | Overlay QML |
 | `scripts/agavai-llm` | Exec llama-server from resolved config |
 | `systemd/agavai-llm.service` | User unit |
 | `share/mcp.json` | Optional MCP client snippet |
@@ -287,7 +285,7 @@ Voice: Super+M, speak — Agavai sends when the recognizer emits end of utteranc
 Fresh machine:
 
 ```bash
-~/Projects/agavai/scripts/download-model.sh
-~/Projects/agavai/scripts/install.sh
+scripts/download-model.sh
+scripts/install.sh
 systemctl --user enable --now agavai-llm
 ```

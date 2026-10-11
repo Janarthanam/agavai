@@ -5,7 +5,6 @@ import os
 import signal
 import subprocess
 import sys
-import time
 import traceback
 from pathlib import Path
 
@@ -19,14 +18,11 @@ from agavai.orchestrator import control_command, run_turn
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
-from agavai.voxtype import record_cancel, record_start, record_stop, wait_for_prompt
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agavai", description="Local Omarchy voice assistant")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("toggle", help="Start or stop a Voxtype-backed request")
-    sub.add_parser("start", help="Start listening")
     sub.add_parser("listen", help="Listen and submit when the utterance ends")
     sub.add_parser("invoke", help="Open the single voice widget and start automatic listening")
     sub.add_parser("stop", help="Stop listening and run the agent")
@@ -106,33 +102,16 @@ def main(argv: list[str] | None = None) -> int:
         if _signal_listener(cfg):
             return 0
         _cancel_path(cfg).unlink(missing_ok=True)
-        record_cancel()
         finish(cfg)
         write_state(cfg, "idle")
         return 0
-    if args.cmd == "start":
-        return _start(cfg)
     if args.cmd == "listen":
-        cfg.vad.enabled = True
-        return _start(cfg)
+        return listen_session(cfg, ChatUi(cfg))
     if args.cmd == "stop":
         if _signal_listener(cfg):
             return 0
-        return _stop(cfg)
-    if args.cmd == "toggle":
-        state = read_state(cfg)
-        phase = _ui_snapshot(cfg).get("phase") or state
-        if phase == "listening":
-            return _stop(cfg)
-        if phase in {"transcribing", "thinking", "speaking"}:
-            record_cancel()
-            finish(cfg)
-            ChatUi(cfg).idle()
-            write_state(cfg, "idle")
-            return 0
-        if cfg.vad.enabled and start_session(cfg):
-            return 0
-        return _start(cfg)
+        print("agavai: no listener is running", file=sys.stderr)
+        return 1
     return 2
 
 
@@ -169,16 +148,8 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
     return 0
 
 
-def _start(cfg) -> int:
-    if not cfg.vad.enabled:
-        return _start_manual(cfg)
-    return listen_session(cfg, ChatUi(cfg))
-
-
 def _pid_marker(pid: int) -> str:
     try:
-        for field in Path(f"/proc/{pid}/stat").read_text().split(" ", 22):
-            pass
         return Path(f"/proc/{pid}/stat").read_text().split(" ", 22)[21]
     except (OSError, IndexError):
         return ""
@@ -219,7 +190,7 @@ def _publish_pid(cfg, pid: int) -> None:
     _pid_path(cfg).write_text(f"{pid} {_pid_marker(pid)}")
 
 
-def start_session(cfg, *, automatic: bool = False) -> bool:
+def start_session(cfg) -> bool:
     """Shared detached-start guard: O_EXCL lock → existence check → publish.
 
     Returns True when this caller spawned the listener; False when a session
@@ -248,7 +219,7 @@ def start_session(cfg, *, automatic: bool = False) -> bool:
         if read_listener(cfg) is not None:
             return False
         proc = subprocess.Popen(
-            [sys.executable, "-m", "agavai", "listen" if automatic else "start"],
+            [sys.executable, "-m", "agavai", "listen"],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -266,15 +237,6 @@ def _signal_listener(cfg) -> bool:
         return False
     os.kill(pid, signal.SIGTERM)
     return True
-
-
-def _ui_snapshot(cfg) -> dict:
-    import json
-
-    try:
-        return json.loads((cfg.runtime_dir / "ui.json").read_text())
-    except (OSError, ValueError):
-        return {}
 
 
 def listen_session(cfg, ui: ChatUi) -> int:
@@ -387,7 +349,7 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
     hypothesis = ""
     try:
         for kind, text in stream.events(
-            on_level=lambda db: ui.level(db, "off", "off"),
+            on_level=ui.level,
             should_stop=stop_requested,
         ):
             if kind == "interim" and text:
@@ -429,7 +391,7 @@ def _run_stop_body(
     continue_conversation: bool = False,
     text: str = "",
 ) -> str | None:
-    """Run one committed line. The text is already final; there is no transcribing wait."""
+    """Run one committed line. The text is already final."""
 
     def aborted() -> bool:
         return stop_requested() if callable(stop_requested) else stop_requested
@@ -467,61 +429,6 @@ def _run_stop_body(
     if result in {"cancelled", "silent"}:
         return None if result == "cancelled" else reply
     return reply
-
-
-def _start_manual(cfg) -> int:
-    ui = ChatUi(cfg)
-    try:
-        prepare_listen(cfg)
-        ui.listening()
-        cue_listen(cfg)
-        record_start(cfg)
-    except Exception as exc:
-        finish(cfg)
-        ui.error(str(exc))
-        write_state(cfg, "error")
-        print(exc, file=sys.stderr)
-        return 1
-    write_state(cfg, "listening")
-    return 0
-
-
-def _stop(cfg) -> int:
-    ui = ChatUi(cfg)
-    try:
-        record_stop()
-    except Exception as exc:
-        finish(cfg)
-        ui.error(str(exc))
-        write_state(cfg, "error")
-        print(exc, file=sys.stderr)
-        return 1
-    hide_listen(cfg)
-    cue_think(cfg)
-    write_state(cfg, "transcribing")
-    ui.transcribing()
-    text = wait_for_prompt(cfg.prompt_file)
-    if not text:
-        finish(cfg)
-        ui.error("I did not hear anything.")
-        ui.idle()
-        write_state(cfg, "idle")
-        speak("I did not hear anything.", cfg)
-        return 1
-    write_state(cfg, "thinking")
-    try:
-        reply = run_turn(text, cfg, ui)
-    except Exception:
-        traceback.print_exc()
-        reply = "The local agent hit an error."
-        ui.error(reply)
-    write_state(cfg, "speaking")
-    finish(cfg)
-    speak(reply, cfg)
-    ui.idle()
-    write_state(cfg, "idle")
-    print(reply)
-    return 0
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The assistant listen path follows this spec: streaming ASR, then end of utterance, then the existing tool loop. Visual layout stays in [ui-design.md](ui-design.md). Model selection and the full config key list stay in [architecture.md](architecture.md) and [share/config.example.toml](share/config.example.toml).
 
-This file wins on runtime behavior where those documents disagree. [architecture.md](architecture.md) still describes a GTK window, a Super+Ctrl+M toggle, and a two-second grace window. [README.md](README.md) says v1 talks to no remote model. None of those three claims match the code. The surface is the Quickshell overlay. Super+M starts a session that stays listening. Head selection may call OpenRouter.
+This file wins on runtime behavior where those documents disagree. [README.md](../README.md) says v1 talks to no remote model. That does not match the code: head selection may call OpenRouter.
 
 ## Requirements
 
@@ -76,7 +76,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 ### Decisions
 
-**One overlay, not a second window.** [ui-design.md](ui-design.md) rejects a GTK window: the launcher is an invocation of the same Quickshell layer. A separate window would still work if the layer failed to appear, which is what [architecture.md](architecture.md) still describes, and it would split focus, results, and cancel across two surfaces. The choice stands only while the Omarchy shell can summon `janar.agavai`. If summon fails, ListenSession is not started.
+**One overlay, not a second window.** [ui-design.md](ui-design.md) rejects a GTK window: the launcher is an invocation of the same Quickshell layer. A separate window would still work if the layer failed to appear, but it would split focus, results, and cancel across two surfaces. The choice stands only while the Omarchy shell can summon `janar.agavai`. If summon fails, ListenSession is not started.
 
 **One process per session, not a resident agent.** ListenSession exits when the user dismisses it, capture fails, or the mic stream ends. A daemon could keep the model transcript across dismissals. It would also hold the microphone and race F9. The transcript lives in that process only. Assumption: a follow-up happens before dismiss. After exit, the next invoke is a blank session.
 
@@ -122,7 +122,7 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
 
-`agavai toggle` while listening does not signal ListenSession. It runs stop in the calling process. That can race the detached listener. `agavai stop` and `agavai cancel` do signal the published pid. Product entry points use invoke, stop, and cancel, not toggle. Stop during listening commits the current hypothesis. Cancel drops it.
+`agavai stop` and `agavai cancel` signal the published pid. Stop during listening commits the current hypothesis. Cancel drops it. With no live listener, stop exits 1 and cancel resets the snapshot and state to idle. Neither calls Voxtype.
 
 There is no retry of a llama HTTP error beyond the one head-attach pass. There is no queue. There is no lock that refuses to start while F9 dictation holds the microphone.
 
@@ -154,7 +154,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 
 ### Streaming ASR
 
-Transport in and the recognizer. The stage is specified in [audio.md](audio.md). The running timer and file transcript live in [src/agavai/meter.py](../src/agavai/meter.py) and [src/agavai/voxtype.py](../src/agavai/voxtype.py) until this replaces them. F9 keeps Voxtype.
+Transport in and the recognizer. The stage is specified in [audio.md](audio.md). F9 keeps Voxtype.
 
 - **Deploy.** In the listen process. One capture of the default source, 16 kHz, mono, 16-bit. The model is Parakeet-Realtime-EOU-120M, with a dynamic cache-aware encoder and full-precision decoder installed by `scripts/download-asr.sh`. Not a separate service.
 - **Lifecycle.** Each chunk updates a cache-aware hypothesis. Interim text is a partial. End of utterance clears that stream’s cache after the line is committed. End of boundary updates the partial and does not commit.
@@ -363,14 +363,15 @@ Rejected options named by the sources below, and why this design did not take th
 
 | Option | Where it is named | Why it is not the voice path |
 |---|---|---|
-| GTK window | [architecture.md](architecture.md), rejected in [ui-design.md](ui-design.md) | Second surface. The launcher summons the overlay instead. |
+| GTK window | Rejected in [ui-design.md](ui-design.md) | Second surface. The launcher summons the overlay instead. |
+| One speech-and-tools model | Earlier decision record, `docs/v2.md` in git history | Does not fit the 8 GB RX 590. Qwen3-Omni-30B-A3B needs about 79 GB at BF16 and about 19 GB at a third-party Q4 estimate. Qwen2.5-Omni GGUF has no audio output in upstream llama.cpp and no tool contract this loop uses. Ultravox, Moshi, GLM-4-Voice, and Mini-Omni still need an end-of-speech detector or do not call tools. The voice path stays a cascade: streaming ASR, the Qwen tool loop, Kokoro. |
 | Sanitizer model on port 18765 | [architecture.md](architecture.md) | Different job and a different cgroup. Reusing it hangs a Voxtype restart. |
 | All tool schemas on the 4B | [architecture.md](architecture.md) | Too many tokens for the useful budget. Heads cut that to at most eight. |
 | MCP inside the turn | [architecture.md](architecture.md), [src/agavai/mcp_server.py](../src/agavai/mcp_server.py) | Same allowlist, extra hop. MCP remains a side door. |
 | Streaming recognizer | [audio.md](audio.md) | Chosen. Parakeet-Realtime-EOU-120M. Partials are not turns. |
-| Silence-timer endpointer | [src/agavai/meter.py](../src/agavai/meter.py) | Replaced on the assistant path. It guessed the end of a sentence. |
-| Voxtype file transcript | [src/agavai/voxtype.py](../src/agavai/voxtype.py) | Stays on F9 dictation. The assistant does not use it. |
+| Silence-timer endpointer | [audio.md](audio.md) | Removed. It guessed the end of a sentence. |
+| Voxtype file transcript | [audio.md](audio.md) | Removed from the assistant. Stays on F9 dictation. |
 | eSpeak or a notification as the voice | [src/agavai/tts.py](../src/agavai/tts.py) | Fallbacks when Kokoro cannot play. Kokoro is preferred. |
 | Keyword-only routing | [src/agavai/router.py](../src/agavai/router.py) | Available as `backend = "keyword"` and as the fallback. Default is Jev. |
 
-Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/orchestrator.py](../src/agavai/orchestrator.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm). The running timer and file transcript, which this spec replaces, are [src/agavai/meter.py](../src/agavai/meter.py) and [src/agavai/voxtype.py](../src/agavai/voxtype.py).
+Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/orchestrator.py](../src/agavai/orchestrator.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm).

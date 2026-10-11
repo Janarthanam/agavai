@@ -8,8 +8,8 @@ arrow contracts.
 Source baseline: `48f49b3`, inspected 2026-10-09. This describes the implemented
 assistant, not the installed desktop or future evaluation capabilities.
 [flow.md](../flow.md) governs runtime behavior; [audio.md](../audio.md) and
-[ui-design.md](../ui-design.md) govern recognition and presentation. Their current
-contracts supersede older Voxtype/GTK descriptions in architecture.md.
+[ui-design.md](../ui-design.md) govern recognition and presentation.
+[architecture.md](../architecture.md) covers process split and model selection.
 
 ## Requirements
 
@@ -423,10 +423,9 @@ Sources actually used:
   [native UI](../ui-design.md), [config example](../../share/config.example.toml).
 - Implementations linked in Modules; [setup](../../scripts/setup.sh),
   [installer](../../scripts/install.sh), [installation guide](../install-bundle.md).
-- [v2 decision record](../v2.md): historical cascade versus single speech model
-  evaluation. This document does not refresh external model comparisons.
-- [Earlier architecture](../architecture.md): model selection/cgroup rationale;
-  legacy runtime sections are superseded.
+- [Rejected options in flow.md](../flow.md): historical cascade versus single
+  speech model evaluation. This document does not refresh external model comparisons.
+- [Architecture](../architecture.md): model selection and cgroup rationale.
 - [Behavior/model replay guidance](../../tests/README.md),
   [context task](../../tasks/conversation-context.md).
 

@@ -11,7 +11,7 @@ def run() -> int:
     if summon_overlay():
         # A leftover "listening" state with no process must not block a new session.
         if read_listener(cfg) is None:
-            start_session(cfg, automatic=True)
+            start_session(cfg)
         return 0
     print("Could not open Agavai. Ensure the Omarchy shell and janar.agavai plugin are running.", file=sys.stderr)
     return 1

@@ -1,6 +1,6 @@
 {
   "name": "agavai",
-  "description": "Local Omarchy voice assistant. Voxtype ears, Qwen3-4B brain, MCP desktop tools.",
+  "description": "Local Omarchy voice assistant. Streaming ASR ears, Qwen3-4B brain, MCP desktop tools.",
   "url": "stdio://agavai",
   "version": "0.1.0",
   "capabilities": { "streaming": false },
