@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 Rectangle {
     id: root
@@ -11,9 +12,9 @@ Rectangle {
     implicitWidth: label.implicitWidth + Style.space(20)
     implicitHeight: Math.max(Style.space(32), label.implicitHeight + Style.space(12))
     radius: height / 2
-    color: pointer.containsMouse ? Util.alpha(Color.accent, 0.18) : quiet ? "transparent" : Util.alpha(Color.foreground, 0.06)
+    color: pointer.containsMouse ? Util.alpha(Commons.Color.accent, 0.18) : quiet ? "transparent" : Util.alpha(Commons.Color.foreground, 0.06)
     border.width: activeFocus ? 2 : 0
-    border.color: Color.accent
+    border.color: Commons.Color.accent
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName
@@ -25,7 +26,7 @@ Rectangle {
         anchors.centerIn: parent
         text: root.text
         textFormat: Text.PlainText
-        color: root.enabled ? Color.foreground : Util.alpha(Color.foreground, 0.4)
+        color: root.enabled ? Commons.Color.foreground : Util.alpha(Commons.Color.foreground, 0.4)
         font.family: Style.font.family
         font.pixelSize: root.textSize
     }

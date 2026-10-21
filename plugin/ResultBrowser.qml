@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtMultimedia
 import qs.Commons
+import qs.Commons as Commons
 
 ColumnLayout {
     id: root
@@ -18,7 +19,7 @@ ColumnLayout {
             Layout.fillWidth: true
             text: root.display.title || "Results"
             textFormat: Text.PlainText
-            color: Color.foreground
+            color: Commons.Color.foreground
             font.bold: true
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -26,14 +27,14 @@ ColumnLayout {
         Text {
             text: root.items.length + " items"
             visible: root.display.kind !== "answer"
-            color: Util.alpha(Color.foreground, 0.62)
+            color: Util.alpha(Commons.Color.foreground, 0.62)
             font.pixelSize: Style.font.caption
         }
     }
     Text {
         visible: root.display.kind !== "answer" && root.items.length === 0
         text: "No matches found. Try a different request."
-        color: Color.foreground
+        color: Commons.Color.foreground
         wrapMode: Text.Wrap
         Layout.fillWidth: true
     }
@@ -58,9 +59,9 @@ ColumnLayout {
                 width: list.width
                 height: Math.max(Style.space(62), row.implicitHeight + Style.space(16))
                 radius: Style.space(8)
-                color: index === root.selected ? Util.alpha(Color.accent, 0.14) : "transparent"
+                color: index === root.selected ? Util.alpha(Commons.Color.accent, 0.14) : "transparent"
                 border.width: index === root.selected ? 1 : 0
-                border.color: Util.alpha(Color.accent, 0.4)
+                border.color: Util.alpha(Commons.Color.accent, 0.4)
                 RowLayout {
                     id: row
                     anchors {
@@ -72,7 +73,7 @@ ColumnLayout {
                     Text {
                         text: modelData.extension || "•"
                         textFormat: Text.PlainText
-                        color: Color.accent
+                        color: Commons.Color.accent
                         font.pixelSize: Style.font.caption
                         Layout.preferredWidth: Style.space(30)
                         elide: Text.ElideRight
@@ -83,7 +84,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             text: modelData.title || "Item"
                             textFormat: Text.PlainText
-                            color: Color.foreground
+                            color: Commons.Color.foreground
                             font.family: Style.font.family
                             font.pixelSize: Style.font.body
                             elide: Text.ElideRight
@@ -92,7 +93,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             text: modelData.subtitle || ""
                             textFormat: Text.PlainText
-                            color: Util.alpha(Color.foreground, 0.62)
+                            color: Util.alpha(Commons.Color.foreground, 0.62)
                             font.pixelSize: Style.font.caption
                             elide: Text.ElideMiddle
                         }
@@ -125,7 +126,7 @@ ColumnLayout {
             Text {
                 visible: image.visible && image.status === Image.Error
                 text: "Image preview unavailable"
-                color: Color.foreground
+                color: Commons.Color.foreground
             }
             Video {
                 id: video
@@ -150,7 +151,7 @@ ColumnLayout {
                 }
                 Text {
                     text: video.error !== MediaPlayer.NoError ? "Playback unavailable" : Math.floor(video.position / 1000) + " / " + Math.floor(video.duration / 1000) + " s"
-                    color: Color.foreground
+                    color: Commons.Color.foreground
                     font.pixelSize: Style.font.caption
                 }
             }
@@ -167,7 +168,7 @@ ColumnLayout {
                     selectByMouse: true
                     textFormat: TextEdit.RichText
                     wrapMode: TextEdit.Wrap
-                    color: Color.foreground
+                    color: Commons.Color.foreground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     text: root.display.kind === "answer" ? root.display.html || "" : root.current.preview_html || "<b>" + String(root.current.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</b><p>" + String(root.current.subtitle || "").replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</p>"

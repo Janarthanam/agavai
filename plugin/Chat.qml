@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Item {
@@ -36,9 +37,9 @@ Item {
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
     readonly property var completion: snapshot.completion || null
     readonly property real strength: listening && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
-    readonly property color ink: Color.foreground
-    readonly property color inkMuted: Util.alpha(Color.foreground, 0.62)
-    readonly property color statusColor: Color.accent
+    readonly property color ink: Commons.Color.foreground
+    readonly property color inkMuted: Util.alpha(Commons.Color.foreground, 0.62)
+    readonly property color statusColor: Commons.Color.accent
     readonly property bool showsActions: !listening && (expanded || phase === "idle" || phase === "error")
     readonly property string placement: String(snapshot.placement || "bottom-right")
     readonly property bool atTop: placement.startsWith("top")
@@ -223,7 +224,7 @@ Item {
                 visible: !root.compact
                 anchors.fill: parent
                 radius: Style.space(28)
-                color: Util.alpha(Color.background, 0.94)
+                color: Util.alpha(Commons.Color.background, 0.94)
             }
 
             FocusScope {
@@ -293,7 +294,7 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Style.space(40)
                                 radius: Style.space(20)
-                                color: Util.alpha(Color.foreground, 0.06)
+                                color: Util.alpha(Commons.Color.foreground, 0.06)
                                 TextInput {
                                     id: typedInput
                                     anchors.fill: parent
