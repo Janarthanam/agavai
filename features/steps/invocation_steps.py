@@ -130,10 +130,11 @@ def session(context, sequences, stop_body=None):
     def default_stop(*_args, **_kwargs):
         return "Done"
 
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body or default_stop) as submit:
+    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start") as chime, patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body or default_stop) as submit:
         context.listen_result = listen_session(context.cfg, context.ui)
         context.submit_count = submit.call_count
         context.submit_calls = submit.call_args_list
+        context.start_chimes = chime.call_count
 
 
 @when("an automatic session hears speech and an end of utterance")
@@ -152,9 +153,18 @@ def missing(context):
             return None
 
     scripted = _Down()
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", return_value="Done") as submit:
+    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", return_value="Done") as submit:
         context.listen_result = listen_session(context.cfg, context.ui)
         context.submit_count = submit.call_count
+
+
+@when("an automatic session cannot start the recognizer")
+def recognizer_down(context):
+    down = AsrError("Streaming ASR model is not installed. Run scripts/download-asr.sh.")
+    with patch("agavai.__main__.cue_start") as chime, patch("agavai.__main__._publish_pid"), patch("agavai.__main__.open_stream", side_effect=down), patch("agavai.__main__._run_stop_body") as submit:
+        context.listen_result = listen_session(context.cfg, context.ui)
+        context.submit_count = submit.call_count
+        context.start_chimes = chime.call_count
 
 
 @when("an automatic session hears only silence")
@@ -170,6 +180,21 @@ def interim(context):
 @when("an automatic session hears an empty end of utterance")
 def empty_eou(context):
     session(context, [[("eou", "")], []])
+
+
+@when("an automatic session hears noise, a request, and a follow-up")
+def noise_then_turns(context):
+    session(context, [[("eou", "")], [("eou", "find the notes")], [("eou", "open the first one")], []])
+
+
+@then("the start chime played once")
+def chimed_once(context):
+    assert context.start_chimes == 1, context.start_chimes
+
+
+@then("the start chime did not play")
+def no_chime(context):
+    assert context.start_chimes == 0, context.start_chimes
 
 
 @when("an automatic session hears an end of boundary")
@@ -227,7 +252,7 @@ def _choice_session(context, sequences, replies):
         return reply
 
     scripted = _Scripted(sequences, on_open=opened)
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body):
+    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body):
         context.listen_result = listen_session(context.cfg, context.ui)
         context.submit_count = len(context.continued)
 

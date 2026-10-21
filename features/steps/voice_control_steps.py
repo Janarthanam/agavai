@@ -196,7 +196,7 @@ def voice_loop(context):
 
     stream = Mock()
     stream.events.side_effect = events
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.hide_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_think") as think, patch("agavai.__main__._publish_pid"), patch("agavai.__main__.open_stream", return_value=stream), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="kokoro") as playback:
+    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.hide_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.cue_think") as think, patch("agavai.__main__._publish_pid"), patch("agavai.__main__.open_stream", return_value=stream), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="kokoro") as playback:
         context.listen_result = listen_session(context.cfg, context.ui)
         context.control_playback = playback.call_args_list
         context.control_think_count = think.call_count

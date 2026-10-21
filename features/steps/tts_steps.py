@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 
 from agavai.config import Config
-from agavai.tts import cue_listen, cue_think, speak
+from agavai.tts import cue_listen, cue_start, cue_think, speak
 
 
 def _cfg(tmp: Path) -> Config:
@@ -90,6 +90,12 @@ def step_not_engine(context, name):
 @when("I cue listen")
 def step_cue_listen(context):
     cue_listen(context.cfg)
+
+
+@when("I cue the session start")
+def step_cue_start(context):
+    context.cfg.runtime_dir = context.tmp / "runtime"
+    cue_start(context.cfg)
 
 
 @when("I cue think")

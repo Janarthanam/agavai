@@ -16,7 +16,7 @@ from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.orchestrator import control_command, run_turn
 from agavai.state import read_state, write_state
-from agavai.tts import cue_listen, cue_think, speak
+from agavai.tts import cue_listen, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
 
 
@@ -268,6 +268,7 @@ def listen_session(cfg, ui: ChatUi) -> int:
             write_state(cfg, "error")
             print(exc, file=sys.stderr)
             return 1
+        cue_start(cfg)
         while True:
             heard, text = _await_utterance(
                 cfg,

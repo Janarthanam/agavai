@@ -60,6 +60,19 @@ def cue_listen(cfg: Config) -> None:
     ensure_tts_server(cfg)
 
 
+def cue_start(cfg: Config) -> None:
+    """One rising chime as a session opens the microphone.
+
+    Only the start of a session chimes: a cue on every reopen between turns
+    was heard as constant beeping.
+    """
+    chime = cfg.runtime_dir / "start-chime.wav"
+    if not chime.is_file():
+        cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
+        _write_tones(chime, ((587, 0.07), (880, 0.1)))
+    _play_wav(chime, wait=False)
+
+
 def cue_think(cfg: Config) -> None:
     """Immediate 'working on it' while the LLM runs. Prefers a pre-rendered Kokoro clip."""
     ack = cfg.runtime_dir / "ack-on-it.wav"

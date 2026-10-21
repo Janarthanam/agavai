@@ -58,6 +58,18 @@ Feature: Invoke one voice widget and speak without a second shortcut
     Then the voice request is not submitted
     And the snapshot phase should be "error"
 
+  Scenario: A recognizer that cannot start shows an error without the start chime
+    Given a chat UI in a temp runtime dir
+    When an automatic session cannot start the recognizer
+    Then the voice request is not submitted
+    And the snapshot phase should be "error"
+    And the start chime did not play
+
+  Scenario: A session chimes once as it starts listening, not when the microphone reopens
+    Given a chat UI in a temp runtime dir
+    When an automatic session hears noise, a request, and a follow-up
+    Then the start chime played once
+
   Scenario: Silence keeps the session listening and does not send noise to the model
     Given a chat UI in a temp runtime dir
     When an automatic session hears only silence

@@ -25,6 +25,11 @@ Feature: Talk-back with Kokoro-82M
     And I cue listen
     Then no audio should be played
 
+  Scenario: Session start plays a chime
+    Given a kokoro-ready temp config
+    When I cue the session start
+    Then an earcon should be played
+
   Scenario: Think plays an instant earcon
     Given a kokoro-ready temp config
     When I cue think
