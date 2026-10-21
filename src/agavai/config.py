@@ -151,6 +151,16 @@ class FilesConfig:
     max_results: int = 20
 
 
+PLACEMENTS = ("bottom-right", "bottom-left", "top-right", "top-left")
+
+
+@dataclass
+class OverlayConfig:
+    """Monitor corner that holds the orb; the expanded view grows from it."""
+
+    placement: str = "bottom-right"
+
+
 @dataclass
 class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
@@ -158,6 +168,7 @@ class Config:
     tts: TtsConfig = field(default_factory=TtsConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
+    overlay: OverlayConfig = field(default_factory=OverlayConfig)
 
     @property
     def tts_prefer(self) -> str:
@@ -312,6 +323,12 @@ def load_config(path: Path | None = None) -> Config:
         cfg.asr.model_dir = _expand(str(asr["model_dir"]))
     if "venv" in asr:
         cfg.asr.venv = _expand(str(asr["venv"]))
+    overlay = data.get("overlay") or {}
+    if "placement" in overlay:
+        placement = str(overlay["placement"])
+        if placement not in PLACEMENTS:
+            raise ValueError(f"unknown [overlay] placement {placement!r}. known: {', '.join(PLACEMENTS)}")
+        cfg.overlay.placement = placement
     return cfg
 
 

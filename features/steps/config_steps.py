@@ -195,3 +195,23 @@ def step_asr(context, device):
 @then('the asr device should be "{device}"')
 def step_asr_device(context, device):
     assert context.cfg.asr.device == device, context.cfg.asr.device
+
+
+@given('a config with overlay placement "{placement}"')
+def step_overlay(context, placement):
+    _write(context, f'[overlay]\nplacement = "{placement}"\n')
+
+
+@then('the overlay placement should be "{placement}"')
+def step_overlay_placement(context, placement):
+    assert context.cfg.overlay.placement == placement, context.cfg.overlay.placement
+
+
+@then('loading the config fails naming "{allowed}"')
+def step_load_fails(context, allowed):
+    try:
+        load_config(context.config_path)
+    except ValueError as exc:
+        assert allowed in str(exc), exc
+        return
+    raise AssertionError("expected ValueError")

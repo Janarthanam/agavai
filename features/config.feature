@@ -58,3 +58,17 @@ Feature: Configurable on-device model
     Given a config with retired vad and voxtype sections and asr device "gpu"
     When I load the config
     Then the asr device should be "gpu"
+
+  Scenario: The overlay sits at the bottom right by default
+    Given an empty agavai config
+    When I load the config
+    Then the overlay placement should be "bottom-right"
+
+  Scenario: The overlay corner is configurable
+    Given a config with overlay placement "top-left"
+    When I load the config
+    Then the overlay placement should be "top-left"
+
+  Scenario: An unknown overlay corner is rejected with the allowed corners
+    Given a config with overlay placement "middle"
+    Then loading the config fails naming "bottom-right, bottom-left, top-right, top-left"

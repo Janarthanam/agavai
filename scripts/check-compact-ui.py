@@ -24,4 +24,4 @@ with tempfile.TemporaryDirectory(prefix='agavai-compact-') as directory:
     output = result.stdout + result.stderr
     if result.returncode or 'COMPACT_UI_PASS' not in output or 'COMPACT_UI_FAIL' in output:
         raise SystemExit(output)
-    print('Compact native UI: focus, geometry, snapshots, minimize, and dismissal passed.')
+    print('Compact native UI: focus, corner geometry for every placement, fixed orb, snapshots, minimize, and dismissal passed.')

@@ -39,6 +39,11 @@ Item {
     readonly property color ink: Color.foreground
     readonly property color inkMuted: Util.alpha(Color.foreground, 0.62)
     readonly property color statusColor: Color.accent
+    readonly property bool showsActions: !listening && (expanded || phase === "idle" || phase === "error")
+    readonly property string placement: String(snapshot.placement || "bottom-right")
+    readonly property bool atTop: placement.startsWith("top")
+    readonly property bool atRight: placement.endsWith("right")
+    readonly property int textTowardOrb: atRight ? Text.AlignRight : Text.AlignLeft
     property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ("/run/user/" + Quickshell.env("UID"))
 
     function chooseScreen() {
@@ -203,15 +208,16 @@ Item {
             id: stage
             objectName: "agavaiStage"
             readonly property int edgeMargin: Style.space(28)
+            readonly property int orbSize: Style.space(80)
             readonly property int sheetWidth: Math.max(1, Math.min(Style.space(680), panel.width - edgeMargin * 2))
             readonly property int voiceWidth: Math.max(1, Math.min(Style.space(440), panel.width - edgeMargin * 2))
-            width: root.compact ? Style.space(80) : root.expanded ? sheetWidth : voiceWidth
             readonly property int inset: Style.space(18)
-            height: root.compact ? Style.space(80) : Math.min(Math.max(col.implicitHeight + inset * 2, Style.space(220)), Math.max(Style.space(280), panel.height - Style.space(40)))
+            width: root.compact ? orbSize : root.expanded ? sheetWidth : voiceWidth
+            height: root.compact ? orbSize : Math.min(Math.max(col.implicitHeight + inset * 2, orbSize), panel.height - edgeMargin * 2)
             clip: true
-            x: parent.width - width - edgeMargin
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: edgeMargin
+            // The orb's corner is fixed, so expanding grows the sheet away from it.
+            x: root.atRight ? parent.width - width - edgeMargin : edgeMargin
+            y: root.atTop ? edgeMargin : parent.height - height - edgeMargin
 
             Rectangle {
                 visible: !root.compact
@@ -241,239 +247,250 @@ Item {
                         event.accepted = true;
                     }
                 }
-                ColumnLayout {
+                // The voice row sits against the orb; results and actions are on its far side.
+                GridLayout {
                     id: col
+                    columns: 1
                     width: Math.max(1, parent.width - stage.inset * 2)
                     x: stage.inset
-                    y: Math.max(stage.inset, parent.height - implicitHeight - stage.inset)
-                    spacing: Style.space(12)
+                    y: root.atTop ? stage.inset : parent.height - implicitHeight - stage.inset
+                    rowSpacing: Style.space(12)
 
-                    Item {
+                    ColumnLayout {
+                        Layout.row: root.atTop ? 1 : 0
+                        Layout.column: 0
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(headerActions.implicitHeight, phaseText.implicitHeight)
+                        visible: !!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool
+                        spacing: Style.space(12)
+
+                        ResultBrowser {
+                            visible: !!root.display
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(Style.space(320), Math.max(Style.space(120), panel.height * 0.42))
+                            display: root.display || ({})
+                            selected: root.selected
+                            onSelectRequested: index => {
+                                root.selected = index;
+                                keyTarget.forceActiveFocus();
+                            }
+                            onOpenRequested: root.openSelected()
+                        }
                         Text {
-                            id: phaseText
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: Math.max(1, parent.width - headerActions.width * 2 - Style.space(12))
-                            horizontalAlignment: Text.AlignHCenter
-                            text: root.snapshot.error ? "Something went wrong" : root.phase === "idle" && root.expanded ? "Here’s what I found" : root.phaseLabel
+                            visible: root.actionError !== ""
+                            Layout.fillWidth: true
+                            text: root.actionError
                             textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            horizontalAlignment: Text.AlignHCenter
                             color: root.statusColor
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.caption
+                        }
+                        RowLayout {
+                            visible: root.typing
+                            Layout.fillWidth: true
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Style.space(40)
+                                radius: Style.space(20)
+                                color: Util.alpha(Color.foreground, 0.06)
+                                TextInput {
+                                    id: typedInput
+                                    anchors.fill: parent
+                                    anchors.margins: Style.space(10)
+                                    color: root.ink
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.body
+                                    clip: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    selectByMouse: true
+                                    onAccepted: root.ask()
+                                }
+                                Text {
+                                    visible: typedInput.text === ""
+                                    anchors.fill: typedInput
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: "Type a request…"
+                                    color: root.inkMuted
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.body
+                                }
+                            }
+                            NativeButton {
+                                text: "Ask"
+                                enabled: typedInput.text.trim() !== "" && !askProc.running
+                                onClicked: root.ask()
+                            }
+                        }
+                        RowLayout {
+                            visible: root.showsActions
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Style.space(4)
+                            NativeButton {
+                                quiet: true
+                                visible: root.phase === "idle" || root.phase === "error"
+                                text: root.typing ? "Voice" : "Type instead"
+                                onClicked: {
+                                    root.typing = !root.typing;
+                                    if (root.typing)
+                                        Qt.callLater(function () {
+                                            typedInput.forceActiveFocus();
+                                        });
+                                }
+                            }
+                            NativeButton {
+                                quiet: true
+                                visible: !root.listening && root.phase !== "thinking" && root.phase !== "speaking"
+                                text: root.transcript ? "Ask again" : "Listen"
+                                onClicked: root.start()
+                            }
+                            NativeButton {
+                                quiet: true
+                                visible: !!root.selectedItem.openable
+                                text: "Open"
+                                onClicked: root.openSelected()
+                            }
+                        }
+                        Text {
+                            visible: !!root.latestTool
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            text: root.latestTool ? root.latestTool.name.replace(/_/g, " ") : ""
+                            textFormat: Text.PlainText
+                            color: root.inkMuted
                             font.family: Style.font.family
                             font.pixelSize: Style.font.caption
                             elide: Text.ElideRight
                         }
-                        Row {
-                            id: headerActions
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Style.space(4)
-                            NativeButton {
-                                objectName: "agavaiMinimize"
-                                quiet: true
-                                text: "−"
-                                accessibleName: "Minimize assistant"
-                                onClicked: root.compact = true
-                            }
-                            NativeButton {
-                                quiet: true
-                                text: "×"
-                                accessibleName: "Dismiss assistant"
-                                onClicked: root.dismiss()
-                            }
-                        }
                     }
-                    ResultBrowser {
-                        visible: !!root.display
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.min(Style.space(320), Math.max(Style.space(120), panel.height * 0.42))
-                        display: root.display || ({})
-                        selected: root.selected
-                        onSelectRequested: index => {
-                            root.selected = index;
-                            keyTarget.forceActiveFocus();
-                        }
-                        onOpenRequested: root.openSelected()
-                    }
-                    Text {
-                        visible: root.actionError !== ""
-                        Layout.fillWidth: true
-                        text: root.actionError
-                        textFormat: Text.PlainText
-                        wrapMode: Text.Wrap
-                        horizontalAlignment: Text.AlignHCenter
-                        color: root.statusColor
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                    }
+
                     RowLayout {
-                        visible: root.typing
+                        Layout.row: root.atTop ? 0 : 1
+                        Layout.column: 0
                         Layout.fillWidth: true
-                        Rectangle {
+                        layoutDirection: root.atRight ? Qt.LeftToRight : Qt.RightToLeft
+                        spacing: Style.space(12)
+
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: Style.space(40)
-                            radius: Style.space(20)
-                            color: Util.alpha(Color.foreground, 0.06)
-                            TextInput {
-                                id: typedInput
-                                anchors.fill: parent
-                                anchors.margins: Style.space(10)
-                                color: root.ink
-                                font.family: Style.font.family
-                                font.pixelSize: Style.font.body
-                                clip: true
-                                horizontalAlignment: Text.AlignHCenter
-                                selectByMouse: true
-                                onAccepted: root.ask()
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: Style.space(6)
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                layoutDirection: root.atRight ? Qt.LeftToRight : Qt.RightToLeft
+                                Text {
+                                    Layout.fillWidth: true
+                                    horizontalAlignment: root.textTowardOrb
+                                    text: root.snapshot.error ? "Something went wrong" : root.phase === "idle" && root.expanded ? "Here’s what I found" : root.phaseLabel
+                                    textFormat: Text.PlainText
+                                    color: root.statusColor
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.caption
+                                    elide: Text.ElideRight
+                                }
+                                NativeButton {
+                                    objectName: "agavaiMinimize"
+                                    quiet: true
+                                    text: "−"
+                                    accessibleName: "Minimize assistant"
+                                    onClicked: root.compact = true
+                                }
                             }
                             Text {
-                                visible: typedInput.text === ""
-                                anchors.fill: typedInput
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                text: "Type a request…"
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                text: root.transcript || (root.listening ? "Listening…" : "What can I help you find?")
+                                textFormat: Text.PlainText
+                                color: root.transcript ? root.ink : root.inkMuted
+                                font.family: Style.font.family
+                                font.pixelSize: root.expanded ? Style.font.heading : Style.font.display
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                visible: root.listening || !(root.turn.assistant || root.snapshot.error)
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                                textFormat: Text.PlainText
                                 color: root.inkMuted
                                 font.family: Style.font.family
-                                font.pixelSize: Style.font.body
+                                font.pixelSize: Style.font.caption
+                                wrapMode: Text.Wrap
+                            }
+                            Text {
+                                visible: !!root.completion
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                wrapMode: Text.Wrap
+                                text: root.completion ? ((root.completion.ok ? "✓ " : "") + root.completion.title + (root.completion.detail ? " · " + root.completion.detail : "")) : ""
+                                textFormat: Text.PlainText
+                                color: root.statusColor
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.heading
+                            }
+                            Text {
+                                id: answer
+                                visible: !!root.turn.assistant || !!root.snapshot.error
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 6
+                                elide: Text.ElideRight
+                                text: root.snapshot.error ? String(root.snapshot.error) : root.turn.assistant || ""
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.heading
+                            }
+                            Text {
+                                visible: root.listening
+                                Layout.alignment: root.atRight ? Qt.AlignRight : Qt.AlignLeft
+                                text: "Send now"
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.caption
+                                Accessible.role: Accessible.Button
+                                Accessible.name: "Send now"
+                                Accessible.onPressAction: root.send()
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -Style.space(6)
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.send()
+                                }
                             }
                         }
-                        NativeButton {
-                            text: "Ask"
-                            enabled: typedInput.text.trim() !== "" && !askProc.running
-                            onClicked: root.ask()
-                        }
-                    }
-                    RowLayout {
-                        visible: !root.listening && (root.expanded || root.phase === "idle" || root.phase === "error")
-                        Layout.alignment: Qt.AlignHCenter
-                        spacing: Style.space(4)
-                        NativeButton {
-                            quiet: true
-                            visible: root.phase === "idle" || root.phase === "error"
-                            text: root.typing ? "Voice" : "Type instead"
-                            onClicked: {
-                                root.typing = !root.typing;
-                                if (root.typing)
-                                    Qt.callLater(function () {
-                                        typedInput.forceActiveFocus();
-                                    });
-                            }
-                        }
-                        NativeButton {
-                            quiet: true
-                            visible: !root.listening && root.phase !== "thinking" && root.phase !== "speaking"
-                            text: root.transcript ? "Ask again" : "Listen"
-                            onClicked: root.start()
-                        }
-                        NativeButton {
-                            quiet: true
-                            visible: !!root.selectedItem.openable
-                            text: "Open"
-                            onClicked: root.openSelected()
-                        }
-                    }
-                    Text {
-                        visible: !!root.latestTool
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.latestTool ? root.latestTool.name.replace(/_/g, " ") : ""
-                        textFormat: Text.PlainText
-                        color: root.inkMuted
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.transcript || (root.listening ? "Listening…" : "What can I help you find?")
-                        textFormat: Text.PlainText
-                        color: root.transcript ? root.ink : root.inkMuted
-                        font.family: Style.font.family
-                        font.pixelSize: root.expanded ? Style.font.heading : Style.font.display
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 3
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        visible: root.listening || !(root.turn.assistant || root.snapshot.error)
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
-                        textFormat: Text.PlainText
-                        color: root.inkMuted
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        wrapMode: Text.Wrap
-                    }
-                    Text {
-                        visible: !!root.completion
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        text: root.completion ? ((root.completion.ok ? "✓ " : "") + root.completion.title + (root.completion.detail ? " · " + root.completion.detail : "")) : ""
-                        textFormat: Text.PlainText
-                        color: root.statusColor
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.heading
-                    }
-                    Text {
-                        id: answer
-                        visible: !!root.turn.assistant || !!root.snapshot.error
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 6
-                        elide: Text.ElideRight
-                        text: root.snapshot.error ? String(root.snapshot.error) : root.turn.assistant || ""
-                        textFormat: Text.PlainText
-                        color: root.ink
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.heading
-                    }
-                    Text {
-                        visible: root.listening
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "Send now"
-                        textFormat: Text.PlainText
-                        color: root.ink
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Send now"
-                        Accessible.onPressAction: root.send()
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -Style.space(6)
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.send()
-                        }
-                    }
-                    Item {
-                        id: orbBox
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: root.listening && root.expanded ? Style.space(96) : Style.space(132)
-                        Layout.preferredHeight: root.listening && root.expanded ? Style.space(96) : Style.space(132)
-                        VoiceOrb {
-                            anchors.fill: parent
-                            phase: root.phase
-                            strength: root.strength
+                        // Keeps the words clear of the orb, which is placed outside the layout.
+                        Item {
+                            Layout.preferredWidth: stage.orbSize - stage.inset
+                            Layout.preferredHeight: stage.orbSize - stage.inset
+                            Layout.alignment: root.atTop ? Qt.AlignTop : Qt.AlignBottom
                         }
                     }
                 }
             }
-            VoiceOrb {
-                id: compactOrb
-                objectName: "agavaiCompactOrb"
-                visible: root.compact
-                anchors.fill: parent
-                phase: root.phase
-                strength: root.strength
+            Item {
+                id: orb
+                objectName: "agavaiOrb"
+                width: stage.orbSize
+                height: stage.orbSize
+                x: root.atRight ? stage.width - width : 0
+                y: root.atTop ? 0 : stage.height - height
                 Accessible.role: Accessible.Button
-                Accessible.name: "Expand Agavai"
-                Accessible.onPressAction: root.compact = false
+                Accessible.name: root.compact ? "Expand Agavai" : "Minimize Agavai"
+                Accessible.onPressAction: root.compact = !root.compact
+                VoiceOrb {
+                    anchors.fill: parent
+                    phase: root.phase
+                    strength: root.strength
+                }
                 MouseArea {
-                    objectName: "agavaiCompactPointer"
+                    objectName: "agavaiOrbPointer"
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
@@ -481,13 +498,12 @@ Item {
                         if (mouse.button === Qt.RightButton)
                             root.dismiss();
                         else
-                            root.compact = false;
+                            root.compact = !root.compact;
                     }
                 }
                 NativeButton {
-                    objectName: "agavaiCompactClose"
-                    anchors.top: parent.top
-                    anchors.right: parent.right
+                    objectName: "agavaiClose"
+                    x: root.atRight ? parent.width - width : 0
                     width: Style.space(32)
                     height: Style.space(32)
                     text: "×"

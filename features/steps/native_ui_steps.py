@@ -154,3 +154,14 @@ def mic_level(context, db):
 @then("the native microphone level is absent")
 def quiet(context):
     assert snapshot(context)["level_db"] is None
+
+
+@given('a chat UI in a temp runtime dir with overlay placement "{placement}"')
+def placed_ui(context, placement):
+    context.execute_steps("Given a chat UI in a temp runtime dir")
+    context.cfg.overlay.placement = placement
+
+
+@then('the native snapshot places the overlay at "{placement}"')
+def placed(context, placement):
+    assert snapshot(context).get("placement") == placement, snapshot(context)

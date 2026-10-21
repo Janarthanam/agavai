@@ -60,6 +60,11 @@ base_url = "https://openrouter.ai/api/alpha/decisions"
 model = "typesafe/jev-1.13"
 api_key_env = "OPENROUTER_API_KEY"
 
+[overlay]
+# Corner of the active monitor that holds the orb. The expanded view grows
+# from it, and the orb stays in place: bottom-right | bottom-left | top-right | top-left
+placement = "bottom-right"
+
 [asr]
 # Assistant listen path. cpu is the default. gpu is used only when this is gpu
 # and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.

@@ -141,3 +141,9 @@ Feature: Native voice widget and result browser
     And the mic input level is -20 dB
     And the user says "hello"
     Then the native microphone level is absent
+
+  Scenario: The snapshot tells the overlay which corner holds the orb
+    Given a chat UI in a temp runtime dir with overlay placement "top-right"
+    When the UI starts listening
+    And the user says "list the planets"
+    Then the native snapshot places the overlay at "top-right"

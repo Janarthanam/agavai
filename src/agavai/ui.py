@@ -231,6 +231,7 @@ class ChatUi:
         self.data["phase"] = phase
         self.data["phase_label"] = label
         self.data["model_id"] = self.cfg.llm.model_id
+        self.data["placement"] = self.cfg.overlay.placement
 
     def _write(self, *, summon: bool = False) -> None:
         if self.cancelled():

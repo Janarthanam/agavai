@@ -232,7 +232,7 @@ Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) 
 
 **In:** streaming ASR, specified in [audio.md](audio.md). One `parec` capture feeds the Parakeet worker; end of utterance or Enter commits the line. The same samples drive the orb's level meter, which never decides a turn.
 
-**Overlay:** the Omarchy shell plugin `janar.agavai` (`plugin/`). It starts as an orb at the bottom right and expands in place for transcripts and results. The listen process writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, partial and committed transcript, each tool start/result, assistant text), and QML `FileView` watches it. The launcher entry **Agavai** (`agavai app`) summons the same overlay; there is no second window. Layout and interaction are in [ui-design.md](ui-design.md).
+**Overlay:** the Omarchy shell plugin `janar.agavai` (`plugin/`). It starts as an orb in the corner set by `[overlay] placement` (default bottom right) and expands in place for transcripts and results; the orb does not move. The listen process writes `$XDG_RUNTIME_DIR/agavai/ui.json` on every step (listening, partial and committed transcript, each tool start/result, assistant text), and QML `FileView` watches it. The launcher entry **Agavai** (`agavai app`) summons the same overlay; there is no second window. Layout and interaction are in [ui-design.md](ui-design.md).
 
 Voxtype’s waveform OSD stays off so it does not stack with the overlay.
 
