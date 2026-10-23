@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress: deploy Whistle/Needle on the local Omarchy desktop. Owner: Codex session cactus-deployment. Feature implementation committed as `48925bb`.
+Complete: Whistle/Needle deployed and validated on the local Omarchy desktop. Deployment record committed as `679d05c`; feature implementation as `48925bb`. Owner: Codex session cactus-deployment.
 
 - [x] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
@@ -48,3 +48,5 @@ In progress: deploy Whistle/Needle on the local Omarchy desktop. Owner: Codex se
 - 2026-10-23T21:12:23+05:30 — Codex session cactus-deployment — deployment validated, awaiting task-record commit. Active host config selects Whistle/Cactus CPU streaming with manual Enter and Needle-only; no larger fallback. Installed launchers now point to this worktree at `bab38d9`; copied current plugin files and service unit, validated plugin and rescanned shell. Stopped and disabled `agavai-llm.service`; Qwen port 18766 closed. Voxtype, keybindings, bar layout and unrelated config were not changed.
   - Host changed files: `~/.config/agavai/config.toml`, `~/.local/bin/agavai`, `~/.local/bin/agavai-llm`, `~/.config/omarchy/plugins/janar.agavai/*`, `~/.config/systemd/user/agavai-llm.service`; provisioned `~/.local/share/agavai/cactus/`; disabled the Qwen service enablement symlink. Prior config/plugin/unit/launcher targets and rollback instructions saved at `~/.local/share/agavai/deployments/20261023T211054+0530/`. Repository changed file: this task only.
   - Validation: pinned artifact hashes verified by setup script; all 4 native Cactus scenarios / 8 steps passed against the host installation, including recorded speech streaming/batch/cancellation, Needle supported/unsupported calls and simulated browser task. Host config readiness, speech preflight, installed CLI engine selection and no-llama launcher check passed. Live `agavai ask` browser request executed `launch(target=browser)` and spoke “launched browser” using Kokoro; UI returned idle without error. Live time query returned “No matching tool call”, a Needle-only capability limitation with no larger fallback; explicitly reported. Live microphone not tested. Whitespace and task diff self-review passed.
+
+- 2026-10-23T21:12:34+05:30 — Codex session cactus-deployment — complete. Deployment and validation record committed as `679d05c`. User can test live speech with Super+M, expand the orb and press Enter after speaking; Escape cancels. Native replay and live typed browser test passed; live microphone remains unverified and Needle-only time query is unsupported. Rollback instructions retained with the host backup. This entry changes task bookkeeping only.
