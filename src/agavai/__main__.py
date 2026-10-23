@@ -15,7 +15,7 @@ from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.orchestrator import control_command, run_turn
-from agavai.recording import Recorder, control as recording_control, recover
+from agavai.recording import Recorder, control as recording_control, correct, recover
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_record, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui, summon_overlay
@@ -28,6 +28,12 @@ def main(argv: list[str] | None = None) -> int:
     listen.add_argument("--record", action="store_true", help="Record instead; the microphone closes when the recording stops")
     record = sub.add_parser("record", help="Start or stop a recording, or pause, resume, or mark it")
     record.add_argument("action", nargs="?", default="toggle", choices=["toggle", "stop", "pause", "resume", "mark"])
+    saved = sub.add_parser("recording", help="Change a saved recording")
+    saved_cmd = saved.add_subparsers(dest="recording_cmd", required=True)
+    corrected = saved_cmd.add_parser("correct", help="Correct one line; the heard words are kept")
+    corrected.add_argument("folder")
+    corrected.add_argument("line", type=int)
+    corrected.add_argument("text")
     sub.add_parser("invoke", help="Open the single voice widget and start automatic listening")
     sub.add_parser("stop", help="Stop listening and run the agent")
     sub.add_parser("cancel", help="Abort listening")
@@ -113,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         return listen_session(cfg, ChatUi(cfg), record=args.record)
     if args.cmd == "record":
         return request_recording(cfg, args.action)
+    if args.cmd == "recording":
+        return _correct_cmd(cfg, Path(args.folder), args.line, args.text)
     if args.cmd == "stop":
         if _signal_listener(cfg):
             return 0
@@ -241,6 +249,20 @@ def read_listener(cfg) -> int | None:
 def _publish_pid(cfg, pid: int) -> None:
     cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
     _pid_path(cfg).write_text(f"{pid} {_pid_marker(pid)}")
+
+
+def _correct_cmd(cfg, folder: Path, line: int, text: str) -> int:
+    # The overlay passes a path from the snapshot; only recordings in the configured folder change.
+    folder = folder.expanduser().resolve()
+    if folder.parent != cfg.recordings.dir.resolve():
+        print(f"agavai: {folder} is not a recording in {cfg.recordings.dir}", file=sys.stderr)
+        return 1
+    try:
+        correct(folder, line, text)
+    except ValueError as exc:
+        print(f"agavai: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def start_session(cfg, *, record: bool = False) -> bool:

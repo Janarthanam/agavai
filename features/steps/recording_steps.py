@@ -268,6 +268,24 @@ def step_model_recordings(context):
     assert "Lecture" in text and str(context.cfg.recordings.dir) not in text, text
 
 
+def _correct_cmd(context, folder: Path, line: int, text: str):
+    with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"):
+        context.exit_code = main(["recording", "correct", str(folder), str(line), text])
+
+
+@when('the overlay corrects line {line:d} to "{text}" through the command line')
+def step_correct_cmd(context, line, text):
+    _correct_cmd(context, _folders(context)[0], line, text)
+
+
+@when("the overlay corrects a line in a folder outside the recordings folder")
+def step_correct_outside(context):
+    outside = Path(tempfile.mkdtemp())
+    (outside / "recording.json").write_text(json.dumps({"segments": [{"id": 1, "live": "x"}]}))
+    _correct_cmd(context, outside, 1, "changed")
+    assert "changed" not in (outside / "recording.json").read_text()
+
+
 @when('I run "agavai record" with nothing running')
 def step_record_cmd_idle(context):
     _record_cmd_idle(context, ["record"])

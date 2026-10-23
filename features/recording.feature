@@ -214,3 +214,18 @@ Feature: Recordings keep the audio, a timed transcript, and corrections
       | Lecture  | Fri 23 Oct, 10:02 · 52:10 |
       | Standup  | Thu 22 Oct, 09:00 · 01:30 |
     And the model hears the recordings by title, without their folders
+
+  Scenario: The overlay corrects a line through the command line, only inside the recordings folder
+    When I record while the microphone hears
+      """
+      audio 1000
+      eou 0 900 the jobs run on cube flow
+      request toggle
+      """
+    And the overlay corrects line 1 to "The jobs run on Kubeflow." through the command line
+    Then the command exits with 0
+    And the recording keeps these lines
+      | start_ms | text                      |
+      | 0        | The jobs run on Kubeflow. |
+    When the overlay corrects a line in a folder outside the recordings folder
+    Then the command exits with 1
