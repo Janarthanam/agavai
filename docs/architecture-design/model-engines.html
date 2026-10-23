@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agavai · model and engine boundaries</title>
+<style>
+:root{color-scheme:light dark;
+  --design-background:var(--background,light-dark(#fff,#191919));
+  --design-foreground:var(--foreground,light-dark(#202020,#ededed));
+  --design-muted-foreground:var(--muted-foreground,light-dark(#606060,#b5b5b5));
+  --design-card:var(--card,light-dark(#f7f7f7,#242424));
+  --design-border:var(--border,light-dark(#d4d4d4,#494949));
+  --design-primary:var(--primary,light-dark(#292929,#e1e1e1));
+  --design-primary-foreground:var(--primary-foreground,light-dark(#fff,#191919));
+  --design-radius:var(--radius,8px);
+  --design-chart-1:var(--chart-1,light-dark(#2a78d6,#3987e5));
+  --design-chart-2:var(--orange,light-dark(#bd4b19,#ee986c));
+  }
+
+*{box-sizing:border-box}
+body{margin:0;
+  color:var(--design-foreground);
+  font:14px/1.5 var(--font-sans,system-ui,sans-serif);
+  background:transparent}
+main{padding:0 0 18px}
+h1,h2,h3,p{margin:0}
+h1{font-size:21px;
+  font-weight:500;
+  margin-bottom:6px}
+h2{font-size:17px;
+  font-weight:500;
+  margin:26px 0 12px}
+h3{font-size:14px;
+  font-weight:500}
+p{margin:6px 0 12px}
+.muted,small{color:var(--design-muted-foreground)}
+small{font-size:12px}
+code{font:12px/1.5 var(--font-mono,ui-monospace,monospace);
+  overflow-wrap:anywhere}
+button,select{font:inherit;
+  color:var(--design-foreground);
+  background:var(--design-card);
+  border:1px solid var(--design-border);
+  border-radius:6px;
+  padding:7px 10px;
+  min-height:36px}
+button{cursor:pointer}
+button[aria-pressed=true]{background:var(--design-primary);
+  color:var(--design-primary-foreground)}
+button:disabled{opacity:.5;
+  cursor:default}
+button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--design-chart-1);
+  outline-offset:3px}
+.controls{display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:end;
+  margin:14px 0}
+label{display:grid;
+  gap:4px;
+  flex:1;
+  min-width:200px}
+label span{font-size:12px;
+  color:var(--design-muted-foreground)}
+select{width:100%}
+.legend{display:flex;
+  gap:8px 18px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:var(--design-muted-foreground);
+  margin:12px 0}
+.legend span{display:flex;
+  align-items:center;
+  gap:6px}
+.sample{width:21px;
+  height:12px;
+  border:1px solid var(--design-border);
+  display:inline-block}
+.sample.proposed{border-style:dashed}
+.sample.seam{border-color:var(--design-chart-2);
+  border-width:2px}
+.badge{display:inline-block;
+  font-size:11px;
+  letter-spacing:.03em;
+  color:var(--design-muted-foreground);
+  font-weight:500}
+.plug{color:var(--design-chart-2)}
+.policy{padding:12px 0;
+  border-top:1px solid var(--design-border);
+  border-bottom:1px solid var(--design-border)}
+.policy strong{font-weight:500}
+.maphead,.maprow{display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  column-gap:22px}
+.maphead{margin:15px 0 8px;
+  font-size:12px;
+  color:var(--design-muted-foreground)}
+.maprow{padding:0 0 20px;
+  position:relative}
+.maprow::after{content:'↓ in-process';
+  position:absolute;
+  bottom:1px;
+  left:14px;
+  font-size:11px;
+  color:var(--design-muted-foreground)}
+.maprow:last-child::after{content:''}
+.component,.process{padding:13px 14px;
+  border:1px solid var(--design-border);
+  border-radius:var(--design-radius);
+  min-width:0;
+  position:relative}
+.component{background:color-mix(in srgb,var(--design-card) 55%,transparent);
+  border-left:3px solid var(--design-border)}
+.component.seam{border-left-color:var(--design-chart-2)}
+.process{background:transparent}
+.process.proposed{border-style:dashed}
+.active .component,.active .process{outline:2px solid var(--design-chart-1);
+  outline-offset:-2px}
+.component p,.process p{font-size:12px;
+  margin:5px 0 0}
+.process .wire{display:block;
+  font-size:12px;
+  color:var(--design-muted-foreground);
+  padding-bottom:7px;
+  margin-bottom:7px;
+  border-bottom:1px solid var(--design-border)}
+.maprow .badge{margin-bottom:4px}
+.process h3{margin-bottom:2px}
+.aux{display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+  padding-bottom:12px}
+.aux p{font-size:12px;
+  margin:5px 0 0}
+.steps{display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-bottom:10px}
+.steps button{font-size:12px;
+  padding:6px 9px}
+.detail{border-left:3px solid var(--design-chart-1);
+  padding:2px 0 2px 12px;
+  min-height:120px}
+.detail h3{margin-bottom:5px}
+.detail dl{display:grid;
+  grid-template-columns:65px 1fr;
+  gap:4px 8px;
+  margin:0;
+  font-size:12px}
+.detail dt{color:var(--design-muted-foreground)}
+.detail dd{margin:0;
+  overflow-wrap:anywhere}
+.latency{display:grid;
+  grid-template-columns:1fr;
+  gap:10px}
+.checkpoint{display:grid;
+  grid-template-columns:170px minmax(80px,1fr) 118px;
+  gap:12px;
+  align-items:center}
+.checkpoint .label{font-size:12px}
+.track{height:15px;
+  background:color-mix(in srgb,var(--design-border) 25%,transparent);
+  position:relative}
+.bar{height:15px;
+  background:var(--design-chart-1);
+  width:var(--value)}
+.budget{position:absolute;
+  top:-4px;
+  height:23px;
+  width:2px;
+  left:var(--budget);
+  background:var(--design-foreground)}
+.reading{font-variant-numeric:tabular-nums;
+  font-size:12px}
+.reading small{display:block;
+  font-size:11px}
+.axis{margin-left:182px;
+  margin-right:130px;
+  display:flex;
+  justify-content:space-between;
+  font-size:11px;
+  color:var(--design-muted-foreground)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;
+  width:100%;
+  font-size:12px}
+th,td{text-align:left;
+  vertical-align:top;
+  padding:9px 8px;
+  border-bottom:1px solid var(--design-border);
+  overflow-wrap:anywhere}
+th{font-weight:500;
+  color:var(--design-muted-foreground)}
+th:first-child,td:first-child{padding-left:0}
+ul{padding-left:19px;
+  margin:6px 0 12px}
+li{margin:4px 0}
+details{margin-top:18px;
+  border-top:1px solid var(--design-border);
+  padding-top:12px}
+summary{cursor:pointer;
+  font-weight:500}
+.sources{font-size:12px}
+.sources a{color:var(--design-foreground);
+  text-underline-offset:3px}
+.sources li{margin:8px 0}
+.note{font-size:12px;
+  color:var(--design-muted-foreground)}
+.two{display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px}
+.two p,.two ul{font-size:12px}
+.inlineflow{font-family:var(--font-mono,ui-monospace,monospace);
+  font-size:12px;
+  line-height:1.9;
+  overflow-wrap:anywhere}
+hr{border:0;
+  border-top:1px solid var(--design-border);
+  margin:18px 0}
+@media(max-width:520px){h1{font-size:19px}
+.maphead{display:none}
+.maprow{grid-template-columns:1fr;
+  gap:8px;
+  padding-bottom:23px}
+.process{margin-left:16px}
+.maprow::after{bottom:2px}
+.aux,.two{grid-template-columns:1fr;
+  gap:12px}
+.checkpoint{grid-template-columns:1fr 106px;
+  gap:5px 12px}
+.checkpoint .label{grid-column:1/-1}
+.axis{margin:0 118px 0 0}
+.detail{min-height:155px}
+th,td{padding:8px 5px}
+button,select{min-height:44px}
+.steps button{min-height:40px}
+label{min-width:180px}
+}
+
+@media(prefers-reduced-motion:no-preference){.bar{transition:width .2s}
+}
+
+</style>
+</head>
+<body>
+<main id="agavai-engine-design">
+<h1>Agavai: where models and engines plug in</h1>
+<p class="muted">Two narrow seams: speech recognition and tool-head routing. Qwen keeps conversation, tool execution planning and the final reply.</p>
+<div class="controls">
+<label>
+<span>Speech recognition</span>
+<select id="asr">
+<option value="parakeet">Parakeet · ONNX Runtime · current</option>
+<option value="whistle" selected>Whistle · Cactus engine · proposed</option>
+</select>
+</label>
+<label>
+<span>Tool-head router</span>
+<select id="router">
+<option value="keyword">Keyword · in-process · measured baseline</option>
+<option value="jev">Jev · remote HTTPS · current default</option>
+<option value="needle" selected>Needle 3 · Cactus worker · proposed</option>
+</select>
+</label>
+</div>
+<div class="policy" id="policy" aria-live="polite">
+</div>
+<div class="legend">
+<span>
+<i class="sample">
+</i>Solid = existing</span>
+<span>
+<i class="sample proposed">
+</i>Dashed = proposed</span>
+<span>
+<i class="sample seam">
+</i>Orange left edge = engine seam</span>
+</div>
+<h2>Process boundaries and data flow</h2>
+<p class="note">Left column: components inside one <code>agavai listen</code> process, kept for the session. Every right-hand box explicitly names another process or service. Rows run top to bottom; the labeled arrows describe both request and return traffic.</p>
+<div class="maphead">
+<span>LOCAL PROCESS P0 · listener / session controller</span>
+<span>OTHER PROCESSES · local unless marked remote</span>
+</div>
+<div id="map">
+<div class="maprow" data-row="0">
+<section class="component">
+<span class="badge">1 · CAPTURE PUMP + READER THREADS</span>
+<h3>Microphone transport</h3>
+<p>PCM pump and stdout/stderr readers are threads in P0. Metering updates the orb; it never commits a turn.</p>
+</section>
+<section class="process">
+<span class="wire">P1 → P0 · OS stdout pipe · raw audio</span>
+<span class="badge">P1 · PAREC · PER UTTERANCE</span>
+<h3>PipeWire / PulseAudio capture</h3>
+<p>Microphone → <code>parec</code> → signed 16-bit little-endian PCM, mono, 16 kHz. Requested capture latency: 20 ms; not an end-to-end measurement.</p>
+</section>
+</div>
+<div class="maprow" data-row="1">
+<section class="component seam">
+<span class="badge plug">2 · PLUGGABLE RECOGNIZER ADAPTER</span>
+<h3>StreamingRecognizer</h3>
+<p>P0 → P2: <code>uint32 BE length + PCM bytes</code>. Zero length flushes/resets. P2 → P0: newline-delimited JSON <code>{kind, text}</code>.</p>
+<p>Events: <code>ready / interim / eob / eou / reset / error</code>. Readiness and reset acknowledgement belong to the lifecycle contract.</p>
+</section>
+<section class="process" id="asr-process">
+<span class="wire">P0 ⇄ P2 · stdin/stdout pipes · separate address space</span>
+<span class="badge" id="asr-tag">
+</span>
+<h3 id="asr-title">
+</h3>
+<p id="asr-body">
+</p>
+</section>
+</div>
+<div class="maprow" data-row="2">
+<section class="component">
+<span class="badge">3 · TURN GATE + SESSION STATE</span>
+<h3>Partial text ≠ committed request</h3>
+<p>
+<code>interim / eob</code> → provisional transcript only. <code>eou</code> or Enter → one committed user line. Escape → discard. No router or tool runs on a partial.</p>
+<p>Conversation messages, chosen heads and pending confirmations live in P0 memory. Exact session controls may return here without inference. For ordinary turns, health-check P4; if history exists, classify context via P4 before routing.</p>
+</section>
+<section class="process">
+<span class="wire">P0 → ui.json → P3 · file snapshot / FileView watch</span>
+<span class="badge">P3 · QUICKSHELL / OMARCHY OVERLAY · LONG-LIVED</span>
+<h3>Orb, transcript, tools and results</h3>
+<p>Reads <code>$XDG_RUNTIME_DIR/agavai/ui.json</code>: phase, partial/final transcript, tool progress, display and reply. This file is presentation state, not the model conversation store. Enter/cancel actions invoke the CLI to signal P0.</p>
+</section>
+</div>
+<div class="maprow" data-row="3">
+<section class="component seam">
+<span class="badge plug">4 · PLUGGABLE TOOL-HEAD ROUTER</span>
+<h3>select(utterance) → list[head_id]</h3>
+<p>Return up to two head IDs; <code>[]</code> means no tools. Head schemas are selected under the configured tool budget. Routing does not execute anything.</p>
+<p id="router-local">
+</p>
+</section>
+<section class="process" id="router-process">
+<span class="wire" id="router-wire">
+</span>
+<span class="badge" id="router-tag">
+</span>
+<h3 id="router-title">
+</h3>
+<p id="router-body">
+</p>
+</section>
+</div>
+<div class="maprow" data-row="4">
+<section class="component">
+<span class="badge">5 · ORCHESTRATOR + LLM HTTP CLIENT</span>
+<h3>Qwen remains the brain</h3>
+<p>After the turn gate and routing, run the model/tool loop. Context classification, when needed, used the same P4 server before routing.</p>
+<p>P0 sends system/user/history + selected tool schemas. Receives assistant text or <code>tool_calls</code>. Tool results return to the next model call; repeat until a final reply or round limit.</p>
+</section>
+<section class="process">
+<span class="wire">P0 ⇄ P4 · HTTP JSON · 127.0.0.1:18766</span>
+<span class="badge">P4 · LLAMA-SERVER · SYSTEMD USER SERVICE</span>
+<h3>llama.cpp engine + selected GGUF</h3>
+<p>
+<code>POST /v1/chat/completions</code>, non-streaming. Default model: Qwen3-4B Instruct Q4_K_M. GGUF weights are already configurable; this is not a generic engine adapter.</p>
+<p>Needle does not replace Qwen's prose reply or conversation classifier.</p>
+</section>
+</div>
+<div class="maprow" data-row="5">
+<section class="component">
+<span class="badge">6 · ALLOWLIST DISPATCH · IN P0</span>
+<h3>call_tool(name, arguments)</h3>
+<p>Checks the named tool, performs the allowed action, publishes results to UI, then appends a clipped tool result to model history. A proposal still follows the existing confirmation contract.</p>
+</section>
+<section class="process">
+<span class="wire">P0 ⇄ child processes · argv/stdout, files and desktop IPC</span>
+<span class="badge">P5… · COMMAND CHILDREN · PER TOOL</span>
+<h3>hyprctl, Omarchy, fd, grim, OCR…</h3>
+<p>Some tools are pure Python; others spawn commands that contact desktop services. Returned text/structured results feed Qwen. The voice path calls tools directly in P0; the separate stdio MCP server is only for external clients.</p>
+</section>
+</div>
+<div class="maprow" data-row="6">
+<section class="component">
+<span class="badge">7 · REPLY + SPEECH CLIENT</span>
+<h3>Final text → speech request</h3>
+<p>After the tool/model loop: publish assistant text, then send <code>{text, out, voice}</code> as JSON + newline. Await <code>{ok}</code> after a WAV is written. Kokoro failure uses eSpeak, then notification.</p>
+</section>
+<section class="process">
+<span class="wire">P0 ⇄ P6 · AF_UNIX stream · kokoro.sock + WAV file</span>
+<span class="badge">P6 · KOKORO SYNTH SERVER · WARM, 600 S IDLE TIMEOUT</span>
+<h3>Kokoro-82M + ONNX Runtime CPU</h3>
+<p>Starts warming near listen/ask. Complete reply synthesis precedes playback; audio is not streamed token by token. Warm synthesis samples: 0.49–0.73 s for the measured short replies.</p>
+</section>
+</div>
+<div class="maprow" data-row="7">
+<section class="component">
+<span class="badge">8 · PLAYBACK OWNERSHIP</span>
+<h3>Play, cancel, then listen again</h3>
+<p>Own the audio process group, poll for cancel at ≤100 ms intervals, stop playback and clean up its WAV. Reopen capture for the next turn. Speech barge-in is not implemented.</p>
+</section>
+<section class="process">
+<span class="wire">P0 → P7 · child process argv with WAV path → speakers</span>
+<span class="badge">P7 · PW-PLAY / PAPLAY · PER REPLY</span>
+<h3>Desktop audio output</h3>
+<p>Playback duration depends on reply length and follows synthesis. Measured cancel-to-stop median: 54 ms on a silent playback probe; not a guarantee for every system load.</p>
+</section>
+</div>
+</div>
+<div class="aux">
+<div>
+<span class="badge">SEPARATE EXISTING PATH</span>
+<p>F9 dictation keeps Voxtype and its sanitizer on <code>:18765</code>. Neither is in the assistant's streaming recognition path.</p>
+</div>
+<div>
+<span class="badge">PROCESS ISOLATION FOR CACTUS</span>
+<p>If both candidates are enabled, P2 and the Needle worker are separate processes. The inspected Cactus binding holds one loaded model per process; loading both together would replace shared model state.</p>
+</div>
+</div>
+<h2>Trace a single request</h2>
+<p class="note">Illustrative payloads for “open the browser”, not a recorded execution. Select a stage to highlight its process boundary above.</p>
+<div class="steps" id="steps" aria-label="Request stages">
+</div>
+<section class="detail" id="detail" aria-live="polite">
+</section>
+<h2>Latency: historical checkpoints vs proposed budgets</h2>
+<p class="note">Blue = historical median; vertical tick = configured eval budget. Each row has its own start event. These overlapping checkpoints must not be added together.</p>
+<div class="axis" aria-hidden="true">
+<span>0</span>
+<span>3</span>
+<span>6</span>
+<span>9 s</span>
+</div>
+<div class="latency" id="latency">
+</div>
+<p class="note">Run <code>20261010-1250</code> · Ryzen 9 3900X · CPU · Qwen3-4B Q4_K_M · keyword routing. First words and commit are ASR replays of synthesized speech, not live microphone-to-screen timings. Four of twelve commit samples never committed within the 8 s tail; missing samples count as infinity in the median. Action timings use a simulated desktop. Reply-audio figures combine turn duration + warm synth + the evaluator's 0.2 s pause; they are estimates of audio onset, not direct live playback measurements. Current listener playback does not insert that pause.</p>
+<details>
+<summary>Per-stage evidence and what remains unknown</summary>
+<div class="tablewrap">
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Evidence</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Capture / pipes / UI</td>
+<td>20 ms capture setting; UI level publication every 100 ms</td>
+<td>Configured cadence, not measured transport or rendering latency.</td>
+</tr>
+<tr>
+<td>Parakeet computation</td>
+<td>160 ms audio step; mean compute 53.6 ms; model load 1.16 s</td>
+<td>Warm compute can keep up in this replay. Endpoint delay is a separate problem.</td>
+</tr>
+<tr>
+<td>Jev routing</td>
+<td>Architecture doc claims 70–500 ms; configured timeout 2 s</td>
+<td>Remote network + inference; absent from the keyword baseline. Not locally timed here.</td>
+</tr>
+<tr>
+<td>Whistle</td>
+<td>Research: roughly 1 s chunks, agreement across passes</td>
+<td>No local latency benchmark. Chunk size is not first-word latency. Native automatic EOU is absent.</td>
+</tr>
+<tr>
+<td>Needle router</td>
+<td>No local samples</td>
+<td>Startup, routing and accuracy must be measured. Qwen and endpointing still remain on the critical path.</td>
+</tr>
+<tr>
+<td>Qwen diagnostic calls</td>
+<td>Context median 2.63 s (n=34); action call median 8.30 s (n=495)</td>
+<td>Pinned eval cases, prompt cache off. Different settings/workload from the product-speed probes above; do not splice into their totals.</td>
+</tr>
+<tr>
+<td>Tool execution</td>
+<td>4.87 s to simulated desktop change includes model work</td>
+<td>Not a standalone tool duration; real commands vary by action.</td>
+</tr>
+<tr>
+<td>Kokoro synthesis</td>
+<td>0.49–0.73 s, n=10</td>
+<td>Warm, short replies. Cold startup and long replies are not covered.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</details>
+<h2>What becomes pluggable</h2>
+<div class="tablewrap">
+<table>
+<thead>
+<tr>
+<th>Seam</th>
+<th>Model vs engine</th>
+<th>Minimum change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ASR worker<br>
+<span class="plug">proposed engine switch</span>
+</td>
+<td>Parakeet ONNX → ONNX Runtime<br>Whistle .cact → Cactus native runtime</td>
+<td>Select worker and engine-specific model checks in <code>asr.py</code>; keep the existing PCM/event protocol. Add the same selection to the voice eval helper.</td>
+</tr>
+<tr>
+<td>Tool router<br>
+<span class="plug">existing interface, new backend</span>
+</td>
+<td>Keyword → no model<br>Jev → remote Decisions API<br>Needle .cact → Cactus native runtime</td>
+<td>Implement the <code>ToolRouter.select()</code> contract through a dedicated Needle worker. Map constrained function output to valid head IDs; do not execute its output as desktop actions.</td>
+</tr>
+<tr>
+<td>Brain<br>weights already configurable</td>
+<td>Selected GGUF → llama.cpp</td>
+<td>Keep Qwen for this experiment. A different general chat engine would need health/chat/tool-call contracts; no such adapter is needed merely to test these two candidates.</td>
+</tr>
+<tr>
+<td>Turn ending<br>spec decision pending</td>
+<td>Parakeet EOU or Enter → commit</td>
+<td>Whistle can first be tested for transcription using known clip boundaries, or manually with Enter after integration. Automatic VAD endpointing requires a deliberate change to <code>docs/audio.md</code>.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="two">
+<section>
+<h2>Proposed Needle worker contract</h2>
+<p class="inlineflow">P0 → JSONL {id, utterance, heads}<br>worker → JSONL {id, head_ids} or {id, error}<br>startup → ready · shutdown → EOF / terminate</p>
+<p>One synchronous request at a time, session-owned process. Needle receives head descriptions as constrained routing choices; its adapter maps function calls back to head IDs. Confidence may be logged for evaluation, but no confidence fast path is part of this design.</p>
+</section>
+<section>
+<h2>Reproducible candidate tests</h2>
+<ul>
+<li>Pin local model and native library files; disable telemetry and hub access (<code>NEEDLE_TELEMETRY=0</code>, <code>HF_HUB_OFFLINE=1</code>, explicit weights and <code>NEEDLE3_LIB_PATH</code>).</li>
+<li>Set <code>auto_date=False</code>; supply the frozen eval clock explicitly.</li>
+<li>Record engine/library versions, model hashes, endpoint policy, router and sampling in the eval fingerprint.</li>
+<li>Compare keyword/Jev/Needle routing separately from Parakeet/Whistle hearing and turn-taking. Remove the eval runner's forced keyword selection for router experiments.</li>
+</ul>
+</section>
+</div>
+<details class="sources">
+<summary>Scope, unresolved decision and source references</summary>
+<p>This page proposes an experiment architecture; it changes no runtime behavior. Whistle automatic endpointing is intentionally unresolved. Current <code>docs/audio.md</code> forbids restoring silence-timer commits, so this design does not quietly add Silero. Documentation in <code>architecture.md</code> still contains legacy Voxtype/VAD sections; current audio/flow contracts and source take precedence.</p>
+<ul>
+<li>
+<a href="../audio.md">Audio specification</a> · <a href="../flow.md">Voice and confirmation flow</a> · <a href="../architecture.md">Architecture and existing configuration</a> · <a href="index.html">Existing architecture atlas</a>
+</li>
+<li>
+<a href="../../src/agavai/asr.py">ASR parent</a> · <a href="../../src/agavai/parakeet_worker.py">ASR worker protocol</a> · <a href="../../src/agavai/__main__.py">Listen / turn gate</a> · <a href="../../src/agavai/meter.py">Capture</a>
+</li>
+<li>
+<a href="../../src/agavai/router.py">Router interface</a> · <a href="../../src/agavai/heads.py">Head schemas</a> · <a href="../../src/agavai/orchestrator.py">Orchestrator</a> · <a href="../../src/agavai/llm.py">Chat transport</a> · <a href="../../src/agavai/tts.py">TTS and playback</a> · <a href="../../scripts/kokoro_synth.py">Kokoro service</a>
+</li>
+<li>
+<a href="../../evals/results/20261010-1250/report.json">Stored report and samples</a> · <a href="../../evals/results/20261010-1250/cases.jsonl">Diagnostic model-call traces</a> · <a href="../../evals/measure.py">Measurement definitions</a> · <a href="../../evals/budgets.toml">Proposed budgets</a> · <a href="../../evals/voice_helper.py">Voice eval binding</a>
+</li>
+<li>Candidate API/platform details from the 2026-10-21 package-source investigation in this thread: <a href="https://huggingface.co/Cactus-Compute/whistle">Whistle</a> · <a href="https://github.com/cactus-compute/needle">Needle</a> · <a href="https://pypi.org/project/cactus-needle/">cactus-needle package</a>. Pin and recheck the selected version during implementation.</li>
+</ul>
+</details>
+</main>
+<script>
+(()=>{
+  'use strict';
+  const root=document.getElementById('agavai-engine-design');
+  const find=id=>root.querySelector('#'+id);
+  const asr=find('asr'),router=find('router');
+  const payloads=[
+    ['Capture','P1 → P0','16 kHz mono s16le audio bytes','A transport pump forwards chunks; level updates only change the orb.','Capture begins for the utterance.'],
+    ['Recognize','P0 ⇄ P2','length-prefixed PCM → {kind:"interim", text:"open the browser"}','Worker returns hypotheses. Whistle would use its own runtime in the same worker slot.','P2 stays loaded across turns; recognizer caches reset between them.'],
+    ['Commit','P0 → P3 (UI); P0 turn gate','{text:"open the browser", final:false} → committed user line','Parakeet EOU or Enter commits; EOB never commits. Whistle has no automatic EOU in this proposal.','A partial cannot launch a tool.'],
+    ['Route','P0 → selected router → P0','"open the browser" → ["launch"]','Selected head schemas are injected into Qwen; no desktop action occurs in the router.','With existing conversation history, Qwen context classification happens before routing.'],
+    ['Plan / reply','P0 ⇄ P4','messages + launch schemas → tool_calls, or assistant content','First Qwen call proposes an allowed function. After its result, another Qwen call can produce the spoken reply.','A simple one-tool request often needs two model calls; more rounds are possible.'],
+    ['Execute','P0 ⇄ command child / desktop service','Illustrative call: launch({target:"browser"}) → result text','Allowlisted dispatcher performs the action, publishes tool progress, then returns the result to Qwen.','Qwen can call again for another tool or return final content.'],
+    ['Synthesize','P0 ⇄ P6','{text:"Browser opened.", out:"…wav", voice:"…"} → {ok:true}','Kokoro writes a complete WAV; the text and result are already visible in the overlay.','A successful synthesis response means the file is ready, not that the user has heard it.'],
+    ['Play','P0 → P7 → speakers','pw-play <reply.wav>','Playback is interruptible through the controller. After speech, the session listens again.','Escape cancels. Spoken barge-in is a separate, unimplemented feature.']
+  ];
+  let stage=0;
+  function showStage(n){
+    stage=n;
+    root.querySelectorAll('[data-row]').forEach((el,i)=>el.classList.toggle('active',i===n));
+    root.querySelectorAll('[data-step]').forEach((el,i)=>el.setAttribute('aria-pressed',String(i===n)));
+    const d=payloads[n];
+    find('detail').innerHTML='<h3>'+String(n+1)+'. '+d[0]+'</h3><dl><dt>Boundary</dt><dd>'+d[1]+'</dd><dt>Payload</dt><dd><code></code></dd><dt>Behavior</dt><dd>'+d[3]+'</dd><dt>Lifecycle</dt><dd>'+d[4]+'</dd></dl>';
+    find('detail').querySelector('code').textContent=d[2];
+  }
+
+  payloads.forEach((d,i)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.dataset.step=i;
+    b.textContent=(i+1)+' '+d[0];
+    b.addEventListener('click',()=>showStage(i));
+    find('steps').append(b);
+  });
+  function update(){
+    const w=asr.value==='whistle',n=router.value==='needle',j=router.value==='jev';
+    find('asr-process').classList.toggle('proposed',w);
+    find('asr-tag').textContent=w?'P2 · WHISTLE WORKER · PROPOSED · SESSION-LIVED':'P2 · PARAKEET WORKER · EXISTING · SESSION-LIVED';
+    find('asr-title').textContent=w?'Cactus native engine + Whistle .cact':'ONNX Runtime + Parakeet-Realtime-EOU-120M';
+    find('asr-body').textContent=w?'New whistle_worker.py adapts the Cactus streaming API to the existing PCM/event contract. Roughly one-second chunks; no native EOU marker. Local compute and first-word latency remain unmeasured.':'parakeet_worker.py runs under the speech venv. 160 ms audio steps; emits partials, EOB and EOU. CPU is the default; configured GPU resolves to CUDA only with NVIDIA present.';
+    find('policy').innerHTML=w?'<strong>Proposed recognition, endpointing unresolved.</strong> Test Whistle hearing against known clip boundaries first. Live Enter-based commit needs worker integration; automatic VAD commits require an audio-spec decision.':'<strong>Current commit rule:</strong> Parakeet EOU or Enter. Candidate router selection does not change when a turn commits.';
+    find('router-process').hidden=!n&&!j;
+    find('router-process').classList.toggle('proposed',n);
+    find('router-local').textContent=n?'Needle is a head selector here, not a replacement for Qwen. Proposed worker IPC is described below.':j?'Current default: remote Jev; on missing key or request failure, keyword fallback.':'Keyword matching runs entirely inside P0. The existing local backend is also only a keyword placeholder; it is not Needle.';
+    find('router-wire').textContent=n?'P0 ⇄ P8 · proposed JSONL stdin/stdout request/response':'P0 ⇄ REMOTE SERVICE · HTTPS / OpenRouter Decisions API';
+    find('router-tag').textContent=n?'P8 · NEEDLE WORKER · PROPOSED · SESSION-LIVED':'OFF MACHINE · JEV · EXISTING REMOTE BACKEND';
+    find('router-title').textContent=n?'Cactus native engine + Needle 3 .cact':'Jev 1.13 on OpenRouter';
+    find('router-body').textContent=n?'A new worker maps head schemas to constrained routing choices and maps the output back to head IDs. One loaded Cactus model per process; never share this process with Whistle.':'Sends the committed utterance and head criteria as a typed choice request. Returns a head choice, not prose. This is the network hop; the rest of the diagram stays local.';
+    showStage(stage);
+  }
+
+  asr.addEventListener('change',update);
+  router.addEventListener('change',update);
+  const metrics=[['First words','from speech start',.674,.5,'1 missing / 12'],['Commit','from speech end',5.895,.5,'4 missing / 12'],['Desktop changed','from commit',4.870,3,'n=5 · simulated'],['Reply audio, no tool','from commit',2.029,2.5,'n=5 · composed'],['Reply audio, one tool','from commit',6.436,4,'n=5 · composed'],['Cancel audio','from cancel request',.054,.3,'n=5 · silent probe']];
+  metrics.forEach(([name,start,value,budget,n])=>{
+    const row=document.createElement('div');
+    row.className='checkpoint';
+    row.innerHTML='<div class="label">'+name+'<br><small>'+start+'</small></div><div class="track" role="img" aria-label="'+name+': median '+value+' seconds, budget '+budget+' seconds"><div class="bar" style="--value:'+value/9*100+'%"></div><i class="budget" style="--budget:'+budget/9*100+'%"></i></div><div class="reading">'+value.toFixed(2)+' s / '+budget+' s<small>'+n+'</small></div>';
+    find('latency').append(row);
+  });
+  update();
+})();
+</script>
+</body></html>
