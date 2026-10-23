@@ -2,7 +2,9 @@
 
 ## Status
 
-- [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
+Rewritten version ready for user review.
+
+- [ ] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
 
 ## Acceptance
 
@@ -18,3 +20,7 @@
 - 2026-10-23T16:37:08+05:30 — Codex session whistle-needle-design — implementation complete, awaiting local commit. Added `docs/architecture-design/model-engines.html`: two engine selectors, eight process/data-flow stages, trace controls, historical latency/budget chart, proposed worker contracts and source references. Changed files: this task and the new HTML only. Validation: 187 browser assertions each at 728 px dark, 360 px light and 320 px light, covering six configurations, eight trace controls and expanded evidence/source layout; visual desktop/mobile review; JavaScript syntax; all 22 reference targets checked (local paths checked for existence); six medians match the stored report; whitespace and self-review passed. Published with T3 html_render. No models, microphones or desktop actions run.
 
 - 2026-10-23T16:37:19+05:30 — Codex session whistle-needle-design — complete. Design and validation record committed as `084edd5`. All acceptance items satisfied and interactive HTML published in the thread. This completion update changes only this task. Runtime implementation and the Whistle automatic endpointing decision remain outside this documentation task.
+
+- 2026-10-23T16:48:42+05:30 — Codex session whistle-needle-design-rewrite — reopened after user review. Previous page met mechanical checks but failed the core requirement of human understanding: an inventory replaced an architecture diagram, details obscured roles, and the worked request was fragmented. Scope remains the same HTML and task. Replace with a labeled process graph, plain-language roles, one complete example and an honest latency summary. Keep protocol/eval details behind disclosure. No runtime changes.
+
+- 2026-10-23T16:54:40+05:30 — Codex session whistle-needle-design-rewrite — rewrite ready for review. Replaced the inventory with one process graph and labeled audio, text, prompt, tool/result and speech paths; current/proposed toggle; a complete browser-opening example; four latency checkpoints with provenance. Main desktop view reduced from about 3841 px to 1937 px; implementation details are disclosed on demand. Corrected the capture path to show audio passing through the session before recognition. Changed files: `docs/architecture-design/model-engines.html` and this task. Validation: visually inspected proposed/current desktop and phone views; checked toggle state and graph-label bounds at 728/320 px; checked expanded-page width, JS syntax, local references and whitespace; published replacement with html_render. Runtime unchanged. Leaving the task open for review of the explanation rather than treating layout checks as user acceptance.
