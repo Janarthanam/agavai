@@ -113,6 +113,7 @@ Item {
         var nextSession = String(obj.session_id || "");
         var nextDisplay = JSON.stringify(obj.display || null);
         var canvasChanged = !!obj.display && nextDisplay !== JSON.stringify(snapshot.display || null);
+        var canvasCleared = !obj.display && !!snapshot.display;
         if (nextSession !== sessionId) {
             selected = 0;
             actionError = "";
@@ -128,6 +129,14 @@ Item {
             if (canvasChanged)
                 compact = false;
         }
+        if (canvasCleared)
+            minimizeIfUnfocused();
+    }
+    // Focus elsewhere minimizes the expanded view, but not while a canvas is on
+    // screen: with follow_mouse, merely moving the pointer would hide the answer.
+    function minimizeIfUnfocused() {
+        if (wantsKeyboardFocus && !display && !panel.contentItem.Window.window.active)
+            compact = true;
     }
     function acquireFocus() {
         if (!wantsKeyboardFocus)
@@ -145,8 +154,7 @@ Item {
     Connections {
         target: panel.contentItem.Window.window
         function onActiveChanged() {
-            if (root.wantsKeyboardFocus && !target.active)
-                root.compact = true;
+            root.minimizeIfUnfocused();
         }
     }
 

@@ -34,6 +34,7 @@ ShellRoot {
             throw new Error(message);
     }
     readonly property var placements: ["top-left", "top-right", "bottom-left", "bottom-right"]
+    readonly property string scenario: Quickshell.env("AGAVAI_UI_CHECK") || "compact"
     property var orbAt: null
     function orbOnScreen(orb, stage) {
         return orb.mapToItem(stage.parent, 0, 0);
@@ -48,6 +49,31 @@ ShellRoot {
         check(Math.abs(stage.x - (right ? panel.width - margin - stage.width : margin)) < 1 && Math.abs(stage.y - (top ? margin : panel.height - margin - stage.height)) < 1, chat.placement + ": the sheet must grow from the orb's corner");
         check(stage.x >= 0 && stage.y >= 0 && stage.x + stage.width <= panel.width && stage.y + stage.height <= panel.height, chat.placement + ": the sheet must remain inside the monitor");
     }
+    // Hyprland focuses the overlay only when its layer maps with on-demand focus,
+    // so opening and expanding share one tick, as in step 5 of the compact run.
+    // That focus is given once per instance, hence a separate run.
+    function canvasFocusStep(step, panel, details) {
+        if (step === 0) {
+            chat.applySnapshot(JSON.stringify({session_id: "focus", phase: "listening"}));
+            input.mouseClick(find(chat, "agavaiOrbPointer"), 40, 40, Qt.LeftButton);
+        } else if (step === 1) {
+            check(!chat.compact && panel.contentItem.Window.active, "Expanded view must acquire focus when activated");
+            chat.applySnapshot(JSON.stringify({session_id: "focus", phase: "speaking", turns: [{user: "list the planets", assistant: "Here are the planets."}], display: {id: "planets", kind: "answer", title: "Planets", html: "<p>Mercury</p>"}}));
+            otherWindow.visible = true;
+        } else if (step === 2) {
+            otherWindow.contentItem.Window.window.requestActivate();
+        } else if (step === 3) {
+            check(otherWindow.contentItem.Window.active, "Another window must be able to take focus from a canvas");
+            check(!chat.compact && details.visible && chat.display.title === "Planets", "A canvas must stay on screen when another window takes focus");
+            input.keyClick(Qt.Key_A);
+            check(otherInput.text === "a", "The other window must receive keyboard input while the canvas stays up");
+            chat.applySnapshot(JSON.stringify({session_id: "focus", phase: "speaking", turns: [{user: "what time is it", assistant: "It is noon."}]}));
+        } else if (step === 4) {
+            check(chat.compact && chat.opened && !details.visible, "Once its canvas is cleared, the view must minimize while another window has focus");
+            console.log("COMPACT_UI_PASS");
+            Qt.quit();
+        }
+    }
     Timer {
         interval: 250
         running: true
@@ -60,7 +86,9 @@ ShellRoot {
                 var details = find(chat, "agavaiDetails");
                 var orb = find(chat, "agavaiOrb");
                 var closeButton = find(chat, "agavaiClose");
-                if (step === 0) {
+                if (scenario === "canvas-focus") {
+                    canvasFocusStep(step, panel, details);
+                } else if (step === 0) {
                     chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", transcript: {text: "find notes"}, level_db: -25}));
                 } else if (step === 1 || step === 4) {
                     check(chat.opened && chat.compact && !chat.wantsKeyboardFocus, "Compact mode must keep the session open without keyboard focus");
