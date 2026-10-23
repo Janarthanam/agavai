@@ -4,7 +4,9 @@ Canvas {
     id: root
     property string phase: "idle"
     property real strength: 0
+    property bool paused: false
     readonly property bool listening: phase === "listening"
+    readonly property bool recording: phase === "recording"
     readonly property bool working: phase === "thinking" || phase === "speaking"
     property real spin: 0
     property real breath: 0
@@ -15,6 +17,7 @@ Canvas {
     onHeightChanged: requestPaint()
     onStrengthChanged: requestPaint()
     onPhaseChanged: requestPaint()
+    onPausedChanged: requestPaint()
     onListeningChanged: {
         if (!listening)
             breath = 0;
@@ -31,9 +34,9 @@ Canvas {
     Timer {
         interval: 32
         repeat: true
-        running: root.visible && (root.listening || root.working)
+        running: root.visible && (root.listening || root.working || root.recording && !root.paused)
         onTriggered: {
-            var step = root.listening ? 0.006 + root.strength * 0.1 : 0.022;
+            var step = root.listening || root.recording ? 0.006 + root.strength * 0.1 : 0.022;
             root.spin = (root.spin + step) % (Math.PI * 2);
         }
     }
@@ -53,6 +56,13 @@ Canvas {
             ctx.strokeStyle = Qt.rgba(0.55, 0.78, 1, 0.48 + root.breath * 0.18 + root.strength * 0.3);
             var ringRadius = Math.min(radius * (1.26 + root.breath * 0.08 + root.strength * 0.34), Math.min(width, height) / 2 - ctx.lineWidth / 2 - 1);
             ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (root.recording) {
+            // Steady, not breathing: recording must read differently from listening at a glance.
+            ctx.beginPath();
+            ctx.lineWidth = Math.max(3, width * 0.035) + (root.paused ? 0 : root.strength * 3);
+            ctx.strokeStyle = root.paused ? Qt.rgba(0.95, 0.7, 0.3, 0.8) : Qt.rgba(0.93, 0.27, 0.25, 0.92);
+            ctx.arc(cx, cy, Math.min(radius * 1.3, Math.min(width, height) / 2 - ctx.lineWidth / 2 - 1), 0, Math.PI * 2);
             ctx.stroke();
         }
         var glow = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius * 1.85);

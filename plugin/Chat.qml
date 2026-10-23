@@ -8,6 +8,7 @@ import Quickshell.Hyprland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import "Clock.js" as Clock
 
 Item {
     id: root
@@ -26,21 +27,29 @@ Item {
     property string actionError: ""
     property bool typing: false
     readonly property bool listening: phase === "listening"
+    readonly property bool recording: phase === "recording"
+    readonly property var rec: snapshot.recording || null
+    readonly property bool recPaused: !!(rec && rec.paused)
+    property double nowMs: Date.now()
+    readonly property string recordingClock: rec ? Clock.clock(rec.elapsed_ms + (recPaused ? 0 : Math.max(0, nowMs - rec.at))) : "00:00"
+    // A recording opened from the Recordings list; a stopped recording is reviewed from its canvas.
+    property string openedRecording: ""
     readonly property var display: snapshot.display || null
     readonly property var items: display && Array.isArray(display.items) ? display.items : []
     readonly property var selectedItem: items.length ? items[Math.min(selected, items.length - 1)] : ({})
     readonly property var turn: (snapshot.turns || []).length ? snapshot.turns[snapshot.turns.length - 1] : ({})
     readonly property var tools: turn.tools || []
     readonly property var latestTool: tools.length ? tools[tools.length - 1] : null
-    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing
+    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing || recording
+    readonly property string reviewPath: recording ? "" : openedRecording || (display && display.kind === "recording" ? String(display.path || "") : "")
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
     readonly property var completion: snapshot.completion || null
-    readonly property real strength: listening && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
+    readonly property real strength: (listening || recording && !recPaused) && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
     readonly property color ink: Commons.Color.foreground
     readonly property color inkMuted: Util.alpha(Commons.Color.foreground, 0.62)
     readonly property color statusColor: Commons.Color.accent
-    readonly property bool showsActions: !listening && (expanded || phase === "idle" || phase === "error")
+    readonly property bool showsActions: !listening && !recording && (expanded || phase === "idle" || phase === "error")
     readonly property string placement: String(snapshot.placement || "bottom-right")
     readonly property bool atTop: placement.startsWith("top")
     readonly property bool atRight: placement.endsWith("right")
@@ -72,7 +81,8 @@ Item {
         dismissedSession = sessionId;
         opened = false;
         compact = true;
-        if (phase === "listening" || phase === "thinking" || phase === "speaking")
+        // During a recording, cancel stops and saves it.
+        if (phase === "listening" || phase === "thinking" || phase === "speaking" || phase === "recording")
             Quickshell.execDetached(["agavai", "cancel"]);
         if (shell && typeof shell.hide === "function")
             shell.hide((manifest && manifest.id) || "janar.agavai");
@@ -95,6 +105,10 @@ Item {
             Quickshell.execDetached(["agavai", "stop"]);
     }
     function openSelected() {
+        if (selectedItem.kind === "recording") {
+            openedRecording = String(selectedItem.path || "");
+            return;
+        }
         if (!selectedItem.openable || openProc.running)
             return;
         actionError = "";
@@ -117,11 +131,15 @@ Item {
         if (nextSession !== sessionId) {
             selected = 0;
             actionError = "";
+            openedRecording = "";
             chooseScreen();
-        } else if (nextDisplay !== JSON.stringify(snapshot.display || null))
+        } else if (nextDisplay !== JSON.stringify(snapshot.display || null)) {
             selected = 0;
+            openedRecording = "";
+        }
         sessionId = nextSession;
         snapshot = obj;
+        nowMs = Date.now();
         phase = String(obj.phase || "idle");
         phaseLabel = String(obj.phase_label || phase);
         if (sessionId !== dismissedSession && (phase !== "idle" || expanded)) {
@@ -156,6 +174,13 @@ Item {
         function onActiveChanged() {
             root.minimizeIfUnfocused();
         }
+    }
+
+    Timer {
+        interval: 500
+        repeat: true
+        running: root.opened && root.recording && !root.recPaused
+        onTriggered: root.nowMs = Date.now()
     }
 
     FileView {
@@ -269,11 +294,25 @@ Item {
                         Layout.row: root.atTop ? 1 : 0
                         Layout.column: 0
                         Layout.fillWidth: true
-                        visible: !!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool
+                        visible: !!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool || root.recording
                         spacing: Style.space(12)
 
+                        RecordingLive {
+                            visible: root.recording
+                            Layout.fillWidth: true
+                            recording: root.rec || ({})
+                            elapsed: root.recordingClock
+                        }
+                        RecordingView {
+                            objectName: "agavaiRecordingView"
+                            visible: root.reviewPath !== ""
+                            Layout.fillWidth: true
+                            path: root.reviewPath
+                            canGoBack: root.openedRecording !== "" && !!root.display && root.display.kind === "recordings"
+                            onBackRequested: root.openedRecording = ""
+                        }
                         ResultBrowser {
-                            visible: !!root.display
+                            visible: !!root.display && root.reviewPath === "" && !root.recording
                             Layout.fillWidth: true
                             Layout.preferredHeight: Math.min(Style.space(320), Math.max(Style.space(120), panel.height * 0.42))
                             display: root.display || ({})
@@ -362,7 +401,7 @@ Item {
                             }
                         }
                         Text {
-                            visible: !!root.latestTool
+                            visible: !!root.latestTool && !root.recording
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignHCenter
                             text: root.latestTool ? root.latestTool.name.replace(/_/g, " ") : ""
@@ -392,7 +431,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     horizontalAlignment: root.textTowardOrb
-                                    text: root.snapshot.error ? "Something went wrong" : root.phase === "idle" && root.expanded ? "Here’s what I found" : root.phaseLabel
+                                    text: root.snapshot.error ? "Something went wrong" : root.phase === "idle" && root.reviewPath !== "" ? "Saved recording" : root.phase === "idle" && root.expanded ? "Here’s what I found" : root.phaseLabel
                                     textFormat: Text.PlainText
                                     color: root.statusColor
                                     font.family: Style.font.family
@@ -410,9 +449,10 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
-                                text: root.transcript || (root.listening ? "Listening…" : "What can I help you find?")
+                                readonly property string heardNow: root.recording ? (root.rec && root.rec.partial ? String(root.rec.partial) : "") : root.transcript
+                                text: heardNow || (root.recording ? (root.recPaused ? "Paused" : "Recording…") : root.listening ? "Listening…" : "What can I help you find?")
                                 textFormat: Text.PlainText
-                                color: root.transcript ? root.ink : root.inkMuted
+                                color: heardNow ? root.ink : root.inkMuted
                                 font.family: Style.font.family
                                 font.pixelSize: root.expanded ? Style.font.heading : Style.font.display
                                 wrapMode: Text.Wrap
@@ -420,10 +460,10 @@ Item {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                visible: root.listening || !(root.turn.assistant || root.snapshot.error)
+                                visible: root.listening || root.recording || !(root.turn.assistant || root.snapshot.error)
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
-                                text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                                text: root.recording ? (root.recPaused ? "Nothing is kept until you resume. Say “Agavai resume”." : "Say “Agavai stop” or press Super+Ctrl+M to stop.") : root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                                 textFormat: Text.PlainText
                                 color: root.inkMuted
                                 font.family: Style.font.family
@@ -431,7 +471,7 @@ Item {
                                 wrapMode: Text.Wrap
                             }
                             Text {
-                                visible: !!root.completion
+                                visible: !!root.completion && !root.recording
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
                                 wrapMode: Text.Wrap
@@ -443,7 +483,7 @@ Item {
                             }
                             Text {
                                 id: answer
-                                visible: !!root.turn.assistant || !!root.snapshot.error
+                                visible: (!!root.turn.assistant || !!root.snapshot.error) && !root.recording
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
                                 wrapMode: Text.Wrap
@@ -496,6 +536,7 @@ Item {
                 VoiceOrb {
                     anchors.fill: parent
                     phase: root.phase
+                    paused: root.recPaused
                     strength: root.strength
                 }
                 MouseArea {
@@ -519,6 +560,27 @@ Item {
                     accessibleName: "Dismiss assistant"
                     onClicked: root.dismiss()
                 }
+            }
+        }
+        // Recording must never be invisible, so the time stays beside the minimized orb.
+        // It sits outside the input mask, so it never takes a click.
+        Rectangle {
+            objectName: "agavaiRecordingChip"
+            visible: root.recording && root.compact
+            width: chipText.implicitWidth + Style.space(24)
+            height: Style.space(28)
+            radius: height / 2
+            x: root.atRight ? stage.x - width - Style.space(10) : stage.x + stage.width + Style.space(10)
+            y: stage.y + (stage.orbSize - height) / 2
+            color: Util.alpha(Commons.Color.background, 0.94)
+            Text {
+                id: chipText
+                anchors.centerIn: parent
+                text: (root.recPaused ? "❚❚ " : "● ") + root.recordingClock
+                textFormat: Text.PlainText
+                color: root.recPaused ? root.inkMuted : Commons.Color.urgent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
             }
         }
     }

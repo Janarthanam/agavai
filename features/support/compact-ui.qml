@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import QtTest
+import QtMultimedia
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
@@ -35,6 +36,8 @@ ShellRoot {
     }
     readonly property var placements: ["top-left", "top-right", "bottom-left", "bottom-right"]
     readonly property string scenario: Quickshell.env("AGAVAI_UI_CHECK") || "compact"
+    readonly property string recordingFolder: Quickshell.env("AGAVAI_UI_RECORDING") || ""
+    property int waited: 0
     property var orbAt: null
     function orbOnScreen(orb, stage) {
         return orb.mapToItem(stage.parent, 0, 0);
@@ -74,6 +77,60 @@ ShellRoot {
             Qt.quit();
         }
     }
+    // Live recording, its review, and the Recordings list. Commands the overlay runs reach a stub agavai.
+    // Returns false to repeat the step on the next tick.
+    function recordingStep(step, panel, stage, details, orb) {
+        var live = {path: recordingFolder, elapsed_ms: 64000, at: Date.now(), paused: false, lines: [{time: "00:58", text: "the canary ships"}], partial: "widen it on monday", transcribing: true};
+        if (step === 0) {
+            chat.applySnapshot(JSON.stringify({session_id: "rec", phase: "recording", recording: live}));
+        } else if (step === 1) {
+            var chip = find(chat, "agavaiRecordingChip");
+            check(chat.opened && chat.compact && chip.visible, "A minimized recording must show its time beside the orb");
+            check(chip.children[0].text.indexOf("01:0") > 0, "The chip must show the elapsed time: " + chip.children[0].text);
+            check(stage.width === Style.space(80) && chip.x + chip.width <= stage.x, "The chip must stay outside the orb's input region");
+            input.mouseClick(find(chat, "agavaiOrbPointer"), 40, 40, Qt.LeftButton);
+        } else if (step === 2) {
+            check(!chat.compact && details.visible && find(chat, "agavaiRecordingLines").count === 1, "Expanding a recording must show its lines");
+            check(find(chat, "agavaiRecordingHeading").text.indexOf("Recording") >= 0 && !chat.showsActions, "The sheet must read as recording, without assistant actions");
+            find(chat, "agavaiRecordingPause").clicked();
+            find(chat, "agavaiRecordingMark").clicked();
+            live.paused = true;
+            chat.applySnapshot(JSON.stringify({session_id: "rec", phase: "recording", recording: live}));
+        } else if (step === 3) {
+            check(find(chat, "agavaiRecordingHeading").text.indexOf("Paused") >= 0 && find(chat, "agavaiRecordingPause").text === "Resume", "A paused recording must say so and offer Resume");
+            chat.applySnapshot(JSON.stringify({session_id: "rec", phase: "idle", display: {id: "saved", kind: "recording", title: "Recording", path: recordingFolder, duration_ms: 2000}}));
+        } else if (step === 4) {
+            var view = find(chat, "agavaiRecordingView");
+            check(view.visible && view.path === recordingFolder && !view.canGoBack, "A stopped recording must open for review");
+        } else if (step === 5) {
+            var review = find(chat, "agavaiRecordingReview");
+            // The file loads asynchronously and rows appear once laid out; wait up to two seconds.
+            if (!(review.itemAtIndex(0) && review.itemAtIndex(1)) && waited++ < 8)
+                return false;
+            check(review.count === 2 && review.itemAtIndex(0) && review.itemAtIndex(1), "The review must list the recording's lines: " + review.count);
+            input.mouseClick(review.itemAtIndex(1), 20, 10, Qt.LeftButton);
+        } else if (step === 6) {
+            var player = find(chat, "agavaiRecordingPlayer");
+            check(player.playbackState === MediaPlayer.PlayingState && player.position >= 900, "Clicking a line must play from its time: " + player.position);
+            player.stop();
+            input.mouseDoubleClickSequence(find(chat, "agavaiRecordingReview").itemAtIndex(0), 20, 10, Qt.LeftButton);
+        } else if (step === 7) {
+            var editor = find(chat, "agavaiRecordingEditor");
+            check(editor.visible && editor.activeFocus, "Double-clicking a line must open it for correction");
+            editor.text = "The canary ships on Thursday.";
+            editor.accepted();
+            check(find(chat, "agavaiRecordingView").editing === 0, "Enter must save the correction and close the editor");
+            chat.applySnapshot(JSON.stringify({session_id: "rec", phase: "idle", display: {id: "list", kind: "recordings", title: "Recordings", items: [{id: "0", kind: "recording", title: "Recording", subtitle: "Fri 23 Oct, 20:17 · 00:02", path: recordingFolder, openable: false}]}}));
+        } else if (step === 8) {
+            check(!find(chat, "agavaiRecordingView").visible, "The Recordings list must show before one is opened");
+            chat.openSelected();
+            check(find(chat, "agavaiRecordingView").visible && find(chat, "agavaiRecordingView").canGoBack, "Opening a listed recording must review it with a way back");
+            find(chat, "agavaiRecordingView").backRequested();
+            check(!find(chat, "agavaiRecordingView").visible && chat.openedRecording === "", "Back must return to the Recordings list");
+            console.log("COMPACT_UI_PASS");
+            Qt.quit();
+        }
+    }
     Timer {
         interval: 250
         running: true
@@ -88,6 +145,9 @@ ShellRoot {
                 var closeButton = find(chat, "agavaiClose");
                 if (scenario === "canvas-focus") {
                     canvasFocusStep(step, panel, details);
+                } else if (scenario === "recording") {
+                    if (recordingStep(step, panel, stage, details, orb) === false)
+                        return;
                 } else if (step === 0) {
                     chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", transcript: {text: "find notes"}, level_db: -25}));
                 } else if (step === 1 || step === 4) {
@@ -181,7 +241,7 @@ ShellRoot {
                 }
                 step++;
             } catch (error) {
-                console.error("COMPACT_UI_FAIL: " + error.message);
+                console.error("COMPACT_UI_FAIL: step " + step + ": " + error.message);
                 Qt.quit();
             }
         }

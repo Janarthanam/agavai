@@ -37,6 +37,7 @@ mkdir -p "$PLUGIN_DST"
 cp -f "$ROOT/plugin/manifest.json" "$ROOT/plugin/Chat.qml" \
   "$ROOT/plugin/VoiceOrb.qml" \
   "$ROOT/plugin/NativeButton.qml" "$ROOT/plugin/ResultBrowser.qml" \
+  "$ROOT/plugin/RecordingLive.qml" "$ROOT/plugin/RecordingView.qml" "$ROOT/plugin/Clock.js" \
   "$ROOT/plugin/BarWidget.qml" "$ROOT/plugin/agavai.png" "$PLUGIN_DST/"
 omarchy plugin validate "$PLUGIN_DST"
 omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
