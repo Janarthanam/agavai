@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: Omarchy design and replacement visual finished and validated; awaiting local commit. Proposed endpoint policy and model-tier choices are documented in [the design](../docs/model-engines.md). Runtime implementation is outside this task.
+Complete: Omarchy design and replacement visual committed as `9bdeea4`. Proposed endpoint policy and model-tier choices are documented in [the design](../docs/model-engines.md). Runtime implementation is outside this task.
 
-- [ ] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
+- [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
 
 ## Acceptance
 
@@ -31,3 +31,5 @@ In progress: Omarchy design and replacement visual finished and validated; await
 - 2026-10-23 — Codex session omarchy-engine-design — in progress, starting at `58a670b`, clean tree. Scope: `docs/model-engines.md`, replacement HTML and this log. User narrowed platform scope to Omarchy. Verified cactus-needle 3.2.8 Whistle streaming API: committed/pending text and flush tail, no turn-end event in that contract. Design separates recognition from endpointing and model roles from runtimes; no runtime implementation.
 
 - 2026-10-23 — Codex session omarchy-engine-design — documentation ready. Changed files: `docs/model-engines.md`, `docs/architecture-design/model-engines.html`, this task. Reviewed contracts against source and current specs; checked local references and whitespace; inspected 728 px dark and 360 px light previews (including expanded details), no console errors. Published with html_render. No runtime tests or model benchmarks run; performance figures are explicitly targets, historical evidence or unknowns.
+
+- 2026-10-23 — Codex session omarchy-engine-design — complete. Design committed as `9bdeea4`; validation recorded above. This completion entry changes only task bookkeeping.
