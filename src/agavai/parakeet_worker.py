@@ -8,6 +8,12 @@ stdlib-only and speaks a length-prefixed PCM protocol on stdin:
 
 Stdout is JSON lines: ready, interim, eou, eob, reset, error.
 
+With --continuous (recordings), an end of utterance does not end the
+stream. The next utterance is decoded from the same audio, so nothing
+between utterances is dropped. Each eou also carries start_ms, the time of
+its first word, and end_ms, both from the start of the stream. A flush
+emits an unfinished last utterance as a final eou.
+
 The cache-aware encoder steps 16 new mel frames (160 ms) with nine frames
 of pre-encode context. PCM and mel overlap survive transport boundaries.
 """
@@ -37,8 +43,8 @@ MAX_SYMBOLS = 10
 LOG_GUARD = np.float32(2**-24)
 
 
-def emit(kind: str, text: str = "") -> None:
-    sys.stdout.write(json.dumps({"kind": kind, "text": text}, ensure_ascii=False) + "\n")
+def emit(kind: str, text: str = "", **timing: int) -> None:
+    sys.stdout.write(json.dumps({"kind": kind, "text": text, **timing}, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
 
@@ -134,7 +140,7 @@ def decode(ids: list[int], vocab: list[str]) -> str:
 
 
 class Stream:
-    def __init__(self, model_dir: str, device: str) -> None:
+    def __init__(self, model_dir: str, device: str, *, continuous: bool = False) -> None:
         from pathlib import Path
 
         root = Path(model_dir)
@@ -147,6 +153,7 @@ class Stream:
         self.encoder = ort.InferenceSession(str(root / "encoder.onnx"), opts, providers=providers)
         self.decoder = ort.InferenceSession(str(root / "decoder_joint.onnx"), opts, providers=providers)
         self.vocab = (root / "vocab.txt").read_text(encoding="utf-8").splitlines()
+        self.continuous = continuous
         self.reset()
 
     def reset(self) -> None:
@@ -161,6 +168,9 @@ class Stream:
         self.c = np.zeros((1, 1, 640), np.float32)
         self.last = BLANK
         self.hyp: list[int] = []
+        self.encoded_ms = 0
+        self.frame_ms = 0
+        self.first_ms: int | None = None
 
     def feed(self, samples: np.ndarray, *, final: bool = False) -> None:
         if self.ended:
@@ -204,9 +214,12 @@ class Stream:
             feeds,
         )
         steps = int(enc_len[0])
+        chunk_ms = mel.shape[1] * HOP * 1000 // SAMPLE_RATE
         for t in range(steps):
+            self.frame_ms = self.encoded_ms + t * chunk_ms // max(steps, 1)
             if self._decode_frame(encoded[:, :, t : t + 1]):
                 return True
+        self.encoded_ms += chunk_ms
         return False
 
     def _decode_frame(self, frame: np.ndarray) -> bool:
@@ -230,6 +243,9 @@ class Stream:
                 # Silence must not close capture and discard the beginning of speech.
                 if not text:
                     return False
+                if self.continuous:
+                    self.finish_utterance()
+                    return False
                 emit("eou", text)
                 return True
             self.last = token
@@ -238,15 +254,28 @@ class Stream:
             if token == EOB:
                 emit("eob", decode(self.hyp, self.vocab))
                 continue
+            if not self.hyp:
+                self.first_ms = self.frame_ms
             self.hyp.append(token)
             emit("interim", decode(self.hyp, self.vocab))
         return False
+
+    def finish_utterance(self) -> None:
+        """Emit the current utterance with its timing and decode the next one from a fresh predictor."""
+        text = decode(self.hyp, self.vocab)
+        if text:
+            emit("eou", text, start_ms=self.first_ms or 0, end_ms=self.frame_ms)
+        self.hyp = []
+        self.first_ms = None
+        self.last = BLANK
+        self.h = np.zeros((1, 1, 640), np.float32)
+        self.c = np.zeros((1, 1, 640), np.float32)
 
 
 def main() -> None:
     model_dir = sys.argv[1]
     device = sys.argv[2] if len(sys.argv) > 2 else "cpu"
-    stream = Stream(model_dir, device)
+    stream = Stream(model_dir, device, continuous="--continuous" in sys.argv[3:])
     emit("ready")
     while True:
         header = read_exact(4)
@@ -255,6 +284,8 @@ def main() -> None:
         n = struct.unpack(">I", header)[0]
         if n == 0:
             stream.feed(np.empty(0, np.float32), final=True)
+            if stream.continuous:
+                stream.finish_utterance()
             stream.reset()
             emit("reset")
             continue

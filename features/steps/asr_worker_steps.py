@@ -44,6 +44,11 @@ def silence(context):
     _check(context, "silence")
 
 
+@when("I replay the ASR speech fixture as one continuous recording")
+def continuous(context):
+    _check(context, "continuous")
+
+
 @then("the ASR worker check passes")
 def checked(context):
     result = context.worker_check

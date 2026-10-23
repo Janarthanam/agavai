@@ -25,3 +25,8 @@ Feature: Speech survives streaming boundaries
   Scenario: Reset starts the next spoken turn without stale audio
     When I replay the ASR speech fixture in two successive turns
     Then the ASR worker check passes
+
+  @asr_model
+  Scenario: A recording keeps every utterance and its timing
+    When I replay the ASR speech fixture as one continuous recording
+    Then the ASR worker check passes
