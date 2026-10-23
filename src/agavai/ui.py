@@ -65,7 +65,7 @@ class ChatUi:
         self.data: dict[str, Any] = {
             "phase": "idle",
             "phase_label": "Idle",
-            "model_id": cfg.llm.model_id,
+            "model_id": (cfg.small_brain or cfg.llm).model_id,
             "turns": [],
             "transcript": {"text": "", "final": False},
         }
@@ -141,6 +141,10 @@ class ChatUi:
     def level(self, db: float | None) -> None:
         """Throttled 10 Hz mic level while listening."""
         self.data["level_db"] = db
+        self._write()
+
+    def transcribing(self) -> None:
+        self._set_phase("transcribing", "Transcribing")
         self._write()
 
     def user(self, text: str, *, keep_display: bool = False) -> None:
@@ -230,7 +234,7 @@ class ChatUi:
             self.data["ts"] = int(time.time() * 1000)
         self.data["phase"] = phase
         self.data["phase_label"] = label
-        self.data["model_id"] = self.cfg.llm.model_id
+        self.data["model_id"] = (self.cfg.small_brain or self.cfg.llm).model_id
         self.data["placement"] = self.cfg.overlay.placement
 
     def _write(self, *, summon: bool = False) -> None:

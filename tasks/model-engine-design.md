@@ -2,8 +2,9 @@
 
 ## Status
 
-Complete: Omarchy design and replacement visual committed as `9bdeea4`. Proposed endpoint policy and model-tier choices are documented in [the design](../docs/model-engines.md). Runtime implementation is outside this task.
+In progress: implementation and validation finished; awaiting local commit. Owner: Codex session engine-implementation.
 
+- [ ] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
 
 ## Acceptance
@@ -33,3 +34,9 @@ Complete: Omarchy design and replacement visual committed as `9bdeea4`. Proposed
 - 2026-10-23 — Codex session omarchy-engine-design — documentation ready. Changed files: `docs/model-engines.md`, `docs/architecture-design/model-engines.html`, this task. Reviewed contracts against source and current specs; checked local references and whitespace; inspected 728 px dark and 360 px light previews (including expanded details), no console errors. Published with html_render. No runtime tests or model benchmarks run; performance figures are explicitly targets, historical evidence or unknowns.
 
 - 2026-10-23 — Codex session omarchy-engine-design — complete. Design committed as `9bdeea4`; validation recorded above. This completion entry changes only task bookkeeping.
+
+- 2026-10-23 — Codex session engine-implementation — reopened at user request, starting `cb9c8d3`, clean tree. Implement configurable Parakeet/Whistle speech adapters, explicit finish/cancel protocol, selectable llama/Needle brain backends with optional escalation, setup instructions and shared replay path. Reuse current capture, tool loop, model catalog and BDD suite. No host configuration/install changes. Exact VAD tuning remains deferred; Whistle supports manual finish initially as designed.
+
+- 2026-10-23T20:20:23+05:30 — Codex session engine-implementation — ready for commit. Implemented independent speech/brain registries; Parakeet/Whistle streaming and Whistle batch; bounded worker protocol with explicit finish/cancel and final-only submission; optional larger-brain escalation with per-turn action deduplication; role-aware llama launcher; pinned Cactus provisioning; shared audio/task eval adapters and model-call recording. Current runtime specs and configuration guide updated. Automatic Whistle VAD remains deferred as designed.
+  - Changed files: `README.md`, `docs/audio.md`, `docs/engines.md`, `docs/flow.md`, `docs/model-engines.md`, `evals/measure.py`, `evals/runner.py`, `evals/voice.py`, `evals/voice_helper.py`, `features/cactus_worker.feature`, `features/engines.feature`, `features/steps/asr_meter_steps.py`, `features/steps/engine_steps.py`, `features/steps/invocation_steps.py`, `features/steps/orchestrator_steps.py`, `features/steps/voice_control_steps.py`, `features/support/asr_checks.py`, `scripts/agavai-llm`, `scripts/configure.sh`, `scripts/setup-cactus.sh`, `share/config.example.toml`, `src/agavai/__main__.py`, `src/agavai/asr.py`, `src/agavai/asr_worker.py`, `src/agavai/brain.py`, `src/agavai/cactus_runtime.py`, `src/agavai/config.py`, `src/agavai/llm.py`, `src/agavai/needle_worker.py`, `src/agavai/orchestrator.py`, `src/agavai/parakeet_worker.py`, `src/agavai/speech_backends.py`, `src/agavai/ui.py`, `src/agavai/worker.py`, `tasks/model-engine-design.md`, `tests/README.md`.
+  - Validation: full Behave suite passed 280 scenarios / 1472 steps, including native Parakeet and four native Cactus scenarios. Final targeted lifecycle/engine/control review passed 88 scenarios / 657 steps after final refinements. Native Needle browser task succeeded against the simulated desktop; Whistle replay helper checked in its independent environment. Shell syntax, Python compilation, example TOML, doc references, whitespace and self-review passed. Runtime artifacts were provisioned only under ignored `.venv/cactus`; no live microphone, host configuration, service activation or comparative performance benchmark.

@@ -74,6 +74,9 @@ BUILTIN_MODELS: dict[str, ModelSpec] = {
 
 @dataclass
 class LlmConfig:
+    backend: str = "llama-server"
+    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/cactus-venv")
+    runtime_library: Path | None = None
     host: str = "127.0.0.1"
     port: int = 18766
     alias: str = "agavai"
@@ -128,10 +131,42 @@ class RouterConfig:
 
 
 @dataclass
+class VadConfig:
+    enabled: bool = True
+    backend: str = "energy"
+    rate: int = 16000
+    frame_ms: int = 20
+    open_threshold_dbfs: float = -35.0
+    close_threshold_dbfs: float = -42.0
+    noise_margin_db: float = 12.0
+    silence_ms: int = 900
+    min_speech_ms: int = 250
+    max_record_ms: int = 15000
+    start_timeout_ms: int = 5000
+    lead_in_ignore_ms: int = 300
+    model_path: Path = field(
+        default_factory=lambda: xdg_data() / "agavai/vad/silero_vad-v5.1.2.onnx"
+    )
+    threshold: float = 0.5
+    response_timeout_ms: int = 250
+    device: str = "cpu"
+    venv: Path = field(default_factory=lambda: xdg_data() / "agavai/tts-venv")
+
+
+@dataclass
 class AsrConfig:
     """Streaming recognizer. device is cpu, or gpu when an NVIDIA GPU is present."""
 
     device: str = "cpu"
+    backend: str = "parakeet-onnx"
+    endpoint: str = "native"
+    mode: str = "streaming"
+    model_path: Path = field(default_factory=lambda: xdg_data() / "agavai/models/whistle.cact")
+    runtime_library: Path | None = None
+    chunk_ms: int = 1000
+    startup_timeout_secs: float = 120
+    finish_timeout_secs: float = 30
+    max_utterance_secs: float = 120
     model_dir: Path = field(
         default_factory=lambda: xdg_data() / "agavai/models/parakeet-realtime-eou-120m"
     )
@@ -172,12 +207,24 @@ class LogConfig:
 @dataclass
 class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
+    # With no explicit small tier, the existing [llm] remains the local brain.
+    small_brain: LlmConfig | None = None
+    large_brain: LlmConfig | None = None
     files: FilesConfig = field(default_factory=FilesConfig)
     tts: TtsConfig = field(default_factory=TtsConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
+    vad: VadConfig = field(default_factory=VadConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     log: LogConfig = field(default_factory=LogConfig)
+
+    def llama_for_role(self, role: str = "service") -> LlmConfig | None:
+        small = self.small_brain or self.llm
+        if role == "small":
+            return small if small.backend == "llama-server" else None
+        if role == "large":
+            return self.large_brain if self.large_brain and self.large_brain.backend == "llama-server" else None
+        return self.llama_for_role("small") or self.llama_for_role("large")
 
     @property
     def tts_prefer(self) -> str:
@@ -325,6 +372,41 @@ def load_config(path: Path | None = None) -> Config:
         cfg.router.jev_model = str(jev["model"])
     if "api_key_env" in jev:
         cfg.router.api_key_env = str(jev["api_key_env"])
+    vad = data.get("vad") or {}
+    if "enabled" in vad:
+        cfg.vad.enabled = bool(vad["enabled"])
+    if "backend" in vad:
+        cfg.vad.backend = str(vad["backend"])
+    if "rate" in vad:
+        cfg.vad.rate = int(vad["rate"])
+    if "frame_ms" in vad:
+        cfg.vad.frame_ms = int(vad["frame_ms"])
+    if "open_threshold_dbfs" in vad:
+        cfg.vad.open_threshold_dbfs = float(vad["open_threshold_dbfs"])
+    if "close_threshold_dbfs" in vad:
+        cfg.vad.close_threshold_dbfs = float(vad["close_threshold_dbfs"])
+    if "noise_margin_db" in vad:
+        cfg.vad.noise_margin_db = float(vad["noise_margin_db"])
+    if "silence_ms" in vad:
+        cfg.vad.silence_ms = int(vad["silence_ms"])
+    if "min_speech_ms" in vad:
+        cfg.vad.min_speech_ms = int(vad["min_speech_ms"])
+    if "max_record_ms" in vad:
+        cfg.vad.max_record_ms = int(vad["max_record_ms"])
+    if "start_timeout_ms" in vad:
+        cfg.vad.start_timeout_ms = int(vad["start_timeout_ms"])
+    if "lead_in_ignore_ms" in vad:
+        cfg.vad.lead_in_ignore_ms = int(vad["lead_in_ignore_ms"])
+    if "model_path" in vad:
+        cfg.vad.model_path = _expand(str(vad["model_path"]))
+    if "threshold" in vad:
+        cfg.vad.threshold = float(vad["threshold"])
+    if "response_timeout_ms" in vad:
+        cfg.vad.response_timeout_ms = int(vad["response_timeout_ms"])
+    if "device" in vad:
+        cfg.vad.device = str(vad["device"])
+    if "venv" in vad:
+        cfg.vad.venv = _expand(str(vad["venv"]))
     asr = data.get("asr") or {}
     if "device" in asr:
         cfg.asr.device = str(asr["device"])
@@ -332,6 +414,54 @@ def load_config(path: Path | None = None) -> Config:
         cfg.asr.model_dir = _expand(str(asr["model_dir"]))
     if "venv" in asr:
         cfg.asr.venv = _expand(str(asr["venv"]))
+    for key in ("backend", "endpoint", "mode"):
+        if key in asr:
+            setattr(cfg.asr, key, str(asr[key]))
+    for key in ("model_path", "runtime_library"):
+        if key in asr:
+            setattr(cfg.asr, key, _expand(str(asr[key])))
+    if "chunk_ms" in asr:
+        cfg.asr.chunk_ms = int(asr["chunk_ms"])
+    for key in ("startup_timeout_secs", "finish_timeout_secs", "max_utterance_secs"):
+        if key in asr:
+            setattr(cfg.asr, key, float(asr[key]))
+    from agavai.brain import BRAIN_BACKENDS
+    from agavai.speech_backends import SPEECH_BACKENDS
+
+    brain = data.get("brain") or {}
+    for role, attr in (("small", "small_brain"), ("large", "large_brain")):
+        if role in brain:
+            spec = brain[role]
+            backend = str(spec.get("backend", "llama-server"))
+            if backend not in BRAIN_BACKENDS:
+                raise ValueError(f"Unknown brain backend: {backend}")
+            model = spec.get("model_path")
+            if not model:
+                raise ValueError(f"[brain.{role}] needs model_path")
+            tier = LlmConfig(backend=backend, model_path=_expand(str(model)), model_id=str(spec.get("model", role)), llama_bin=cfg.llm.llama_bin)
+            for key in ("host", "alias"):
+                if key in spec:
+                    setattr(tier, key, str(spec[key]))
+            for key in ("port", "max_tokens", "max_tool_rounds", "timeout_secs", "ctx_size", "n_gpu_layers"):
+                if key in spec:
+                    setattr(tier, key, int(spec[key]))
+            if "temperature" in spec:
+                tier.temperature = float(spec["temperature"])
+            for key in ("venv", "runtime_library", "llama_bin"):
+                if key in spec:
+                    setattr(tier, key, _expand(str(spec[key])))
+            if tier.max_tool_rounds < 1 or tier.timeout_secs <= 0 or tier.max_tokens < 1:
+                raise ValueError(f"Invalid limits in [brain.{role}]")
+            setattr(cfg, attr, tier)
+    if cfg.asr.backend not in SPEECH_BACKENDS:
+        raise ValueError(f"Unknown ASR backend: {cfg.asr.backend}")
+    if cfg.asr.endpoint not in {"native", "manual"} or cfg.asr.mode not in {"streaming", "batch"}:
+        raise ValueError("ASR endpoint must be native/manual and mode must be streaming/batch")
+    SPEECH_BACKENDS[cfg.asr.backend].validate_selection(cfg.asr)
+    if cfg.large_brain and (cfg.small_brain or cfg.llm).backend == cfg.large_brain.backend == "llama-server" and (cfg.small_brain or cfg.llm).base_url == cfg.large_brain.base_url:
+        raise ValueError("Small and large llama-server models need distinct host/port endpoints")
+    if not 20 <= cfg.asr.chunk_ms <= 5000 or min(cfg.asr.startup_timeout_secs, cfg.asr.finish_timeout_secs, cfg.asr.max_utterance_secs) <= 0:
+        raise ValueError("Invalid ASR chunk size or deadline")
     overlay = data.get("overlay") or {}
     if "placement" in overlay:
         placement = str(overlay["placement"])
@@ -400,17 +530,21 @@ def _llm_table_span(text: str) -> tuple[int, int]:
     return (start, end)
 
 
-def dump_llm_env(cfg: Config | None = None) -> str:
+def dump_llm_env(cfg: Config | None = None, role: str = "service") -> str:
     """Shell assignments for agavai-llm. Values are shlex-quoted."""
     cfg = cfg or load_config()
+    model = cfg.llama_for_role(role)
+    if model is None:
+        return "ENGINE=none\n"
     pairs = {
-        "BIN": str(cfg.llm.llama_bin),
-        "MODEL": str(cfg.llm.model_path),
-        "HOST": cfg.llm.host,
-        "PORT": str(cfg.llm.port),
-        "CTX": str(cfg.llm.ctx_size),
-        "NGL": str(cfg.llm.n_gpu_layers),
-        "ALIAS": cfg.llm.alias,
-        "MODEL_ID": cfg.llm.model_id,
+        "ENGINE": "llama-server",
+        "BIN": str(model.llama_bin),
+        "MODEL": str(model.model_path),
+        "HOST": model.host,
+        "PORT": str(model.port),
+        "CTX": str(model.ctx_size),
+        "NGL": str(model.n_gpu_layers),
+        "ALIAS": model.alias,
+        "MODEL_ID": model.model_id,
     }
     return "".join(f"{k}={shlex.quote(v)}\n" for k, v in pairs.items())

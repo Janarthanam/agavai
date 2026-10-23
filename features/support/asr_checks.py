@@ -50,18 +50,26 @@ def check_speech(model_dir, *, reset, silence):
     expected = "please find the meeting notes from yesterday and open the document in my downloads folder"
     sizes = (3200,) if reset or silence else (160, 3200, 10174)
     for size in sizes:
-        frames = b"".join(struct.pack(">I", len(pcm[i:i + size])) + pcm[i:i + size]
-                          for i in range(0, len(pcm), size))
-        turn = frames + struct.pack(">I", 0)
+        from agavai.asr import worker_settings
+        from agavai.config import AsrConfig
+        settings = worker_settings(AsrConfig(model_dir=Path(model_dir)))
+        def frame(command, uid, data=b""):
+            payload = struct.pack(">cI", command, uid) + data
+            return struct.pack(">I", len(payload)) + payload
+        turns = []
+        for uid in range(1, 3 if reset else 2):
+            frames = b"".join(frame(b"A", uid, pcm[i:i + size]) for i in range(0, len(pcm), size))
+            turns.append(frame(b"S", uid) + frames + frame(b"F", uid))
         result = subprocess.run(
-            [sys.executable, str(ROOT / "src" / "agavai" / "parakeet_worker.py"), model_dir, "cpu"],
-            input=turn * (2 if reset else 1), capture_output=True, timeout=45,
+            [sys.executable, str(ROOT / "src" / "agavai" / "asr_worker.py"), json.dumps(settings)],
+            input=b"".join(turns), capture_output=True, timeout=45,
         )
-        assert result.returncode == 0, result.stderr.decode()
+        assert result.returncode == 0, result.stderr.decode() + result.stdout.decode()
         events = [json.loads(line) for line in result.stdout.splitlines()]
-        utterances = [event["text"] for event in events if event["kind"] == "eou"]
+        utterances = [event["text"] for event in events if event["kind"] == "final"]
         assert utterances == [expected] * (2 if reset else 1), (size, utterances)
-        assert sum(event["kind"] == "reset" for event in events) == (2 if reset else 1), events
+        assert sum(event["kind"] == "endpoint" for event in events) == (2 if reset else 1), events
+
 
 
 if __name__ == "__main__":

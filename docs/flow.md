@@ -4,6 +4,14 @@ Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The as
 
 This file wins on runtime behavior where those documents disagree. [README.md](../README.md) says v1 talks to no remote model. That does not match the code: head selection may call OpenRouter.
 
+## Configurable engines
+
+Speech and brain backends are independently selectable; [engines.md](engines.md) lists the implemented settings. Parakeet/ONNX and the existing `[llm]` remain the defaults. Whistle/Cactus supports streaming or batch transcription with manual Enter-to-submit. Enter flushes final recognition before committing; Escape cancels without decoding/submitting a batch. Partial words and microphone levels never submit. No VAD silence policy is enabled.
+
+The small local brain runs first. Optional `[brain.large]` handles explicit escalation, unsupported/empty output, inference failure or exhausted steps. Successful small answers and Needle tool results finish directly. Local controls still bypass inference. Qwen can occupy either role. Llama conversation classification uses the small tier; Needle preserves shared history without that classification. The session validates tools, owns confirmations and carries completed results across escalation. No automatic inference-time downloads or silent device substitution are allowed.
+
+These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
+
 ## Requirements
 
 Agavai is a local Omarchy assistant for one person at the machine.

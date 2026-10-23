@@ -18,15 +18,19 @@ class _Scripted:
         self.sequences = [list(seq) for seq in sequences]
         self.on_open = on_open
 
-    def events(self, on_level, should_stop=None):
+    def events(self, on_level, should_stop=None, should_cancel=None):
         if self.on_open:
             self.on_open()
         seq = self.sequences.pop(0) if self.sequences else []
+        final = ""
         for item in seq:
             if callable(item):
                 item()
                 continue
+            final = item[1] or final
             yield item
+        if should_stop and should_stop() and not (should_cancel and should_cancel()):
+            yield "eou", final
 
     def close(self):
         return None
@@ -145,7 +149,7 @@ def speech(context):
 @when("an automatic session has no microphone")
 def missing(context):
     class _Down:
-        def events(self, on_level, should_stop=None):
+        def events(self, on_level, should_stop=None, should_cancel=None):
             raise AsrError("Microphone input is unavailable. Check your input device and try again.")
             yield None
 

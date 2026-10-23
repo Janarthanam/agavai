@@ -26,6 +26,7 @@ import agavai.tools as tools
 from agavai.config import Config, load_config
 from agavai.llm import chat as real_chat
 from agavai.llm import health
+from agavai.brain import create_brain
 from agavai.ui import ChatUi
 
 from evals.bindings import desktop as desktop_binding
@@ -43,9 +44,11 @@ def pinned_config() -> Config:
     cfg = load_config()
     cfg.router.backend = "keyword"
     cfg.router.fallback = "keyword"
-    cfg.llm.temperature = 0
-    cfg.llm.seed = SEED
-    cfg.llm.cache_prompt = False
+    for model in (cfg.llm, cfg.small_brain, cfg.large_brain):
+        if model is not None:
+            model.temperature = 0
+            model.seed = SEED
+            model.cache_prompt = False
     return cfg
 
 
@@ -113,6 +116,19 @@ class NetworkGuard:
 _real_select_head_ids = orchestrator.select_head_ids
 
 
+class RecordedBrain:
+    def __init__(self, backend, recorder, cfg):
+        self.backend, self.recorder, self.cfg = backend, recorder, cfg
+        self.tool_only = backend.tool_only
+
+    def ready(self):
+        return self.backend.ready()
+
+    def respond(self, messages, tools):
+        return self.recorder.record_model(self.cfg, messages, tools,
+                                          lambda: self.backend.respond(messages, tools))
+
+
 class Recorder:
     """Watches the two places the eval can see without knowing a route:
     model exchanges and world operations. Tool calls and router heads are
@@ -135,11 +151,19 @@ class Recorder:
             self.first_change = time.monotonic() - self.started
 
     def chat(self, cfg, messages, *, tools):
+        return self.record_model(cfg, messages, tools, lambda: real_chat(cfg, messages, tools=tools))
+
+    def brain(self, cfg, *, chat, health):
+        backend = create_brain(cfg, chat=real_chat, health=health)
+        return RecordedBrain(backend, self, cfg)
+
+    def record_model(self, cfg, messages, tools, invoke):
         kind = "context" if messages and messages[0].get("content") == orchestrator.CONTEXT_SYSTEM else "action"
         start = time.monotonic()
-        entry: dict[str, Any] = {"kind": kind, "offered": [t["function"]["name"] for t in tools or []]}
+        entry: dict[str, Any] = {"kind": kind, "backend": cfg.backend, "model": cfg.model_id,
+                                 "offered": [t["function"]["name"] for t in tools or []]}
         try:
-            message = real_chat(cfg, messages, tools=tools)
+            message = invoke()
         except Exception as exc:
             entry.update(error=str(exc), seconds=round(time.monotonic() - start, 3))
             self.model.append(entry)
@@ -148,7 +172,7 @@ class Recorder:
             {"name": (c.get("function") or {}).get("name"), "arguments": (c.get("function") or {}).get("arguments")}
             for c in message.get("tool_calls") or []
         ]
-        entry.update(content=message.get("content"), tool_calls=calls, seconds=round(time.monotonic() - start, 3))
+        entry.update(content=message.get("content"), tool_calls=calls, unsupported=message.get("unsupported"), seconds=round(time.monotonic() - start, 3))
         self.model.append(entry)
         return message
 
@@ -209,6 +233,7 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
         stack.enter_context(patch.object(orchestrator, "datetime", _frozen_datetime(clock)))
         stack.enter_context(patch.dict(tools.DISPATCH, {"clock_now": lambda _a, _c: clock.now.strftime("%A, %Y-%m-%d %H:%M")}))
         stack.enter_context(patch.object(orchestrator, "chat", recorder.chat))
+        stack.enter_context(patch.object(orchestrator, "create_brain", recorder.brain))
         stack.enter_context(patch.object(orchestrator, "call_tool", recorder.call_tool))
         stack.enter_context(patch.object(orchestrator, "select_head_ids", recorder.select_head_ids))
         ui = ChatUi(cfg)
@@ -332,8 +357,10 @@ def _server_props(cfg: Config) -> dict[str, Any]:
 
 
 def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
-    props = _server_props(cfg)
-    model_path = Path(props.get("model_path") or cfg.llm.model_path).expanduser()
+    small = cfg.small_brain or cfg.llm
+    from dataclasses import replace
+    props = _server_props(replace(cfg, llm=small)) if small.backend == "llama-server" else {}
+    model_path = Path(props.get("model_path") or small.model_path).expanduser()
     cpu = next((line.split(":", 1)[1].strip() for line in Path("/proc/cpuinfo").read_text().splitlines() if line.startswith("model name")), platform.processor())
     return {
         "git_commit": _git("rev-parse", "HEAD"),
@@ -344,14 +371,28 @@ def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
         "llama_server_build": props.get("build_info", ""),
         "router": f"{cfg.router.backend} (fallback {cfg.router.fallback})",
         "bindings": bindings,
-        "max_tool_rounds": cfg.llm.max_tool_rounds,
+        "max_tool_rounds": small.max_tool_rounds,
         "max_tools": cfg.router.max_tools,
-        "max_tokens": cfg.llm.max_tokens,
-        "sampling": {"temperature": cfg.llm.temperature, "seed": cfg.llm.seed, "cache_prompt": cfg.llm.cache_prompt},
+        "max_tokens": small.max_tokens,
+        "sampling": {"temperature": small.temperature, "seed": small.seed, "cache_prompt": small.cache_prompt},
         "cpu": cpu,
         "python": sys.version.split()[0],
+        "speech_engine": {
+            "backend": cfg.asr.backend, "endpoint": cfg.asr.endpoint, "mode": cfg.asr.mode,
+            "chunk_ms": cfg.asr.chunk_ms, "device": cfg.asr.device,
+            "model_sha256": {p.name: _sha256(p) for p in ([cfg.asr.model_path] if cfg.asr.backend == "whistle-cactus" else
+                                [cfg.asr.model_dir / name for name in ("encoder.onnx", "decoder_joint.onnx", "vocab.txt")]) if p.is_file()},
+            "runtime_sha256": _sha256(cfg.asr.runtime_library) if cfg.asr.runtime_library and cfg.asr.runtime_library.is_file() else "",
+        },
+        "brain_engines": {role: {
+            "backend": model.backend, "model_path": str(model.model_path),
+            "model_sha256": _sha256(model.model_path) if model.model_path.is_file() else "",
+            "endpoint": model.base_url if model.backend == "llama-server" else "worker",
+            "runtime_sha256": _sha256(model.runtime_library) if model.runtime_library and model.runtime_library.is_file() else "",
+            "temperature": model.temperature, "seed": model.seed, "max_tokens": model.max_tokens,
+        } for role, model in (("small", cfg.small_brain or cfg.llm), ("large", cfg.large_brain)) if model is not None},
     }
 
 
 def server_ready(cfg: Config) -> bool:
-    return health(cfg.llm)
+    return create_brain(cfg.small_brain or cfg.llm, chat=real_chat, health=health).ready()

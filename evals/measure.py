@@ -161,11 +161,13 @@ def run_measure(out: Path, *, log: Callable[[str], None]) -> dict[str, Any]:
     speed = []
     clean = [c for c in voice.get("clips", []) if c["group"] == "clean"]
     if clean:
-        first = [None if c["first_interim_t"] is None else c["first_interim_t"] - c["speech_start_s"] + c["step_mean_s"] for c in clean]
-        commit = [c["commits"][0]["t"] - c["speech_end_s"] + c["step_mean_s"] if c["commits"] else None for c in clean]
-        basis = "recognizer replay of synthesized requests: audio position of the event, plus the mean compute time of one 160 ms step"
-        speed.append(check("first_words", first, budgets["speed"]["first_words_s"], marginal, basis))
-        speed.append(check("commit", commit, budgets["speed"]["commit_s"], marginal, basis + "; a request never committed within 8 s counts as over"))
+        first = [None if c["first_interim_t"] is None else c.get("first_interim_ready_t", c["first_interim_t"] + c["step_mean_s"]) - c["speech_start_s"] for c in clean]
+        commit = [c["commits"][0].get("ready_t", c["commits"][0]["t"] + c["step_mean_s"]) - c["speech_end_s"] if c["commits"] else None for c in clean]
+        basis = "recognizer replay with sequential compute and audio arrival; excludes live IPC/capture jitter"
+        if cfg.asr.mode == "streaming":
+            speed.append(check("first_words", first, budgets["speed"]["first_words_s"], marginal, basis))
+        if cfg.asr.endpoint == "native":
+            speed.append(check("commit", commit, budgets["speed"]["commit_s"], marginal, basis + "; missing commits count as over"))
     changed, tool_reply, plain_reply, tool_texts, plain_texts = [], [], [], [], []
     for _ in range(samples):
         if _wait_idle(cfg, log):

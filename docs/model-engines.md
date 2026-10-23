@@ -4,7 +4,7 @@
 
 **Ask the small local model first. Ask the larger model only when the small one cannot handle the request.** Qwen is a local brain; it is not inherently the larger tier. Needle can handle supported tool requests directly, rather than routing every request into Qwen.
 
-Scope is the existing Omarchy desktop. Keep microphone capture, overlay, tool permissions and speech playback. Support Parakeet/ONNX Runtime and Whistle/Cactus without teaching the session their model-specific APIs. Support brain backends independently of speech selection. This is a proposed design, not implemented behavior.
+Scope is the existing Omarchy desktop. Keep microphone capture, overlay, tool permissions and speech playback. Support Parakeet/ONNX Runtime and Whistle/Cactus without teaching the session their model-specific APIs. Support brain backends independently of speech selection. The core adapters, configuration, worker lifecycle and conditional escalation are implemented; [engines.md](engines.md) documents exact current keys. VAD remains proposed.
 
 Current [flow.md](flow.md) and [audio.md](audio.md) require partial words and native EOU or Enter to submit. This proposal preserves that for Parakeet. Batch recognition and optional VAD endpointing are explicit extensions; they must be reflected in those specs when implemented. Other operating systems and remote deployment are outside this iteration.
 
@@ -39,7 +39,7 @@ flowchart TD
     O[Quickshell overlay process]
     C -->|16 kHz mono PCM| A
     A -->|framed PCM over stdin| R
-    A -->|same PCM if VAD enabled| E
+    A -->|future VAD: same PCM| E
     R -->|JSONL partial text and native EOU if supported| E
     E -->|finish command| R
     R -->|JSONL final transcript| E
@@ -79,11 +79,11 @@ The session-facing contract is:
 - `feed(utterance_id, pcm)` accepts ordered audio in the shared capture format.
 - `finish(utterance_id)` stops input and requests final decoding, including pending tail.
 - `cancel(utterance_id)` discards the utterance without submitting it.
-- Events: `partial(full_display_text)`, optional `endpoint(sample_offset)`, `final(full_text)`, `cancelled`, and `error`. Every event carries its utterance ID.
+- Events: `partial(full_display_text)`, optional `endpoint`, `final(full_text)`, `cancelled`, and `error`. Every event carries its utterance ID.
 
-The worker handshake declares protocol version, model/runtime identity, partial-text support and native-EOU support. Normalize Whistle's committed-plus-pending output into replacement display text. Its adapter converts PCM to float samples and owns chunk accumulation. Parakeet retains its 160 ms inference steps and streaming cache. A batch adapter alone owns the full-utterance buffer and decodes on finish; the session does not duplicate it.
+The worker handshake declares protocol version, backend identity, partial-text support and native-EOU support. Normalize Whistle's committed-plus-pending output into replacement display text. Its adapter converts PCM to float samples and owns chunk accumulation. Parakeet retains its 160 ms inference steps and streaming cache. A batch adapter alone owns the full-utterance buffer and decodes on finish; the session does not duplicate it.
 
-Use typed length-prefixed input frames for start/audio/finish/cancel, and JSONL output. Replace the current ambiguous zero-length flush/reset convention. Serialize commands after accepted audio. On native EOU the adapter fixes the boundary at its reported offset; later queued audio must not leak into the final transcript. A simultaneous Enter is idempotent. Final text can commit only after a finish decision; stable chunks never commit. Ignore stale IDs and require cancellation/reset acknowledgement before the next utterance.
+Use typed length-prefixed input frames for start/audio/finish/cancel, and JSONL output. Replace the current ambiguous zero-length flush/reset convention. Serialize commands after accepted audio. On native EOU the Parakeet adapter stops extending its hypothesis; later queued audio must not leak into the final transcript. A simultaneous Enter is idempotent. Final text can commit only after a finish decision; stable chunks never commit. Ignore stale IDs and require cancellation/reset acknowledgement before the next utterance.
 
 Configure worker executable/environment, model artifact, supported device, chunk size, startup deadline and absolute finish deadline. A timeout or crash cancels that utterance and reports an error; restart for a fresh request, never execute a partial. Bound deadlines from operation start, not time since the last event. Process one utterance at a time; sustain faster-than-real-time decoding without unbounded queues. Log load time, first partial, per-chunk compute and final-tail time separately. Whistle timings on this Omarchy machine remain unmeasured.
 
@@ -104,17 +104,17 @@ Profiles select supported combinations, not arbitrary interchangeable model file
 ```toml
 [asr]
 backend = "whistle-cactus"
-model = "/models/whistle.cact"
+model_path = "/models/whistle.cact"
 device = "cpu"
 endpoint = "manual"
 
 [brain.small]
 backend = "needle-cactus"
-model = "/models/needle.cact"
+model_path = "/models/needle.cact"
 
 [brain.large]
 backend = "llama-server"
-model = "/models/qwen.gguf"
+model_path = "/models/qwen.gguf"
 ```
 
 This is one experiment, not a decision that Qwen must be the larger tier. Small Qwen followed by a larger configured model also fits. To select Parakeet, change the speech backend to `parakeet-onnx`, its artifact directory and endpoint to `native`; the brain configuration stays the same. Runtime-specific executable/provider/thread settings belong to their backend, not a GGUF-only common `ModelSpec`.
@@ -166,7 +166,7 @@ Whistle is expected to reduce inference cost; it is not yet a measured latency p
 
 ## Conclusion & References
 
-Implement the speech lifecycle boundary first, preserving Parakeet behavior. Add Whistle behind it and compare manual-finish runs before tuning automatic endpointing. Then add the brain adapter and explicit small-to-large escalation. Update runtime specs alongside each behavior change; no runtime behavior changes in this documentation revision.
+The speech lifecycle, Parakeet/Whistle adapters, brain registry and conditional escalation are implemented. The native fixture checks cover both Cactus models and the Parakeet worker. Use [engines.md](engines.md) for setup and exact settings. Automatic Whistle endpointing and comparative quality/latency benchmarking remain follow-up work.
 
 - Current contracts: [flow](flow.md), [audio](audio.md), [model direction](v2.md#model-escalation-direction--2026-10-23), [installation](install-bundle.md).
 - Existing code: [ASR](../src/agavai/asr.py), [LLM](../src/agavai/llm.py), [orchestrator](../src/agavai/orchestrator.py), [config](../src/agavai/config.py), [voice eval](../evals/voice_helper.py).

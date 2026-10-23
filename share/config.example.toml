@@ -72,8 +72,40 @@ placement = "bottom-right"
 level = "info"
 
 [asr]
-# Assistant listen path. cpu is the default. gpu is used only when this is gpu
-# and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.
+# Independent speech model/runtime choice. GPU requires an installed NVIDIA
+# CUDA provider; unavailable devices fail rather than silently switching.
+backend = "parakeet-onnx"
+endpoint = "native"
+mode = "streaming"
 device = "cpu"
 # model_dir = "~/.local/share/agavai/models/parakeet-realtime-eou-120m"
 # venv = "~/.local/share/agavai/tts-venv"
+# To use Whistle, replace the values above and set these paths:
+# backend = "whistle-cactus"
+# endpoint = "manual"  # Enter flushes/submits; Escape discards
+# mode = "streaming"   # or "batch" (no partial words)
+# model_path = "~/.local/share/agavai/cactus/whistle.cact"
+# runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+# venv = "~/.local/share/agavai/cactus/venv"
+chunk_ms = 1000
+startup_timeout_secs = 120
+finish_timeout_secs = 30
+max_utterance_secs = 120
+
+# Optional brain roles. Without these tables, [llm] is the small local brain.
+# The larger runtime is called only on explicit escalation, empty/unsupported
+# output, inference failure or exhausted tool steps. Run setup-cactus.sh first.
+# [brain.small]
+# backend = "needle-cactus"
+# model_path = "~/.local/share/agavai/cactus/needle3.cact"
+# venv = "~/.local/share/agavai/cactus/venv"
+# runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+# timeout_secs = 10
+#
+# [brain.large]
+# backend = "llama-server"
+# model_path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+# host = "127.0.0.1"
+# port = 18766
+# alias = "agavai"
+# max_tool_rounds = 6

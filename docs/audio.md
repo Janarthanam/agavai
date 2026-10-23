@@ -25,9 +25,11 @@ Voxtype is not in this capture. Dictation keeps its own file interface. The assi
 
 ## Streaming ASR
 
+The default backend below is Parakeet. Select `whistle-cactus` in `[asr]` for streaming or batch Whistle through the same audio lifecycle; see [engine configuration](engines.md). Whistle uses manual Enter to finish input and flush its pending tail before submission. Batch mode has no partial transcript. Escape discards either mode. The backend and endpoint policy are validated before microphone capture; no silence timer is introduced.
+
 The model is [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1), a cache-aware streaming FastConformer with an RNN-T decoder, about 120 million parameters. Audio arrives in short chunks while the person is still talking. The encoder keeps a cache, so each chunk continues the sentence instead of re-reading it from the start. The attention context shipped with the model is 70 frames of the past and 1 frame of lookahead, about 80 ms. The model card states a design latency of 80–160 ms. On its end-of-utterance test the median delay is 160 ms and the 90th percentile is 280 ms.
 
-The device is configurable. The default is CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. The dynamic cache-aware ONNX steps 16 new mel frames at a time, 160 ms, with nine preceding frames for the subsampling context. The frontend uses the reference EOU pipeline's HTK mel scale with area normalization and raw log features. Pre-emphasis and overlapping FFT windows continue across microphone packets. Only the start and explicit end of a stream are padded. The full-precision decoder avoids the dropped tokens observed with the earlier INT8 decoder. `scripts/download-asr.sh` pins and verifies both exports from [parakeet-rs](https://huggingface.co/altunenes/parakeet-rs).
+The device is configurable. The default is CPU. GPU requires NVIDIA hardware and an installed ONNX CUDA provider; missing support is an explicit error. The dynamic cache-aware ONNX steps 16 new mel frames at a time, 160 ms, with nine preceding frames for the subsampling context. The frontend uses the reference EOU pipeline's HTK mel scale with area normalization and raw log features. Pre-emphasis and overlapping FFT windows continue across microphone packets. Only the start and explicit end of a stream are padded. The full-precision decoder avoids the dropped tokens observed with the earlier INT8 decoder. `scripts/download-asr.sh` pins and verifies both exports from [parakeet-rs](https://huggingface.co/altunenes/parakeet-rs).
 
 Each step returns the current hypothesis. Until an end marker appears, that text replaces the previous partial on the overlay. It is not a new conversation turn. That rule is already in [ui-design.md](ui-design.md).
 
@@ -49,7 +51,7 @@ The official checkpoint is English and does not emit punctuation or capitals.
 Turn taking is the only stage that may decide the user has finished. It reads the streaming ASR output.
 
 - An interim hypothesis is written to user context as a partial transcript. The overlay shows it. The LLM is not called.
-- An end-of-utterance marker, or the Enter key, commits the current line. That line is the user text for one turn.
+- A native end-of-utterance marker (Parakeet), or Enter (either backend), ends input. The worker finishes the buffered tail and returns final text before the session commits once.
 - Escape drops the stream, clears the hypothesis, and does not commit.
 - An end-of-boundary marker does not commit.
 

@@ -64,10 +64,16 @@ def chat(
         raise LlmError(f"llama-server HTTP {exc.code}: {detail}") from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise LlmError(f"llama-server unreachable at {cfg.base_url}: {exc}") from exc
+    except (ValueError, OSError) as exc:
+        raise LlmError(f"Invalid llama-server response: {exc}") from exc
+    if not isinstance(body, dict):
+        raise LlmError("llama-server response must be an object.")
     choices = body.get("choices") or []
     if not choices:
         raise LlmError(f"empty llama-server response: {body!r}"[:500])
     message = choices[0].get("message") or {}
+    if not isinstance(message, dict) or not isinstance(message.get("content") or "", str):
+        raise LlmError("Invalid assistant message from llama-server.")
     usage = body.get("usage") or {}
     calls = [str((call.get("function") or {}).get("name")) for call in parse_tool_calls(message)]
     log.info(
@@ -82,6 +88,8 @@ def parse_tool_calls(message: dict[str, Any]) -> list[dict[str, Any]]:
     """OpenAI tool_calls, plus Qwen <tool_call> XML if the template leaks."""
     calls = message.get("tool_calls") or []
     if calls:
+        if not isinstance(calls, list) or any(not isinstance(call, dict) or not isinstance(call.get("function"), dict) for call in calls):
+            raise LlmError("Invalid tool calls from the model.")
         return list(calls)
     content = message.get("content") or ""
     if "<tool_call>" not in content:

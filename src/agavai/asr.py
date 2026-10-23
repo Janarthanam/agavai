@@ -1,357 +1,200 @@
-"""Streaming ASR for the assistant listen path.
-
-The parent stays stdlib-only. Parakeet runs in the TTS venv via
-parakeet_worker.py. A reader thread drains the worker's stdout so a full
-pipe cannot stall the microphone pump. Turn taking lives in the listen loop:
-this module only delivers interim, end-of-boundary, and end-of-utterance events.
-"""
-
+"""One capture and a selectable speech worker for the assistant listen path."""
 from __future__ import annotations
 
 import json
 import logging
-import math
 import os
-import queue
+from pathlib import Path
 import select
 import shutil
 import struct
 import subprocess
 import threading
 import time
-from pathlib import Path
 
 from agavai.config import Config
+from agavai.meter import ParecSource, rms_dbfs
+from agavai.worker import WorkerError, WorkerProcess
 
 MIC_ERROR = "Microphone input is unavailable. Check your input device and try again."
-PAREC_ARGV = [
-    "parec",
-    "--raw",
-    "--format=s16le",
-    "--rate=16000",
-    "--channels=1",
-    "--latency-msec=20",
-    "-d",
-    "@DEFAULT_SOURCE@",
-]
-CLAMP_DBFS = -100.0
-_REF = 32768.0
+AsrError = WorkerError
 log = logging.getLogger(__name__)
 
 
-class AsrError(RuntimeError):
-    pass
-
-
-def rms_dbfs(frame: bytes) -> float:
-    """s16le PCM → dBFS, clamped to −100. Pure; no I/O."""
-    if len(frame) % 2:
-        frame = frame[:-1]
-    n = len(frame) // 2
-    if not n:
-        return CLAMP_DBFS
-    total = 0.0
-    for (sample,) in struct.iter_unpack("<h", frame):
-        total += sample * sample
-    rms = math.sqrt(total / n)
-    if rms <= 0:
-        return CLAMP_DBFS
-    return max(CLAMP_DBFS, 20.0 * math.log10(rms / _REF))
-
-
-def resolve_device(requested: str) -> str:
-    """CPU unless config asks for GPU and an NVIDIA GPU is present."""
-    if (requested or "cpu").strip().lower() != "gpu":
-        return "cpu"
-    if Path("/proc/driver/nvidia/version").is_file():
-        return "cuda"
-    return "cpu"
+def worker_settings(cfg):
+    from agavai.speech_backends import SPEECH_BACKENDS
+    try:
+        factory = SPEECH_BACKENDS[cfg.backend]
+        factory.validate_selection(cfg)
+        settings = factory.settings(cfg)
+    except (KeyError, ValueError) as exc:
+        raise AsrError(str(exc)) from exc
+    if not 20 <= cfg.chunk_ms <= 5000 or min(cfg.startup_timeout_secs, cfg.finish_timeout_secs, cfg.max_utterance_secs) <= 0:
+        raise AsrError("Invalid ASR chunk size or deadline.")
+    return {key: str(value) if isinstance(value, Path) else value for key, value in settings.items()}
 
 
 class StreamingRecognizer:
-    """One Parakeet process for the listen session. Capture starts per utterance."""
+    """Session-lived inference worker; each events() call owns one microphone capture."""
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config):
         self.cfg = cfg
-        root = Path(cfg.asr.model_dir).expanduser()
-        python = Path(cfg.asr.venv).expanduser() / "bin" / "python"
-        missing = [
-            name
-            for name in ("encoder.onnx", "decoder_joint.onnx", "vocab.txt")
-            if not (root / name).is_file()
-        ]
-        if missing:
-            raise AsrError("Streaming ASR model is not installed. Run scripts/download-asr.sh.")
+        settings = worker_settings(cfg.asr)
+        python = Path(cfg.asr.venv) / "bin/python"
         if not python.is_file():
-            raise AsrError(f"Streaming ASR runtime is missing: {python}")
-        worker = Path(__file__).with_name("parakeet_worker.py")
-        device = resolve_device(cfg.asr.device)
-        started = time.monotonic()
-        self.proc = subprocess.Popen(
-            [str(python), str(worker), str(root), device],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        self._lines: queue.Queue[str | None] = queue.Queue()
-        self._stdout_eof = threading.Event()
-        self._stderr_buf = bytearray()
-        self._reader = threading.Thread(target=self._read_stdout, daemon=True)
-        self._reader.start()
-        self._err_reader = threading.Thread(target=self._drain_stderr, daemon=True)
-        self._err_reader.start()
-        self._parec: subprocess.Popen | None = None
-        self._pump: threading.Thread | None = None
+            raise AsrError(f"ASR runtime is missing: {python}")
+        self._parec = None
+        self._pump = None
         self._stop_pump = threading.Event()
         self._pump_done = threading.Event()
-        self._mic_error = threading.Event()
-        self._write_lock = threading.Lock()
-        ready = self._read_line(120)
-        if not ready:
-            detail = self._failure("Streaming ASR did not start.")
-            self.close()
-            raise AsrError(detail)
+        self._pump_error = ""
+        self._uid = 0
+        started = time.monotonic()
+        self._worker = WorkerProcess([str(python), str(Path(__file__).with_name("asr_worker.py")), json.dumps(settings)])
         try:
-            msg = json.loads(ready)
-        except json.JSONDecodeError as exc:
+            ready = self._worker.receive(cfg.asr.startup_timeout_secs)
+            if not ready or ready.get("kind") != "ready" or ready.get("protocol") != 1:
+                raise AsrError("ASR worker did not provide a compatible readiness handshake.")
+            if cfg.asr.endpoint == "native" and not ready.get("native_endpoint"):
+                raise AsrError("Selected recognizer does not provide native endpointing.")
+            log.info("ASR ready backend=%s load_s=%.3f", cfg.asr.backend, time.monotonic() - started)
+        except Exception:
             self.close()
-            raise AsrError("Streaming ASR did not start.") from exc
-        if msg.get("kind") == "error":
-            text = msg.get("text") or "Streaming ASR did not start."
-            self.close()
-            raise AsrError(text)
-        if msg.get("kind") != "ready":
-            self.close()
-            raise AsrError("Streaming ASR did not start.")
-        log.info("asr ready device=%s load_secs=%.2f", device, time.monotonic() - started)
+            raise
 
-    def events(self, on_level, should_stop=None):
-        if self.proc.poll() is not None:
-            raise AsrError(self._failure("Streaming ASR stopped."))
+    def events(self, on_level, should_stop=None, should_cancel=None):
         if not shutil.which("parec"):
             raise AsrError(MIC_ERROR)
-        self._mic_error.clear()
-        self._pump_done.clear()
+        self._uid += 1
+        uid = self._uid
         self._stop_pump.clear()
+        self._pump_done.clear()
+        self._pump_error = ""
         self._level_db = None
-        next_level_at = 0.0
-        self._parec = subprocess.Popen(PAREC_ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        self._pump = threading.Thread(target=self._pump_audio, args=(should_stop,), daemon=True)
-        self._pump.start()
+        self._send(b"S", uid)
+        finished = False
         try:
-            while True:
-                line = self._read_line(0.05)
-                if should_stop and should_stop():
-                    return
-                if self._mic_error.is_set():
-                    raise AsrError(MIC_ERROR)
-                # Publish on the session thread so level and transcript writes cannot race.
-                db = self._level_db
-                now = time.monotonic()
-                if db is not None and now >= next_level_at:
-                    on_level(db)
-                    next_level_at = now + 0.1
-                if line is None:
-                    if self.proc.poll() is not None:
-                        if should_stop and should_stop():
-                            return
-                        raise AsrError(self._failure("Streaming ASR stopped."))
-                    if self._pump_done.is_set():
-                        yield from self._flush()
-                        return
-                    continue
-                kind, text = _event(line)
-                if kind == "eou":
-                    yield kind, text
-                    return
-                if kind in {"interim", "eob"}:
-                    yield kind, text
-        finally:
-            self._sync_reset()
-            self._stop_capture()
-
-    def close(self) -> None:
-        self._stop_capture()
-        proc = getattr(self, "proc", None)
-        if proc is not None and proc.poll() is None:
-            proc.terminate()
             try:
-                proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-
-    def _pump_audio(self, should_stop) -> None:
-        assert self._parec is not None and self._parec.stdout is not None
-        out = self._parec.stdout
-        got = False
-        try:
-            while not self._stop_pump.is_set():
+                self._parec = subprocess.Popen(ParecSource.ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            except OSError as exc:
+                raise AsrError(MIC_ERROR) from exc
+            self._pump = threading.Thread(target=self._pump_audio, args=(uid,), daemon=True)
+            self._pump.start()
+            next_level = 0.0
+            started = time.monotonic()
+            while True:
+                if should_cancel and should_cancel():
+                    return
                 if should_stop and should_stop():
-                    break
+                    self._stop_capture()
+                    if self.cfg.asr.mode == "batch":
+                        yield "finishing", ""
+                    message = self._finish(uid)
+                    finished = True
+                    yield "eou", message.get("text") or ""
+                    return
+                if self._pump_error:
+                    raise AsrError(self._pump_error)
+                if time.monotonic() - started >= self.cfg.asr.max_utterance_secs:
+                    raise AsrError("Maximum utterance duration exceeded; request was not submitted.")
+                db = self._level_db
+                if db is not None and time.monotonic() >= next_level:
+                    on_level(db)
+                    next_level = time.monotonic() + 0.1
+                message = self._worker.receive(0.05)
+                if message:
+                    if message.get("utterance_id") != uid:
+                        continue
+                    kind = message.get("kind")
+                    if kind == "endpoint" and self.cfg.asr.endpoint == "native":
+                        self._stop_capture()
+                        message = self._finish(uid)
+                        finished = True
+                        yield "eou", message.get("text") or ""
+                        return
+                    if kind == "partial":
+                        yield "interim", message.get("text") or ""
+                if self._pump_done.is_set():
+                    if self._pump_error:
+                        raise AsrError(self._pump_error)
+                    # A disconnected mic is not the user submitting a command.
+                    return
+        finally:
+            self._stop_capture()
+            if not finished:
+                try:
+                    self._send(b"C", uid)
+                    self._wait_terminal(uid, "cancelled")
+                except AsrError:
+                    self.close()
+                    raise
+
+    def _finish(self, uid):
+        started = time.monotonic()
+        self._send(b"F", uid, timeout=min(2, self.cfg.asr.finish_timeout_secs))
+        result = self._wait_terminal(uid, "final", deadline=started + self.cfg.asr.finish_timeout_secs)
+        log.info("ASR final utterance=%s backend=%s finish_s=%.3f", uid, self.cfg.asr.backend, time.monotonic() - started)
+        return result
+
+    def _wait_terminal(self, uid, kind, *, deadline=None):
+        if deadline is None:
+            deadline = time.monotonic() + self.cfg.asr.finish_timeout_secs
+        while time.monotonic() < deadline:
+            message = self._worker.receive(min(0.1, max(0, deadline - time.monotonic())))
+            if message and message.get("utterance_id") == uid and message.get("kind") == kind:
+                return message
+        raise AsrError(f"ASR {kind} timed out; request was not submitted.")
+
+    def _send(self, kind, uid, payload=b"", *, timeout=2):
+        self._worker.send(struct.pack(">cI", kind, uid) + payload, timeout=timeout)
+
+    def _pump_audio(self, uid):
+        got = False
+        tail = b""
+        try:
+            out = self._parec.stdout
+            while not self._stop_pump.is_set():
                 ready, _, _ = select.select([out], [], [], 0.05)
                 if not ready:
                     continue
                 data = os.read(out.fileno(), 3200)
                 if not data:
                     if not got:
-                        self._mic_error.set()
+                        self._pump_error = MIC_ERROR
                     break
                 got = True
+                data = tail + data
+                tail = data[len(data) - len(data) % 2:]
+                data = data[:len(data) - len(data) % 2]
+                if not data:
+                    continue
                 self._level_db = rms_dbfs(data)
-                self._write(data)
-        except Exception:
-            self._mic_error.set()
+                self._send(b"A", uid, data)
+        except (OSError, AsrError) as exc:
+            if not self._stop_pump.is_set():
+                self._pump_error = f"Microphone/ASR input failed: {exc}"
         finally:
             self._pump_done.set()
-            self._stop_parec()
 
-    def _flush(self):
-        """Ask the worker to finish the buffered tail, then yield until it resets."""
+    def _stop_capture(self):
         self._stop_pump.set()
+        if self._parec is not None and self._parec.poll() is None:
+            self._parec.terminate()
+            try:
+                self._parec.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                self._parec.kill()
+                self._parec.wait()
         if self._pump is not None:
-            self._pump.join(timeout=2)
-        if self.proc.poll() is not None:
-            return
-        self._write(b"")
-        deadline_s = 30
-        waited = 0.0
-        while waited < deadline_s:
-            line = self._read_line(0.1)
-            waited += 0.1
-            if line is None:
-                if self.proc.poll() is not None:
-                    return
-                continue
-            waited = 0.0
-            kind, text = _event(line)
-            if kind == "reset":
-                return
-            if kind in {"interim", "eob", "eou"}:
-                yield kind, text
+            self._pump.join(timeout=3)
+            if self._pump.is_alive():
+                raise AsrError("Microphone pump did not stop.")
+        if self._parec is not None and self._parec.stdout is not None:
+            self._parec.stdout.close()
 
-    def _sync_reset(self) -> None:
-        self._stop_pump.set()
-        if self._pump is not None and self._pump.is_alive():
-            self._pump.join(timeout=2)
-        if self.proc.poll() is not None:
-            return
-        try:
-            self._write(b"")
-        except OSError:
-            self.close()
-            return
-        deadline_s = 30
-        waited = 0.0
-        while waited < deadline_s:
-            line = self._read_line(0.1)
-            waited += 0.1
-            if line is None:
-                if self.proc.poll() is not None:
-                    return
-                continue
-            waited = 0.0
-            kind, _text = _event(line)
-            if kind == "reset":
-                return
-        self.close()
-
-    def _write(self, payload: bytes) -> None:
-        assert self.proc.stdin is not None
-        frame = struct.pack(">I", len(payload)) + payload
-        with self._write_lock:
-            self.proc.stdin.write(frame)
-            self.proc.stdin.flush()
-
-    def _read_stdout(self) -> None:
-        assert self.proc.stdout is not None
-        buf = b""
-        try:
-            while True:
-                ready, _, _ = select.select([self.proc.stdout], [], [], 0.05)
-                if not ready:
-                    if self.proc.poll() is None:
-                        continue
-                    try:
-                        chunk = os.read(self.proc.stdout.fileno(), 65536)
-                    except OSError:
-                        break
-                    if not chunk:
-                        break
-                else:
-                    chunk = os.read(self.proc.stdout.fileno(), 65536)
-                    if not chunk:
-                        break
-                buf += chunk
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    self._lines.put(line.decode("utf-8", "replace"))
-        finally:
-            if buf.strip():
-                self._lines.put(buf.decode("utf-8", "replace"))
-            self._lines.put(None)
-            self._stdout_eof.set()
-
-    def _read_line(self, timeout: float) -> str | None:
-        if self._stdout_eof.is_set() and self._lines.empty():
-            return None
-        try:
-            item = self._lines.get(timeout=timeout)
-        except queue.Empty:
-            return None
-        if item is None:
-            self._stdout_eof.set()
-            return None
-        return item
-
-    def _drain_stderr(self) -> None:
-        if self.proc.stderr is None:
-            return
-        try:
-            while True:
-                chunk = os.read(self.proc.stderr.fileno(), 4096)
-                if not chunk:
-                    return
-                self._stderr_buf.extend(chunk)
-                if len(self._stderr_buf) > 8192:
-                    del self._stderr_buf[:-8192]
-        except OSError:
-            return
-
-    def _failure(self, fallback: str) -> str:
-        """A short message for the overlay; the worker's own output goes to the log."""
-        text = bytes(self._stderr_buf).decode("utf-8", "replace").strip()
-        if text:
-            log.error("asr worker output:\n%s", text)
-        return fallback
-
-    def _stop_capture(self) -> None:
-        self._stop_pump.set()
-        self._stop_parec()
-
-    def _stop_parec(self) -> None:
-        proc = self._parec
-        if proc is None or proc.poll() is not None:
-            return
-        proc.terminate()
-        try:
-            proc.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-
-
-def _event(line: str) -> tuple[str | None, str]:
-    try:
-        msg = json.loads(line)
-    except json.JSONDecodeError:
-        return None, ""
-    kind = msg.get("kind")
-    if kind == "error":
-        raise AsrError(msg.get("text") or "Streaming ASR failed.")
-    if kind in {"interim", "eob", "eou", "reset"}:
-        return kind, msg.get("text") or ""
-    return None, ""
+    def close(self):
+        self._stop_capture()
+        self._worker.close()
 
 
 def open_stream(cfg: Config) -> StreamingRecognizer:

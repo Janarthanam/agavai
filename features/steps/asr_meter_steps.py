@@ -12,20 +12,23 @@ from unittest.mock import patch
 from behave import when, then
 
 from agavai.__main__ import _cancel_path, listen_session
-from agavai.asr import PAREC_ARGV, rms_dbfs
+from agavai.asr import rms_dbfs
+from agavai.meter import ParecSource
 
 
 WORKER = """
 import json, struct, sys
 with open(sys.argv[1], 'wb') as recorded:
-    print(json.dumps({'kind': 'ready'}), flush=True)
+    print(json.dumps({'kind': 'ready', 'protocol': 1, 'native_endpoint': True}), flush=True)
     while header := sys.stdin.buffer.read(4):
         size = struct.unpack('>I', header)[0]
-        if size:
-            recorded.write(sys.stdin.buffer.read(size))
+        frame = sys.stdin.buffer.read(size)
+        kind, uid = struct.unpack('>cI', frame[:5])
+        if kind == b'A':
+            recorded.write(frame[5:])
             recorded.flush()
-        else:
-            print(json.dumps({'kind': 'reset'}), flush=True)
+        elif kind == b'C':
+            print(json.dumps({'kind': 'cancelled', 'utterance_id': uid}), flush=True)
 """
 CAPTURE = """
 import sys, time
@@ -64,7 +67,7 @@ def capture(context, *, cancel=False, empty=False):
         if argv[0] == "parec":
             context.capture_count += 1
             return spawn([sys.executable, "-c", CAPTURE, str(audio)], **kwargs)
-        assert Path(argv[1]).name == "parakeet_worker.py", argv
+        assert Path(argv[1]).name == "asr_worker.py", argv
         return spawn([sys.executable, "-c", WORKER, str(context.recorded)], **kwargs)
 
     with patch("agavai.asr.subprocess.Popen", side_effect=popen), patch("agavai.asr.shutil.which", return_value="/usr/bin/parec"), patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch.object(context.ui, "level", side_effect=level), patch("agavai.__main__._run_stop_body") as submit:
@@ -127,8 +130,8 @@ def sine_db(context):
 
 @then('the parec argv should use "{flag}" for "{target}"')
 def parec_argv(context, flag, target):
-    assert flag in PAREC_ARGV and target in PAREC_ARGV, PAREC_ARGV
-    assert "--target=@DEFAULT_SOURCE@" not in " ".join(PAREC_ARGV), PAREC_ARGV
+    assert flag in ParecSource.ARGV and target in ParecSource.ARGV, ParecSource.ARGV
+    assert "--target=@DEFAULT_SOURCE@" not in " ".join(ParecSource.ARGV), ParecSource.ARGV
 
 
 @when("I check the native orb animation without desktop capture")

@@ -105,7 +105,7 @@ def step_named_listing(context, tool):
     ])
     reply = f"Here are {folder}/, {image}, and {notes}."
     scripted = [
-        {"tool_calls": [{"id": "c1", "function": {"name": tool, "arguments": "{}"}}], "content": ""},
+        {"tool_calls": [{"id": "c1", "function": {"name": tool, "arguments": '{"query":"notes"}'}}], "content": ""},
         {"content": reply, "tool_calls": []},
     ]
 

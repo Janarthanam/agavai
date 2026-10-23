@@ -40,7 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     say.add_argument("text", nargs="+")
     sub.add_parser("status")
     sub.add_parser("mcp", help="Run the MCP stdio server")
-    sub.add_parser("dump-llm", help="Print llama-server env for the launcher script")
+    dump = sub.add_parser("dump-llm", help="Print llama-server env for the launcher script")
+    dump.add_argument("--role", choices=["service", "small", "large"], default="service")
     app_cmd = sub.add_parser("app", help="Start Agavai listening (app launcher)")
     app_cmd.description = "Start Agavai listening in the single voice widget"
     model = sub.add_parser("model", help="Show, list, or select the on-device GGUF")
@@ -67,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         serve_stdio()
         return 0
     if args.cmd == "dump-llm":
-        sys.stdout.write(dump_llm_env(cfg))
+        sys.stdout.write(dump_llm_env(cfg, args.role))
         return 0
     if args.cmd in {"app", "invoke"}:
         from agavai.app import run as run_app
@@ -76,15 +77,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "model":
         return _model_cmd(cfg, args.action, args.name)
     if args.cmd == "status":
-        spec = cfg.llm.active_spec()
+        from agavai.brain import create_brain
+        from agavai.llm import LlmError, chat
+        model = cfg.small_brain or cfg.llm
+        spec = model.active_spec()
+        try:
+            available = create_brain(model, chat=chat, health=health).ready()
+        except LlmError:
+            available = False
         print(f"state={read_state(cfg)}")
-        print(f"llm={'up' if health(cfg.llm) else 'down'} {cfg.llm.base_url}")
-        print(f"model_id={cfg.llm.model_id}")
-        print(f"model_path={cfg.llm.model_path}")
-        print(f"model_present={cfg.llm.model_path.is_file()}")
+        print(f"asr_backend={cfg.asr.backend} endpoint={cfg.asr.endpoint} mode={cfg.asr.mode}")
+        print(f"brain_backend={model.backend}")
+        print(f"llm={'up' if available else 'down'} {model.base_url if model.backend == 'llama-server' else 'worker'}")
+        print(f"model_id={model.model_id}")
+        print(f"model_path={model.model_path}")
+        print(f"model_present={model.model_path.is_file()}")
         if spec and spec.description:
             print(f"model_desc={spec.description}")
-        if cfg.llm.path_overridden:
+        if model.path_overridden:
             print("model_path_overridden=true")
         return 0
     if args.cmd == "speak":
@@ -257,7 +267,7 @@ def listen_session(cfg, ui: ChatUi) -> int:
 
     The mic stays open until the user dismisses it or the capture ends.
     A finished action returns to listening with the results still on screen.
-    The recognizer, not a silence timer, decides when the line is finished.
+    Native EOU or Enter ends input; final decoding completes before submission.
     """
     _cancel_path(cfg).unlink(missing_ok=True)
     _publish_pid(cfg, os.getpid())
@@ -345,6 +355,8 @@ def listen_session(cfg, ui: ChatUi) -> int:
         log.info("session end reason=%s", ended)
         if stream is not None:
             stream.close()
+        from agavai.brain import close_brains
+        close_brains()
         from agavai.tts import sweep_playback_wavs
 
         sweep_playback_wavs()
@@ -379,28 +391,29 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
     def captured(reason: str, line: str = "") -> None:
         log.info("asr end reason=%s words=%d secs=%.2f", reason, len(line.split()), time.monotonic() - started)
 
-    hypothesis = ""
     try:
         for kind, text in stream.events(
             on_level=ui.level,
             should_stop=stop_requested,
+            should_cancel=lambda: stop_requested() and cancel_requested(),
         ):
-            if kind == "interim" and text:
-                hypothesis = text
+            if kind == "finishing":
+                ui.transcribing()
+                write_state(cfg, "transcribing")
+            elif kind == "interim" and text:
                 ui.partial(text)
             elif kind == "eob" and text:
-                hypothesis = text
                 ui.partial(text)
             elif kind == "eou":
-                line = (text or hypothesis).strip()
+                if stop_requested() and cancel_requested():
+                    break
+                line = text.strip()
                 if not line:
                     captured("empty")
                     return "ignore", ""
-                captured("eou", line)
+                captured("enter" if stop_requested() else "eou", line)
                 ui.partial(line)
                 return "speech", line
-            if stop_requested():
-                break
     except AsrError as exc:
         finish(cfg)
         ui.error(str(exc))
@@ -414,9 +427,6 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
         ui.idle()
         write_state(cfg, "idle")
         return "cancel", ""
-    if stop_requested():
-        captured("enter", hypothesis)
-        return "speech", hypothesis.strip()
     captured("stream_ended")
     return "ended", ""
 

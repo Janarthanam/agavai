@@ -72,3 +72,5 @@ PYTHONPATH=src behave
 ```bash
 PYTHONPATH=src .venv/bin/python -m evals run      # writes evals/results/<run>/report.json and report.html
 ```
+
+Speech and brain runtimes can be selected independently. See [engine configuration](docs/engines.md) for Whistle/Cactus, Parakeet/ONNX, Needle and small-to-large model escalation.

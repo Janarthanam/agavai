@@ -68,6 +68,8 @@ def _speech_env(cfg: Config) -> tuple[str, dict[str, str]]:
 
 def helper(cfg: Config, request: dict[str, Any], timeout: int = 1800) -> dict[str, Any]:
     python, _ = _speech_env(cfg)
+    if request["mode"] != "recognize":
+        python = str(Path(cfg.tts.venv) / "bin/python")
     proc = subprocess.run([python, "-I", str(HELPER)], input=json.dumps(request), capture_output=True, text=True, timeout=timeout, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"voice helper failed: {proc.stderr[-1500:]}")
@@ -116,8 +118,8 @@ def ensure_clips(cfg: Config, specs: list[dict[str, Any]]) -> dict[str, dict[str
 
 
 def recognize(cfg: Config, clips: list[dict[str, str]]) -> dict[str, Any]:
-    _, paths = _speech_env(cfg)
-    return helper(cfg, {"mode": "recognize", "model_dir": paths["model_dir"], "clips": clips})
+    from agavai.asr import worker_settings
+    return helper(cfg, {"mode": "recognize", "asr": worker_settings(cfg.asr), "clips": clips})
 
 
 def _norm(text: str) -> str:
@@ -259,8 +261,8 @@ def run_voice(shipped_caps: set[str], *, log: Callable[[str], None], case_result
             speech_output.append(grade_speech_output(pick, heard_text(clip)))
 
     return {
-        "clips": [{**{k: s[k] for k in ("id", "group", "text", "snr_db")}, **timing[s["id"]], **{k: by_id[s["id"]][k] for k in ("commits", "uncommitted", "first_interim_t", "step_mean_s", "step_max_s")}} for s in specs],
-        "recognizer": {"load_s": heard["load_s"], "peak_rss_mb": heard["peak_rss_mb"]},
+        "clips": [{**{k: s[k] for k in ("id", "group", "text", "snr_db")}, **timing[s["id"]], **{k: by_id[s["id"]][k] for k in ("commits", "uncommitted", "first_interim_t", "first_interim_ready_t", "endpoint", "step_mean_s", "step_max_s")}} for s in specs],
+        "recognizer": {key: heard[key] for key in ("load_s", "peak_rss_mb", "backend", "endpoint", "mode")},
         "hearing": hearing,
         "turn_taking": turns,
         "spoken_tasks": spoken,

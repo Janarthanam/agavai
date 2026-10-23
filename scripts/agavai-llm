@@ -5,7 +5,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
-eval "$(python3 -m agavai dump-llm)"
+ROLE="${1:-service}"
+eval "$(python3 -m agavai dump-llm --role "$ROLE")"
+if [[ "$ENGINE" == "none" ]]; then
+  echo "No llama-server configured for role: $ROLE"
+  exit 0
+fi
 LOG_DIR="${XDG_RUNTIME_DIR:-/tmp}/agavai"
 mkdir -p "$LOG_DIR"
 
