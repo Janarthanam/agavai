@@ -2,12 +2,16 @@
 
 ## Status
 
-Rewritten version ready for user review.
+In progress. User direction recorded: ask the small local model first; ask the
+larger model only if the small model cannot answer. Qwen is a local brain. The
+existing HTML still shows the earlier router-only proposal and needs to be revised
+around this escalation flow. See [the decision record](../docs/v2.md#model-escalation-direction--2026-10-23).
 
 - [ ] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
 
 ## Acceptance
 
+- Show small-local-model-first answering, with larger-model escalation only when needed; do not assume every request needs both Needle and Qwen.
 - Compare current Parakeet and router implementations with proposed Cactus workers.
 - Show process ownership, IPC payloads, turn commit and the Qwen/tool/reply loop.
 - Distinguish historical measurements, configured budgets and unmeasured candidates.
@@ -24,3 +28,5 @@ Rewritten version ready for user review.
 - 2026-10-23T16:48:42+05:30 — Codex session whistle-needle-design-rewrite — reopened after user review. Previous page met mechanical checks but failed the core requirement of human understanding: an inventory replaced an architecture diagram, details obscured roles, and the worked request was fragmented. Scope remains the same HTML and task. Replace with a labeled process graph, plain-language roles, one complete example and an honest latency summary. Keep protocol/eval details behind disclosure. No runtime changes.
 
 - 2026-10-23T16:54:40+05:30 — Codex session whistle-needle-design-rewrite — rewrite ready for review. Replaced the inventory with one process graph and labeled audio, text, prompt, tool/result and speech paths; current/proposed toggle; a complete browser-opening example; four latency checkpoints with provenance. Main desktop view reduced from about 3841 px to 1937 px; implementation details are disclosed on demand. Corrected the capture path to show audio passing through the session before recognition. Changed files: `docs/architecture-design/model-engines.html` and this task. Validation: visually inspected proposed/current desktop and phone views; checked toggle state and graph-label bounds at 728/320 px; checked expanded-page width, JS syntax, local references and whitespace; published replacement with html_render. Runtime unchanged. Leaving the task open for review of the explanation rather than treating layout checks as user acceptance.
+
+- 2026-10-23T17:31:09+05:30 — Codex session model-escalation-note — recorded user direction in `docs/v2.md` and this task: small local model first; larger model only if no answer; Qwen is a local brain. This supersedes the router-only interpretation of the candidate design. Tier assignments, larger-model deployment and escalation criteria remain unspecified. Existing HTML is explicitly marked as needing revision; no runtime or HTML changes in this note. Validation: reviewed the two-file Markdown diff and whitespace.
