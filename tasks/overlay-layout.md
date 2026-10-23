@@ -53,3 +53,11 @@ Status: complete. Commits `edbe6f0`, `a4d172c`, `fed791a`, `853100a`. Deployed 2
     - The prototype was not updated.
     - The model once said "Nine十六" for twelve times eight (2026-10-21).
     - `_play_tones` leaves a temp WAV per call.
+- 2026-10-23T17:45:45+05:30 — Claude Code session overlay-layout — follow-up, complete. User: "for things that require it to display we need to continue to display". Asked what they saw; the answer: the view shrank back to the orb. Cause: `Chat.qml` minimized on any focus loss, and Hyprland `input:follow_mouse = 1` turns pointer movement into focus loss.
+  - Fix committed as `7d5eb76`. `minimizeIfUnfocused()` skips the minimize while `display` is set. `applySnapshot` calls it when a snapshot removes the canvas, so a new request still minimizes an unfocused view. Files: `plugin/Chat.qml`, `features/support/compact-ui.qml`, `scripts/check-compact-ui.py`, `docs/{flow,ui-design}.md`.
+  - Native check: a second scenario (`AGAVAI_UI_CHECK=canvas-focus`) runs in its own Quickshell instance. In the harness, `requestActivate()` never focuses the overlay. Hyprland focuses it only when its layer maps with on-demand focus, so the scenario opens and expands in one tick, as compact step 5 does.
+  - Validation:
+    - Both scenarios passed three runs in a row. One earlier compact run failed once at step 8 (typing reached another window), then passed on rerun.
+    - Mutation checks each fail as expected: no canvas exception, no minimize on clear, and no minimize on focus loss.
+    - Full Behave suite: 245 scenarios passed, 3 skipped. `git diff --check` clean.
+  - Deployed: copied `plugin/` at `7d5eb76`; all files match. `omarchy plugin validate` OK. `omarchy restart shell` loaded the overlay with no warnings.
