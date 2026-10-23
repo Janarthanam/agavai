@@ -1,6 +1,6 @@
 # Recordings
 
-Status: proposed design, not implemented. Open decisions are listed at the end and tracked in [tasks/recording.md](../tasks/recording.md).
+Status: design agreed 2026-10-23; phase P0 in progress. Decisions are listed at the end; progress is tracked in [tasks/recording.md](../tasks/recording.md).
 
 Agavai can listen without answering. It keeps the audio, a timestamped transcript, and your corrections, so you can play any moment back later. The same recording can become a transcript, notes, or a translation. The assistant loop stays as specified in [flow.md](flow.md), and the overlay rules stay in [ui-design.md](ui-design.md). This file covers only what recording adds or changes.
 
@@ -8,8 +8,8 @@ Agavai can listen without answering. It keeps the audio, a timestamped transcrip
 
 - **One idea: record first, decide later.** A recording is always the same thing: audio plus a timestamped transcript. Transcript, Notes, and Translation are views of it. You never choose a mode in a dialog before you start. What you say to start it picks the first view, and you can switch views at any time, during or after recording, without recording again.
 - **Starting takes one gesture.**
-  - Voice in an ordinary Agavai session: "record this", "take notes", "transcribe this meeting", "translate this into French".
-  - A shortcut that toggles recording.
+  - Voice in an ordinary Agavai session: "record this", "take notes", "transcribe this meeting".
+  - Super+Ctrl+M, which toggles recording.
   - `agavai record` on the command line.
 - **While recording, speech is content.** Agavai does not answer, route, or speak. Nothing you say goes to OpenRouter. The only voice controls are separate, isolated utterances that start with the name: "Agavai stop", "Agavai pause", "Agavai resume", "Agavai mark".
 - **Recording is always visible.**
@@ -34,9 +34,9 @@ Agavai can listen without answering. It keeps the audio, a timestamped transcrip
 
 | Gesture | Result |
 |---|---|
-| "Agavai, take notes" (any wording that asks to record, take notes, transcribe, or translate) | Recording starts in the current session. The first view comes from the wording: notes, transcript, or translation with its target language. |
-| Record shortcut | Starts a recording in the Transcript view. Pressing it again stops. This mirrors Alt+Print for screen recording. |
-| `agavai record [--view transcript\|notes\|translation] [--to LANG] [--title TEXT]` | Same as the shortcut, from scripts. |
+| "Agavai, take notes" (any wording that asks to record, take notes, or transcribe) | Recording starts in the current session. The first view comes from the wording: notes or transcript. |
+| Super+Ctrl+M | Starts a recording in the Transcript view. Pressing it again stops. This mirrors Alt+Print for screen recording. Super+M stays the assistant. |
+| `agavai record` | Same as Super+Ctrl+M, from scripts. `agavai record stop\|pause\|resume\|mark` control a running recording. |
 | Super+M while recording | Raises the recording sheet. It does not start a second capture. |
 
 ### While recording
@@ -51,7 +51,7 @@ The overlay keeps its corner and orb (see [ui-design.md](ui-design.md)).
   - Committed lines show their `mm:ss` time.
   - The current partial line is dimmed, next to the orb.
   - The view stops scrolling on its own while you are reading earlier lines.
-  - The view chip (`Transcript ▾`) at the top switches views live. Translation adds the translated line under each committed line a moment after it lands.
+  - The view chip (`Transcript ▾`) at the top switches views live.
 - **Controls next to the orb.**
   - **Pause / Resume.** Paused time is not recorded and is shown as a gap.
   - **Mark.** Drops a bookmark at the current moment, with an optional typed label.
@@ -85,7 +85,7 @@ The overlay keeps its corner and orb (see [ui-design.md](ui-design.md)).
 |---|---|---|
 | Transcript (always) | Every line with its time, punctuated, your corrections applied | Live recognizer, then the offline pass |
 | Notes | A summary paragraph, then headings, bullets, decisions, and action items, each linked to the time it was said | Local LLM over the transcript |
-| Translation (to a language) | Each line translated, shown under the original or alone | Local LLM, line by line, so lines stay seekable |
+| Translation (to a language), later phase | Each line translated, shown under the original or alone | Local LLM, line by line, so lines stay seekable |
 
 New views are new prompts over the same transcript. They never need a new recording.
 
@@ -129,7 +129,7 @@ flowchart LR
 ```
 
 - **Capture.** ListenSession already owns the microphone, so recording runs in that same process. Unlike the assistant path, capture does not stop at an end of utterance, because a gap there would lose audio. One `parec` stream feeds three consumers: a WAV file, the live recognizer, and the orb meter.
-- **Audio file.** Recording writes plain 16 kHz PCM WAV (about 115 MB per hour) and flushes every second. A crash or power loss still leaves a playable file; recovery fixes the header. On stop, ffmpeg encodes `audio.opus` and the WAV is deleted after the Opus file is verified. `[recordings] keep_lossless = true` keeps a FLAC instead.
+- **Audio file.** Recording writes plain 16 kHz PCM WAV (about 115 MB per hour) and flushes every second. A crash or power loss still leaves a playable file; recovery fixes the header. On stop, ffmpeg encodes `audio.opus` and the WAV is deleted after the Opus file is verified.
 - **Live recognizer.** Parakeet EOU gains a continuous mode. After an end of utterance it resets its decoder without dropping queued audio. It reports each segment's start and end from the sample count, accurate to one 160 ms step. Each committed segment is appended to `segments.jsonl` and published to the snapshot. The assistant path keeps today's per-utterance behavior.
 - **Offline pass.** This runs after stop, as `agavai recordings process <id>` at low CPU priority. It is a detached job, so it survives dismissing the overlay.
   - **Model.** The proposed model is [Parakeet-TDT-0.6B-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3): 25 European languages, punctuation, capitals, and word timestamps. It needs its own pinned download script. Voxtype's copy is not read, to keep the two apps separate as [flow.md](flow.md) requires.
@@ -178,15 +178,14 @@ flowchart LR
 | Phase | Scope |
 |---|---|
 | P0 Record and review | Start by voice, shortcut, or CLI. Continuous capture to WAV, then Opus. Live transcript with times. Recording folder. Review sheet with player, clickable lines, and corrections. Library list. Bar indicator and chimes. Crash recovery. |
-| P1 Views | Offline polish pass, title, Notes, Translation (text, through the local LLM), voice follow-ups on the open recording, search, export. |
-| P2 Later | Computer audio as a second channel. Labels for You (microphone) and Others (computer) come free from separate channels. Also live translation while recording, and a glossary learned from corrections. |
+| P1 Views | Offline polish pass, title, Notes, voice follow-ups on the open recording, search, export. |
+| P2 Later | Computer audio as a second channel. Labels for You (microphone) and Others (computer) come free from separate channels. Translation, first as text through the local LLM and then live while recording. A glossary learned from corrections. |
 
-## Open decisions
+## Decisions taken
 
-1. **Audio sources in the first version.** Microphone only, or also computer audio for meetings, calls, and videos? Computer audio is the main reason to translate something you did not say yourself. It needs a monitor-source capture and, without headphones, echo handling.
-2. **Translation languages.** Which spoken languages, translated into which?
-   - Parakeet-TDT-0.6B-v3 covers 25 European languages.
-   - Tamil, Hindi, and other languages need a Whisper-family model, about 1.6 GB.
-   - Translation quality of the 4B local model varies by language and must be measured for each language you need.
-3. **Folder and retention.** `~/Documents/Agavai/Recordings/` and keep everything until you delete it, or somewhere else, or auto-delete audio after a period?
-4. **Record shortcut.** Super+Ctrl+M today duplicates Super+M (marked legacy in `~/.config/hypr/bindings.lua`). Repurposing it as the record toggle is the natural fit; Super+Alt+M is free otherwise. Changing it edits your Hyprland bindings, which are outside this repository.
+Decided with the user on 2026-10-23:
+
+1. **Microphone only to start.** Computer audio comes in a later phase.
+2. **Translation comes later.** It moved to P2, so the offline model choice for other languages waits until then.
+3. **Folder and retention.** `~/Documents/Agavai/Recordings/`, kept until the user deletes a recording.
+4. **Record shortcut.** Super+Ctrl+M, today a duplicate of Super+M, becomes the record toggle. Super+M stays the assistant.

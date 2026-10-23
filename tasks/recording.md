@@ -1,19 +1,14 @@
 # Recordings: listen, keep the audio, transcript, notes, translation
 
-Waiting for input. The design is proposed in [docs/recording.md](../docs/recording.md). Before implementation, the user needs to decide:
-
-1. Audio sources for the first version: microphone only, or also computer audio.
-2. Translation languages, spoken and target. This decides the offline model: Parakeet-TDT-0.6B-v3 for 25 European languages, or a Whisper-family model for Tamil, Hindi, and others.
-3. Recording folder and retention (proposed: `~/Documents/Agavai/Recordings/`, kept until deleted).
-4. Record shortcut (proposed: repurpose Super+Ctrl+M, which today duplicates Super+M). This edits `~/.config/hypr/bindings.lua`, outside the repo.
+In progress: P0. Design in [docs/recording.md](../docs/recording.md).
 
 ## Surface
 
 - [ ] P0 voice Record continuously to a recording folder with a live timestamped transcript; start by voice, shortcut, or CLI; stop never discards
 - [ ] P0 ui Recording state: red orb ring, timer chip in compact, bar indicator, start and stop chimes, Pause, Mark, and Stop
 - [ ] P0 ui Review sheet: player, click a line to seek, highlight during playback, in-place corrections, library list
-- [ ] P1 voice Offline polish pass, title, Notes and Translation views, voice follow-ups and search over recordings
-- [ ] P2 voice Computer audio as a second channel, live translation, glossary from corrections
+- [ ] P1 voice Offline polish pass, title, Notes view, voice follow-ups and search over recordings
+- [ ] P2 voice Computer audio as a second channel, translation, glossary from corrections
 
 ### Log
 
@@ -37,3 +32,10 @@ Waiting for input. The design is proposed in [docs/recording.md](../docs/recordi
     - Corrections as a layer.
     - One `recording.json` source with Markdown exports.
   - Files: `docs/recording.md` (new), this task. No code changed.
+- 2026-10-23T20:02:33+05:30 — Claude Code session overlay-layout — in progress. User decisions:
+  1. "start with microphone for now. we will add computer audio in a bit."
+  2. "translation can be done later."
+  3. Folder approved: "store until deleted."
+  4. Shortcut: "works. Super+M is fine." Read as Super+Ctrl+M becoming the record toggle, with Super+M unchanged.
+  - Design doc updated with these decisions. Starting P0.
+  - Findings: the Parakeet EOU worker reports ready in about 1.3 s, and its model is 685 MB with 48 GB free. A recording therefore runs its own continuous worker while the assistant's stays loaded.
