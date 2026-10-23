@@ -1,6 +1,6 @@
 # Recordings
 
-Status: design agreed 2026-10-23; phase P0 in progress. Decisions are listed at the end; progress is tracked in [tasks/recording.md](../tasks/recording.md).
+Status: design agreed 2026-10-23. P0 is implemented in the repository and not yet deployed; what P0 includes is under [P0 as built](#p0-as-built). Decisions are listed at the end, and progress is tracked in [tasks/recording.md](../tasks/recording.md).
 
 Agavai can listen without answering. It keeps the audio, a timestamped transcript, and your corrections, so you can play any moment back later. The same recording can become a transcript, notes, or a translation. The assistant loop stays as specified in [flow.md](flow.md), and the overlay rules stay in [ui-design.md](ui-design.md). This file covers only what recording adds or changes.
 
@@ -53,7 +53,7 @@ The overlay keeps its corner and orb (see [ui-design.md](ui-design.md)).
   - The view stops scrolling on its own while you are reading earlier lines.
   - The view chip (`Transcript ▾`) at the top switches views live.
 - **Controls next to the orb.**
-  - **Pause / Resume.** Paused time is not recorded and is shown as a gap.
+  - **Pause / Resume.** Paused time is not recorded and is shown as a gap. The recognizer still hears during a pause, so "Agavai resume" works, but nothing heard then is kept or shown.
   - **Mark.** Drops a bookmark at the current moment, with an optional typed label.
   - **Stop.** Ends and saves.
 - **Voice controls.** Only an isolated committed utterance of "Agavai stop", "Agavai pause", "Agavai resume", or "Agavai mark" acts. It uses the same whole-utterance rule as the existing controls (see [flow.md](flow.md)). The control's words are dropped from the transcript and its moment is marked in the audio. Anything longer, such as "Agavai stop the server before deploying", is content.
@@ -180,6 +180,14 @@ flowchart LR
 | P0 Record and review | Start by voice, shortcut, or CLI. Continuous capture to WAV, then Opus. Live transcript with times. Recording folder. Review sheet with player, clickable lines, and corrections. Library list. Bar indicator and chimes. Crash recovery. |
 | P1 Views | Offline polish pass, title, Notes, voice follow-ups on the open recording, search, export. |
 | P2 Later | Computer audio as a second channel. Labels for You (microphone) and Others (computer) come free from separate channels. Translation, first as text through the local LLM and then live while recording. A glossary learned from corrections. |
+
+## P0 as built
+
+- **Start.** Super+Ctrl+M (`agavai record`), the CLI, and voice all start a recording. A voice start speaks the model's short reply first, then the start chime plays and recording begins.
+- **Ending.** A recording started from the shortcut ends its session when it stops, closing the microphone and leaving the review on screen. One started inside an assistant session returns to listening.
+- **Review.** It has playback, click-to-seek lines, the highlighted current line, mark ticks, speed, corrections with "Show heard words", and "Open folder". Copy, Export, Delete, Replace across the recording, and the view tabs are not built yet; a recording is deleted by removing its folder.
+- **Live transcript.** P0 keeps the live recognizer's text: lowercase, unpunctuated, English. The title is "Recording" until P1 adds the polish pass and titles.
+- **MCP.** `start_recording` and `list_recordings` are not offered over `agavai mcp`.
 
 ## Decisions taken
 

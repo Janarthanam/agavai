@@ -125,7 +125,7 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
 
-`agavai stop` and `agavai cancel` signal the published pid. Stop during listening commits the current hypothesis. Cancel drops it. With no live listener, stop exits 1 and cancel resets the snapshot and state to idle. Neither calls Voxtype.
+`agavai stop` and `agavai cancel` signal the published pid. Stop during listening commits the current hypothesis. Cancel drops it. During a recording both stop and save it; cancel also dismisses the overlay. With no live listener, stop exits 1 and cancel resets the snapshot and state to idle. Neither calls Voxtype.
 
 There is no retry of a llama HTTP error beyond the one head-attach pass. There is no queue. There is no lock that refuses to start while F9 dictation holds the microphone.
 
@@ -149,11 +149,28 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/app.py](../src/agavai/app.py), [src/agavai/state.py](../src/agavai/state.py), [src/agavai/feedback.py](../src/agavai/feedback.py).
 
 - **Deploy.** `agavai invoke` and `agavai app` summon Overlay, then detach `python -m agavai listen` under a new session. The pid and the `/proc` start token are written to `listen.pid`. A second starter loses on `listen.lock` (`O_EXCL`) or on a live pid.
-- **Lifecycle.** The process publishes its pid, opens transport in, and runs streaming ASR until cancel, a mic error, or the stream ending. Interim text updates user context. End of utterance, or Enter, commits the line and runs the turn, then listening resumes with the canvas kept. On the way in it unmutes the default source if muted, and mutes it again on the way out only if this session unmuted it. `state` holds one word: `idle`, `listening`, `thinking`, `speaking`, or `error`. There is no transcribing wait. Invoke treats `listening`, `thinking`, and `speaking` as busy and does not start another process.
+- **Lifecycle.** The process publishes its pid, opens transport in, and runs streaming ASR until cancel, a mic error, or the stream ending. Interim text updates user context. End of utterance, or Enter, commits the line and runs the turn, then listening resumes with the canvas kept. On the way in it unmutes the default source if muted, and mutes it again on the way out only if this session unmuted it. `state` holds one word: `idle`, `listening`, `thinking`, `speaking`, `recording`, or `error`. There is no transcribing wait. Invoke treats `listening`, `thinking`, and `speaking` as busy and does not start another process.
 - **Latency.** Words are written to Snapshot as the hypothesis updates. The model card’s design latency is 80–160 ms. End of utterance, not a silence timer, submits the line. Enter force-submits the current hypothesis.
 - **Throughput.** One listen process. Turns are serial. Follow-up utterances in that process keep the last 24 non-system model messages and the heads used so far, still at most two heads.
-- **Configuration.** Streaming ASR device, default CPU. Runtime files live under `$XDG_RUNTIME_DIR/agavai/`: `state`, `listen.pid`, `listen.lock`, `listen.cancel`, `unmuted-by-us`.
+- **Configuration.** Streaming ASR device, default CPU. Runtime files live under `$XDG_RUNTIME_DIR/agavai/`: `state`, `listen.pid`, `listen.lock`, `listen.cancel`, `record.request`, `unmuted-by-us`.
 - **Observability.** `agavai status` prints `state` and whether LlamaServer is up. Recognizer failures print to stderr. There is no trace of why a session exited.
+
+### Recordings
+
+[src/agavai/recording.py](../src/agavai/recording.py) and the recording loop in [src/agavai/__main__.py](../src/agavai/__main__.py). The product design is [recording.md](recording.md).
+
+- **Deploy.** Inside ListenSession, which owns the microphone. `agavai record` toggles. With no live listener it summons Overlay and detaches `agavai listen --record`. With one, it appends the action to `record.request` and sends SIGUSR1; a listener still starting is not signalled, since it has no handler yet. `start_recording` sends this session the same toggle, so a voice start records right after the spoken reply.
+- **Lifecycle.**
+  - **Start.** A recording runs its own continuous recognizer process (`parakeet_worker.py --continuous`), started in about 1.3 s, while the assistant's stays loaded. The start chime plays to the end before capture begins.
+  - **Capture.** One `parec` runs for the whole recording. Every packet goes to a growing `audio.wav`, whose header is rewritten on each write, and to the recognizer. Each committed line, mark, and pause is appended to `segments.jsonl`.
+  - **Controls.** Only an isolated committed "Agavai stop", "stop recording", "pause", "resume", or "mark" acts; anything longer is a line. While paused the recognizer still hears, so "Agavai resume" works, but nothing is written or shown. Line times move onto the audio file's clock.
+  - **Stop.** Stop, toggle, SIGTERM, dismissal, and a lost microphone all save. ffmpeg encodes `audio.opus`, and the WAV is deleted once ffprobe finds the same length. `recording.json` and `transcript.md` are written last, and the journal is removed. A recording with no audio leaves no folder.
+  - **After.** A shortcut session then ends with the review on screen. An assistant session listens again.
+  - **Recovery.** When a recording starts, folders still marked `recording` are finished from their WAV and journal and marked recovered.
+- **Latency.** Live lines arrive at the recognizer's end of utterance. Stopping waits for the Opus encode, which grows with the recording's length. No measurement is in the repo.
+- **Throughput.** One recording at a time, in the one listen process. Corrections are separate `agavai recording correct` processes that rewrite `recording.json`.
+- **Configuration.** `[recordings] dir`, default `~/Documents/Agavai/Recordings`. Recordings are kept until the user deletes them.
+- **Observability.** `state` is `recording`. Snapshot carries a `recording` block while recording, then a `recording` canvas pointing at the folder. `recording.json` records `audio_error` when compression failed and `recovered` after a crash.
 
 ### Streaming ASR
 
@@ -237,14 +254,14 @@ Heads:
 - **Latency.** The default subprocess timeout is 15 s. `launch` and `play_url` use 20 s. That bound is the tool’s contribution to a turn. No per-tool target is set.
 - **Throughput.** Tools in one model step run one after another. They are not parallel.
 - **Configuration.** `[files] roots` and `max_results` (default 20). Everything else is the command on `PATH`.
-- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`.
+- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Neither do `start_recording` and `list_recordings`, where the recording itself is the feedback. `agavai mcp` neither lists nor runs those two, so other agents cannot start the microphone or read recordings. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`.
 
 ### Speech
 
 [src/agavai/tts.py](../src/agavai/tts.py).
 
 - **Deploy.** A Kokoro process started by ListenSession on the first listen or think cue, if the socket is down. Weights come from `scripts/download-tts.sh`. eSpeak-ng is a system package. The notification sender is Omarchy’s.
-- **Lifecycle.** Start cue: once the streaming recognizer is ready, the session plays one short rising chime (`start-chime.wav` in the runtime directory) as the orb appears. It plays once per listen process; a recognizer that cannot start shows its error without it. Listen cue: warm the socket silently on every microphone reopen. Think cue: `ack-on-it.wav` if Kokoro has written it, otherwise two tones. Final speech tries `[tts] prefer`, then Kokoro, then eSpeak, then a notification. Kokoro playback in ListenSession is polled; cancel kills the process group. eSpeak plays to completion inside the engine call. `agavai ask` uses a blocking speak and does not poll cancel during playback.
+- **Lifecycle.** Start cue: once the streaming recognizer is ready, the session plays one short rising chime (`start-chime.wav` in the runtime directory) as the orb appears. It plays once per listen process; a recognizer that cannot start shows its error without it. Record cues: three rising notes before a recording, which finish before capture starts, and two falling notes after it. Listen cue: warm the socket silently on every microphone reopen. Think cue: `ack-on-it.wav` if Kokoro has written it, otherwise two tones. Final speech tries `[tts] prefer`, then Kokoro, then eSpeak, then a notification. Kokoro playback in ListenSession is polled; cancel kills the process group. eSpeak plays to completion inside the engine call. `agavai ask` uses a blocking speak and does not poll cancel during playback.
 - **Latency.** No time-to-first-audio measurement. Assumption: warming at the start of listening hides model load, so the reply plays when the sentence is ready. A cold socket on a short turn would break that. Only the start of a session is audible. Reopening the microphone between turns, including after an empty end of utterance, is silent.
 - **Throughput.** One playback at a time. A new session starts another server only if the socket does not answer.
 - **Configuration.** `[tts] prefer`, `voice` (`af_bella`), `model_path`, `voices_path`, `venv`.
@@ -259,7 +276,7 @@ Heads:
 - **Latency.** The file is the UI protocol. Assumption: readers see a replace as one snapshot, not a torn write. Interim hypotheses are the hottest writer. A slow reader falls behind the file watch; nothing queues intermediate frames.
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.
 - **Configuration.** `[overlay] placement` is copied into every snapshot; an unknown corner fails config loading. Otherwise only the runtime directory. Turn history kept on the overlay is five. Result text is clipped (280 characters on the tool row, 160 on arguments).
-- **Observability.** The file is the log: `phase`, `phase_label`, `ts` when the phase changes, `transcript`, `turns`, `display`, `answer_html`, `completion`, `error`, `level_db`, `session_id`, `model_id`, `placement`. `state` can disagree with `phase`. The overlay shows `phase`.
+- **Observability.** The file is the log: `phase`, `phase_label`, `ts` when the phase changes, `transcript`, `turns`, `display`, `answer_html`, `completion`, `error`, `level_db`, `session_id`, `model_id`, `placement`, and `recording` while one runs (path, elapsed time, paused, the last 30 lines and marks, the partial line, and whether the live transcript still runs). `state` can disagree with `phase`. The overlay shows `phase`.
 
 ## Low-level design
 

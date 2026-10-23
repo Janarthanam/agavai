@@ -12,7 +12,7 @@ One native overlay starts as an orb in a corner of the screen (bottom right unle
 hotkey → streaming ASR → on-device GGUF on llama-server :18766 → allowlisted tools → speak
 ```
 
-F9 dictation stays Voxtype. **Super+M** invokes Agavai: the line sends when streaming ASR hears the end of the utterance. In the expanded view, Enter sends the current line and Escape dismisses. Super+Ctrl+M remains an invocation alias. `agavai invoke`, the launcher, and the bar always use automatic listening. The recognizer weights come from `scripts/download-asr.sh`. `[asr] device` defaults to CPU, and selects an NVIDIA GPU only when that device is set to `gpu` and one is present.
+F9 dictation stays Voxtype. **Super+M** invokes Agavai: the line sends when streaming ASR hears the end of the utterance. In the expanded view, Enter sends the current line and Escape dismisses. Super+Ctrl+M remains an invocation alias until it is bound to `agavai record`, which toggles a recording. Saying "take notes" or "record this" also starts one. The audio, a timed transcript, and corrections are kept in `~/Documents/Agavai/Recordings` ([docs/recording.md](docs/recording.md)). `agavai invoke`, the launcher, and the bar always use automatic listening. The recognizer weights come from `scripts/download-asr.sh`. `[asr] device` defaults to CPU, and selects an NVIDIA GPU only when that device is set to `gpu` and one is present.
 
 Open **Agavai** from the app launcher (or `agavai app` / `agavai invoke`). The launcher, shortcut, and bar share **one overlay**, which starts listening automatically. Left-click the bar icon to speak; right-click cancels. In the expanded view, Escape or × dismisses the overlay. “Type instead” provides a text entry on the same surface. Reinvoking while a request is active raises the widget without submitting or restarting the command.
 
@@ -53,7 +53,7 @@ If Kokoro is missing, Agavai falls back to eSpeak then a notification.
 
 Tools are grouped into heads. **Jev** (OpenRouter Decisions API, `typesafe/jev-1.13`) picks a head; Qwen3-4B only sees those schemas. Set `OPENROUTER_API_KEY`. If the key is missing, a keyword fallback still routes. Wallpaper: `omarchy theme bg set/next/current`.
 
-No generic shell. No Grok. Pixel click / YOLO is not in v1.
+No generic shell. No Grok. Pixel click / YOLO is not in v1. The recording tools are not offered over MCP.
 
 ## Tests
 

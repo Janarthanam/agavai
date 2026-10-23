@@ -223,6 +223,7 @@ Allowlist (no generic shell):
 | `play_url` | https only, `omarchy-launch-webapp` / browser |
 | `screen_context` | focused window + `grim` + `tesseract` |
 | `list_agents` | systemd units, plugin list, A2A cards — **does not call Grok** |
+| `start_recording` / `list_recordings` | the listen session's recording ([recording.md](recording.md)); not offered over MCP |
 
 Pixel click / YOLO is out of v1. Screen understanding is structured (`hyprctl`) then OCR.
 
