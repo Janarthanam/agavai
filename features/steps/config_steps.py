@@ -207,6 +207,16 @@ def step_overlay_placement(context, placement):
     assert context.cfg.overlay.placement == placement, context.cfg.overlay.placement
 
 
+@given('a config with recordings in "{folder}"')
+def step_recordings(context, folder):
+    _write(context, f'[recordings]\ndir = "{folder}"\n')
+
+
+@then('recordings should be kept in "{folder}"')
+def step_recordings_dir(context, folder):
+    assert context.cfg.recordings.dir == Path(folder).expanduser(), context.cfg.recordings.dir
+
+
 @then('loading the config fails naming "{allowed}"')
 def step_load_fails(context, allowed):
     try:

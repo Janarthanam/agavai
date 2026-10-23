@@ -65,6 +65,11 @@ api_key_env = "OPENROUTER_API_KEY"
 # from it, and the orb stays in place: bottom-right | bottom-left | top-right | top-left
 placement = "bottom-right"
 
+[recordings]
+# Each recording is a folder here: the audio, recording.json (segments,
+# marks, and corrections), and a readable transcript.md. Kept until deleted.
+dir = "~/Documents/Agavai/Recordings"
+
 [asr]
 # Assistant listen path. cpu is the default. gpu is used only when this is gpu
 # and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.

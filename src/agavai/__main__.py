@@ -15,15 +15,19 @@ from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.orchestrator import control_command, run_turn
+from agavai.recording import Recorder, control as recording_control, recover
 from agavai.state import read_state, write_state
-from agavai.tts import cue_listen, cue_start, cue_think, speak
-from agavai.ui import ChatUi, cancel_ui
+from agavai.tts import cue_listen, cue_record, cue_start, cue_think, speak
+from agavai.ui import ChatUi, cancel_ui, summon_overlay
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agavai", description="Local Omarchy voice assistant")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("listen", help="Listen and submit when the utterance ends")
+    listen = sub.add_parser("listen", help="Listen and submit when the utterance ends")
+    listen.add_argument("--record", action="store_true", help="Record instead; the microphone closes when the recording stops")
+    record = sub.add_parser("record", help="Start or stop a recording, or pause, resume, or mark it")
+    record.add_argument("action", nargs="?", default="toggle", choices=["toggle", "stop", "pause", "resume", "mark"])
     sub.add_parser("invoke", help="Open the single voice widget and start automatic listening")
     sub.add_parser("stop", help="Stop listening and run the agent")
     sub.add_parser("cancel", help="Abort listening")
@@ -106,7 +110,9 @@ def main(argv: list[str] | None = None) -> int:
         write_state(cfg, "idle")
         return 0
     if args.cmd == "listen":
-        return listen_session(cfg, ChatUi(cfg))
+        return listen_session(cfg, ChatUi(cfg), record=args.record)
+    if args.cmd == "record":
+        return _record_cmd(cfg, args.action)
     if args.cmd == "stop":
         if _signal_listener(cfg):
             return 0
@@ -175,6 +181,52 @@ def _cancel_path(cfg) -> Path:
     return cfg.runtime_dir / "listen.cancel"
 
 
+def _record_request_path(cfg) -> Path:
+    return cfg.runtime_dir / "record.request"
+
+
+class _RecordRequests:
+    """Actions from `agavai record`: appended to a file, then SIGUSR1 to the listener."""
+
+    def __init__(self, cfg) -> None:
+        self.path = _record_request_path(cfg)
+        self.signalled = False
+
+    def take(self) -> list[str]:
+        if not self.signalled:
+            return []
+        self.signalled = False
+        taking = self.path.with_suffix(".taking")
+        try:
+            # Renaming first means an action appended meanwhile waits for the next signal.
+            self.path.replace(taking)
+        except FileNotFoundError:
+            return []
+        actions = taking.read_text().split()
+        taking.unlink(missing_ok=True)
+        return actions
+
+
+def _record_cmd(cfg, action: str) -> int:
+    pid = read_listener(cfg)
+    state = read_state(cfg)
+    if action != "toggle" and (pid is None or state != "recording"):
+        print("agavai: no recording is running", file=sys.stderr)
+        return 1
+    if pid is not None:
+        # A listener still starting has no SIGUSR1 handler yet, and the signal would end it.
+        if state not in {"listening", "thinking", "speaking", "recording"}:
+            return 0
+        with _record_request_path(cfg).open("a") as requests:
+            requests.write(action + "\n")
+        os.kill(pid, signal.SIGUSR1)
+        return 0
+    if not summon_overlay():
+        print("Could not open Agavai. Ensure the Omarchy shell and janar.agavai plugin are running.", file=sys.stderr)
+        return 1
+    return 0 if start_session(cfg, record=True) else 1
+
+
 def read_listener(cfg) -> int | None:
     """Live, identity-matched listener PID, or None when stale/absent."""
     try:
@@ -190,7 +242,7 @@ def _publish_pid(cfg, pid: int) -> None:
     _pid_path(cfg).write_text(f"{pid} {_pid_marker(pid)}")
 
 
-def start_session(cfg) -> bool:
+def start_session(cfg, *, record: bool = False) -> bool:
     """Shared detached-start guard: O_EXCL lock → existence check → publish.
 
     Returns True when this caller spawned the listener; False when a session
@@ -219,7 +271,7 @@ def start_session(cfg) -> bool:
         if read_listener(cfg) is not None:
             return False
         proc = subprocess.Popen(
-            [sys.executable, "-m", "agavai", "listen"],
+            [sys.executable, "-m", "agavai", "listen", *(["--record"] if record else [])],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -239,28 +291,38 @@ def _signal_listener(cfg) -> bool:
     return True
 
 
-def listen_session(cfg, ui: ChatUi) -> int:
+def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
     """One listen process. Partials update the overlay; end of utterance runs the turn.
 
     The mic stays open until the user dismisses it or the capture ends.
     A finished action returns to listening with the results still on screen.
     The recognizer, not a silence timer, decides when the line is finished.
+    With record, the session records first and ends when the recording stops.
     """
     _cancel_path(cfg).unlink(missing_ok=True)
+    _record_request_path(cfg).unlink(missing_ok=True)
     _publish_pid(cfg, os.getpid())
     stop_requested = False
     cancel_requested = False
+    requests = _RecordRequests(cfg)
 
     def on_sigterm(signum, frame):
         nonlocal stop_requested, cancel_requested
         stop_requested = True
         cancel_requested = _cancel_path(cfg).exists()
 
+    def on_record_request(signum, frame):
+        requests.signalled = True
+
     prev_handler = signal.signal(signal.SIGTERM, on_sigterm)
+    prev_record_handler = signal.signal(signal.SIGUSR1, on_record_request)
     reply: str | None = None
     followups = 0
     stream = None
     try:
+        if record:
+            ui.begin_session()
+            return 1 if _record_session(cfg, ui, requests, lambda: stop_requested) == "error" else 0
         try:
             stream = open_stream(cfg)
         except AsrError as exc:
@@ -277,9 +339,19 @@ def listen_session(cfg, ui: ChatUi) -> int:
                 fresh=followups == 0,
                 stop_requested=lambda: stop_requested,
                 cancel_requested=lambda: cancel_requested,
+                record_requested=lambda: requests.signalled,
             )
             if heard == "error":
                 return 1
+            if heard == "record":
+                # Only a toggle starts a recording; stop, pause, and mark need one running.
+                if "toggle" in requests.take():
+                    if _record_session(cfg, ui, requests, lambda: stop_requested) == "cancel":
+                        return 0
+                    stop_requested = False
+                    followups += 1
+                ui.continue_listening()
+                continue
             if heard == "cancel" or ui.cancelled():
                 return 0
             if heard == "ignore":
@@ -326,15 +398,18 @@ def listen_session(cfg, ui: ChatUi) -> int:
             _pid_path(cfg).unlink()
         except OSError:
             pass
-        if read_state(cfg) == "listening":
+        if read_state(cfg) in {"listening", "recording"}:
             write_state(cfg, "idle")
         signal.signal(signal.SIGTERM, prev_handler)
+        signal.signal(signal.SIGUSR1, prev_record_handler)
     print(reply or "")
     return 0
 
 
-def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, cancel_requested) -> tuple[str, str]:
-    """Capture one utterance. Returns (speech|cancel|error|ended, text)."""
+def _await_utterance(
+    cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, cancel_requested, record_requested=lambda: False
+) -> tuple[str, str]:
+    """Capture one utterance. Returns (speech|cancel|record|error|ended, text)."""
     try:
         prepare_listen(cfg)
         if fresh:
@@ -351,7 +426,7 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
     try:
         for kind, text in stream.events(
             on_level=ui.level,
-            should_stop=stop_requested,
+            should_stop=lambda: stop_requested() or record_requested(),
         ):
             if kind == "interim" and text:
                 hypothesis = text
@@ -365,7 +440,7 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
                     return "ignore", ""
                 ui.partial(line)
                 return "speech", line
-            if stop_requested():
+            if stop_requested() or record_requested():
                 break
     except AsrError as exc:
         finish(cfg)
@@ -379,9 +454,105 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
         ui.idle()
         write_state(cfg, "idle")
         return "cancel", ""
+    if record_requested():
+        ui.partial("")
+        return "record", ""
     if stop_requested():
         return "speech", hypothesis.strip()
     return "ended", ""
+
+
+def _record_session(cfg, ui: ChatUi, requests: _RecordRequests, stopping) -> str:
+    """One recording. Every way of stopping saves it: SIGTERM, "Agavai stop", and `agavai record`.
+
+    Returns "saved", "cancel" when the overlay was dismissed (the recording is
+    still saved), or "error" when recording could not start.
+    """
+    recover(cfg)
+    try:
+        stream = open_stream(cfg, continuous=True)
+    except AsrError as exc:
+        ui.error(str(exc))
+        write_state(cfg, "error")
+        print(exc, file=sys.stderr)
+        return "error"
+    try:
+        try:
+            prepare_listen(cfg)
+            recorder = Recorder(cfg)
+        except OSError as exc:
+            message = f"Could not start recording: {exc.strerror or exc}."
+            ui.error(message)
+            write_state(cfg, "error")
+            print(message, file=sys.stderr)
+            return "error"
+        cue_record(cfg, starting=True)
+        write_state(cfg, "recording")
+        ui.end_recording()
+        ui.recording(recorder.live("", True), summon=True)
+        ended = ""
+        partial = ""
+        transcribing = True
+        problem = ""
+
+        def act(action: str) -> None:
+            nonlocal ended
+            if action in {"stop", "toggle"}:
+                ended = "stop"
+            elif action == "pause":
+                recorder.pause()
+            elif action == "resume":
+                recorder.resume()
+            elif action == "mark":
+                recorder.mark()
+
+        try:
+            for msg in stream.record(recorder.audio, should_stop=lambda: bool(ended) or stopping()):
+                kind = msg["kind"]
+                if kind == "level":
+                    ui.data["level_db"] = msg["db"]
+                elif kind in {"interim", "eob"}:
+                    partial = msg.get("text") or ""
+                elif kind == "eou":
+                    partial = ""
+                    line = msg.get("text") or ""
+                    action = recording_control(line)
+                    if action:
+                        act(action)
+                    else:
+                        recorder.add_line(line, int(msg.get("start_ms") or 0), int(msg.get("end_ms") or 0))
+                elif kind == "asr_lost":
+                    transcribing = False
+                for action in requests.take():
+                    act(action)
+                if recorder.error:
+                    ended = "error"
+                ui.recording(recorder.live(partial, transcribing))
+        except AsrError as exc:
+            problem = str(exc)
+        if not ended and not stopping() and not problem:
+            problem = "The microphone stopped, so the recording was saved."
+    finally:
+        stream.close()
+        finish(cfg)
+    if recorder.discard_if_empty():
+        ui.end_recording()
+        ui.error(problem or "Nothing was recorded.")
+        write_state(cfg, "error")
+        return "error"
+    folder = recorder.finish()
+    cue_record(cfg, starting=False)
+    ui.end_recording()
+    if ui.cancelled():
+        return "cancel"
+    ui.display({"kind": "recording", "title": recorder.meta["title"], "path": str(folder), "duration_ms": recorder.meta["duration_ms"]})
+    problem = recorder.error or problem
+    if problem:
+        ui.error(problem)
+    else:
+        ui.idle()
+    write_state(cfg, "idle")
+    return "saved"
 
 
 def _run_stop_body(

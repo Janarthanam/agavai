@@ -75,7 +75,7 @@ class ChatUi:
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
-                    for key in ("level_db", "display", "ts", "transcript", "answer_html", "error"):
+                    for key in ("level_db", "display", "ts", "transcript", "answer_html", "error", "recording"):
                         loaded.pop(key, None)
                     self.data.update(loaded)
                     self.data["turns"] = []
@@ -202,6 +202,15 @@ class ChatUi:
         self._set_phase("speaking", "Speaking")
         self._write()
 
+    def recording(self, block: dict[str, Any], *, summon: bool = False) -> None:
+        """The live recording for the overlay: time, recent lines, and the line being heard."""
+        self.data["recording"] = block
+        self._set_phase("recording", "Paused" if block.get("paused") else "Recording")
+        self._write(summon=summon)
+
+    def end_recording(self) -> None:
+        self.data.pop("recording", None)
+
     def idle(self) -> None:
         self._set_phase("idle", "Idle")
         self._write()
@@ -224,7 +233,7 @@ class ChatUi:
         return turns[-1]
 
     def _set_phase(self, phase: str, label: str) -> None:
-        if phase != "listening":
+        if phase not in {"listening", "recording"}:
             self.data["level_db"] = None
         if self.data.get("phase") != phase:
             self.data["ts"] = int(time.time() * 1000)

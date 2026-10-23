@@ -72,3 +72,13 @@ Feature: Configurable on-device model
   Scenario: An unknown overlay corner is rejected with the allowed corners
     Given a config with overlay placement "middle"
     Then loading the config fails naming "bottom-right, bottom-left, top-right, top-left"
+
+  Scenario: Recordings are kept in Documents by default
+    Given an empty agavai config
+    When I load the config
+    Then recordings should be kept in "~/Documents/Agavai/Recordings"
+
+  Scenario: The recordings folder is configurable
+    Given a config with recordings in "~/Notes/Voice"
+    When I load the config
+    Then recordings should be kept in "~/Notes/Voice"

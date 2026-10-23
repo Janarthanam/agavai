@@ -66,11 +66,27 @@ def cue_start(cfg: Config) -> None:
     Only the start of a session chimes: a cue on every reopen between turns
     was heard as constant beeping.
     """
-    chime = cfg.runtime_dir / "start-chime.wav"
+    _chime(cfg, "start-chime.wav", ((587, 0.07), (880, 0.1)), wait=False)
+
+
+def cue_record(cfg: Config, *, starting: bool) -> None:
+    """Three rising notes before recording, two falling after it.
+
+    The start chime finishes before capture begins, so speakers do not put it
+    into the recording.
+    """
+    if starting:
+        _chime(cfg, "record-start.wav", ((523, 0.07), (659, 0.07), (784, 0.12)), wait=True)
+    else:
+        _chime(cfg, "record-stop.wav", ((784, 0.08), (523, 0.12)), wait=False)
+
+
+def _chime(cfg: Config, name: str, notes: tuple[tuple[int, float], ...], *, wait: bool) -> None:
+    chime = cfg.runtime_dir / name
     if not chime.is_file():
         cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
-        _write_tones(chime, ((587, 0.07), (880, 0.1)))
-    _play_wav(chime, wait=False)
+        _write_tones(chime, notes)
+    _play_wav(chime, wait=wait)
 
 
 def cue_think(cfg: Config) -> None:

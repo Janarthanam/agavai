@@ -4,6 +4,8 @@ The parent stays stdlib-only. Parakeet runs in the TTS venv via
 parakeet_worker.py. A reader thread drains the worker's stdout so a full
 pipe cannot stall the microphone pump. Turn taking lives in the listen loop:
 this module only delivers interim, end-of-boundary, and end-of-utterance events.
+A recording uses record() instead: one capture for its whole length, with
+the worker in continuous mode.
 """
 
 from __future__ import annotations
@@ -70,7 +72,7 @@ def resolve_device(requested: str) -> str:
 class StreamingRecognizer:
     """One Parakeet process for the listen session. Capture starts per utterance."""
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, *, continuous: bool = False) -> None:
         self.cfg = cfg
         root = Path(cfg.asr.model_dir).expanduser()
         python = Path(cfg.asr.venv).expanduser() / "bin" / "python"
@@ -86,7 +88,7 @@ class StreamingRecognizer:
         worker = Path(__file__).with_name("parakeet_worker.py")
         device = resolve_device(cfg.asr.device)
         self.proc = subprocess.Popen(
-            [str(python), str(worker), str(root), device],
+            [str(python), str(worker), str(root), device, *(["--continuous"] if continuous else [])],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -103,6 +105,7 @@ class StreamingRecognizer:
         self._stop_pump = threading.Event()
         self._pump_done = threading.Event()
         self._mic_error = threading.Event()
+        self._asr_lost = threading.Event()
         self._write_lock = threading.Lock()
         ready = self._read_line(120)
         if not ready:
@@ -167,6 +170,56 @@ class StreamingRecognizer:
             self._sync_reset()
             self._stop_capture()
 
+    def record(self, on_audio, should_stop):
+        """Capture until should_stop(), then flush the last words.
+
+        Every packet goes to on_audio, which must not raise, and then to the
+        worker. Yields worker messages (interim, eob, eou with its timing),
+        a level message every 100 ms so the caller can act on requests even
+        in silence, and one asr_lost message if the worker dies. Audio keeps
+        flowing to on_audio after that.
+        """
+        if self.proc.poll() is not None:
+            raise AsrError(self._failure("Streaming ASR stopped."))
+        if not shutil.which("parec"):
+            raise AsrError(MIC_ERROR)
+        self._mic_error.clear()
+        self._asr_lost.clear()
+        self._pump_done.clear()
+        self._stop_pump.clear()
+        self._level_db = None
+        next_level_at = 0.0
+        lost_reported = False
+        self._parec = subprocess.Popen(PAREC_ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._pump = threading.Thread(target=self._pump_audio, args=(should_stop, on_audio), daemon=True)
+        self._pump.start()
+        try:
+            while not should_stop():
+                if self._mic_error.is_set():
+                    raise AsrError(MIC_ERROR)
+                if self._pump_done.is_set():
+                    break
+                now = time.monotonic()
+                if now >= next_level_at:
+                    yield {"kind": "level", "db": self._level_db}
+                    next_level_at = now + 0.1
+                if not lost_reported and (self._asr_lost.is_set() or self.proc.poll() is not None):
+                    lost_reported = True
+                    self._failure("Streaming ASR stopped.")
+                    yield {"kind": "asr_lost"}
+                line = self._read_line(0.05)
+                if line is not None:
+                    msg = _message(line)
+                    if msg is not None:
+                        yield msg
+            self._stop_pump.set()
+            if self._pump is not None:
+                self._pump.join(timeout=2)
+            if not lost_reported:
+                yield from self._flush_messages()
+        finally:
+            self._stop_capture()
+
     def close(self) -> None:
         self._stop_capture()
         proc = getattr(self, "proc", None)
@@ -178,7 +231,7 @@ class StreamingRecognizer:
                 proc.kill()
                 proc.wait()
 
-    def _pump_audio(self, should_stop) -> None:
+    def _pump_audio(self, should_stop, on_audio=None) -> None:
         assert self._parec is not None and self._parec.stdout is not None
         out = self._parec.stdout
         got = False
@@ -196,7 +249,17 @@ class StreamingRecognizer:
                     break
                 got = True
                 self._level_db = rms_dbfs(data)
-                self._write(data)
+                if on_audio is None:
+                    self._write(data)
+                    continue
+                on_audio(data)
+                if self._asr_lost.is_set():
+                    continue
+                try:
+                    self._write(data)
+                except OSError:
+                    # A recording keeps its audio when the live transcript fails.
+                    self._asr_lost.set()
         except Exception:
             self._mic_error.set()
         finally:
@@ -205,6 +268,10 @@ class StreamingRecognizer:
 
     def _flush(self):
         """Ask the worker to finish the buffered tail, then yield until it resets."""
+        for msg in self._flush_messages():
+            yield msg["kind"], msg.get("text") or ""
+
+    def _flush_messages(self):
         self._stop_pump.set()
         if self._pump is not None:
             self._pump.join(timeout=2)
@@ -221,11 +288,13 @@ class StreamingRecognizer:
                     return
                 continue
             waited = 0.0
-            kind, text = _event(line)
-            if kind == "reset":
+            msg = _message(line)
+            if msg is None:
+                continue
+            if msg["kind"] == "reset":
                 return
-            if kind in {"interim", "eob", "eou"}:
-                yield kind, text
+            if msg["kind"] in {"interim", "eob", "eou"}:
+                yield msg
 
     def _sync_reset(self) -> None:
         self._stop_pump.set()
@@ -342,18 +411,21 @@ class StreamingRecognizer:
             proc.wait()
 
 
-def _event(line: str) -> tuple[str | None, str]:
+def _message(line: str) -> dict | None:
     try:
         msg = json.loads(line)
     except json.JSONDecodeError:
-        return None, ""
+        return None
     kind = msg.get("kind")
     if kind == "error":
         raise AsrError(msg.get("text") or "Streaming ASR failed.")
-    if kind in {"interim", "eob", "eou", "reset"}:
-        return kind, msg.get("text") or ""
-    return None, ""
+    return msg if kind in {"interim", "eob", "eou", "reset"} else None
 
 
-def open_stream(cfg: Config) -> StreamingRecognizer:
-    return StreamingRecognizer(cfg)
+def _event(line: str) -> tuple[str | None, str]:
+    msg = _message(line)
+    return (msg["kind"], msg.get("text") or "") if msg else (None, "")
+
+
+def open_stream(cfg: Config, *, continuous: bool = False) -> StreamingRecognizer:
+    return StreamingRecognizer(cfg, continuous=continuous)

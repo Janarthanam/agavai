@@ -162,6 +162,13 @@ class OverlayConfig:
 
 
 @dataclass
+class RecordingsConfig:
+    """Where recordings are kept; each recording is one folder in it."""
+
+    dir: Path = field(default_factory=lambda: _expand("~/Documents/Agavai/Recordings"))
+
+
+@dataclass
 class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
     files: FilesConfig = field(default_factory=FilesConfig)
@@ -169,6 +176,7 @@ class Config:
     router: RouterConfig = field(default_factory=RouterConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
+    recordings: RecordingsConfig = field(default_factory=RecordingsConfig)
 
     @property
     def tts_prefer(self) -> str:
@@ -329,6 +337,9 @@ def load_config(path: Path | None = None) -> Config:
         if placement not in PLACEMENTS:
             raise ValueError(f"unknown [overlay] placement {placement!r}. known: {', '.join(PLACEMENTS)}")
         cfg.overlay.placement = placement
+    recordings = data.get("recordings") or {}
+    if "dir" in recordings:
+        cfg.recordings.dir = _expand(str(recordings["dir"]))
     return cfg
 
 
