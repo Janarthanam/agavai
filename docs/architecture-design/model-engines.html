@@ -1,299 +1,42 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How Whistle and Needle fit into Agavai</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Replaceable engines on Omarchy</title>
 <style>
-:root {
-  color-scheme: light dark;
-  --ink: var(--foreground, light-dark(#222, #eee));
-  --subtle: var(--muted-foreground, light-dark(#595959, #b9b9b9));
-  --line: var(--border, light-dark(#bcbcbc, #626262));
-  --surface: var(--card, light-dark(#f6f6f6, #242424));
-  --page: var(--background, light-dark(#fff, #191919));
-  --selected: var(--primary, light-dark(#222, #ddd));
-  --selected-ink: var(--primary-foreground, light-dark(#fff, #191919));
-  --new: light-dark(#ae491a, #f0a078);
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: transparent; color: var(--ink); font: 15px/1.5 var(--font-sans, system-ui, sans-serif); }
-main { padding-bottom: 20px; }
-h1 { margin: 0 0 8px; font-size: 22px; font-weight: 500; }
-h2 { margin: 26px 0 10px; font-size: 18px; font-weight: 500; }
-p { margin: 8px 0 12px; }
-small, .small { font-size: 12px; }
-.muted { color: var(--subtle); }
-strong { font-weight: 500; }
-.controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 18px 0 10px; }
-button { padding: 8px 13px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; background: transparent; font: inherit; cursor: pointer; }
-button[aria-pressed="true"] { background: var(--selected); color: var(--selected-ink); }
-button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.legend { margin-left: auto; font-size: 12px; color: var(--subtle); }
-.legend i { display: inline-block; width: 20px; border-top: 2px dashed var(--new); vertical-align: middle; margin-right: 4px; }
-#diagram { display: block; width: 100%; overflow: visible; }
-#diagram text { font: 14px var(--font-sans, system-ui, sans-serif); fill: var(--ink); }
-#diagram .process-label { font-size: 11px; fill: var(--subtle); letter-spacing: .03em; }
-#diagram .node-name { font-size: 17px; font-weight: 500; }
-#diagram .role { font-size: 12px; fill: var(--subtle); }
-#diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
-#diagram .session { fill: var(--page); stroke: var(--ink); stroke-width: 1.5; }
-#diagram .candidate { stroke: var(--new); stroke-dasharray: 5 4; }
-#diagram .arrow { fill: none; stroke: var(--subtle); stroke-width: 1.3; }
-#diagram .arrow-label { font-size: 12px; fill: var(--subtle); paint-order: stroke; stroke: var(--page); stroke-width: 5px; stroke-linejoin: round; }
-#diagram .arrow-head { fill: var(--subtle); }
-#decision { border-left: 3px solid var(--new); padding-left: 12px; margin: 4px 0 0; }
-.example { margin: 0; padding-left: 25px; }
-.example li { padding-left: 4px; margin: 0 0 12px; }
-.example .payload { display: block; font-size: 13px; color: var(--subtle); }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-th { color: var(--subtle); font-size: 12px; font-weight: 400; }
-th:first-child, td:first-child { padding-left: 0; }
-td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
-code { font: 12px/1.5 var(--font-mono, ui-monospace, monospace); overflow-wrap: anywhere; }
-details { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); }
-summary { cursor: pointer; font-size: 14px; }
-details p, details li { font-size: 13px; }
-details li { margin-bottom: 8px; }
-details ul { padding-left: 20px; }
-a { color: var(--ink); text-underline-offset: 3px; }
-@media (max-width: 520px) {
-  h1 { font-size: 20px; }
-  .legend { width: 100%; margin: 3px 0 0; }
-  button { min-height: 44px; }
-  table { font-size: 13px; }
-}
-</style>
-</head>
-<body>
-<main id="model-design">
-<h1>Whistle hears. Needle routes. Qwen decides.</h1>
-<p>Whistle can turn speech into text. Needle can choose which group of tools Qwen sees. Qwen still chooses the action, handles the tool result and writes the spoken answer.</p>
-<div class="controls" role="group" aria-label="Architecture version">
-  <button type="button" id="proposed" aria-pressed="true">With Whistle + Needle</button>
-  <button type="button" id="current" aria-pressed="false">Current system</button>
-  <span class="legend"><i></i>Proposed worker, not implemented</span>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground);font-family:var(--font-sans,system-ui);background:transparent}main{padding-bottom:16px}h2{margin-top:24px}p{line-height:1.5}.flow{display:grid;gap:8px}.process{border:1px solid var(--border);padding:16px;border-radius:var(--radius,8px)}.label{display:block;color:var(--muted-foreground);margin-bottom:8px}.arrow{text-align:center;padding:4px;overflow-wrap:anywhere}.options{display:grid;grid-template-columns:1fr 1fr;gap:12px}.branch{border-left:2px solid var(--border);padding-left:16px;margin-top:12px}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--border);padding:10px 5px}summary{padding:12px 0}code{overflow-wrap:anywhere}a{color:inherit}@media(max-width:500px){.options{grid-template-columns:1fr}}
+</style></head><body><main>
+<p><strong>Omarchy: replace the engines, keep the voice loop.</strong><br>Proposed design. The small local brain handles the request first; the larger model runs only when needed.</p>
+<div class="flow" aria-label="Processes and data flow on one Omarchy machine">
+<div class="process"><span class="label">Capture process · parec</span>Microphone → 16 kHz mono PCM</div>
+<div class="arrow">↓ audio bytes → session → selected speech worker</div>
+<div class="process"><span class="label">Speech worker process · replaceable</span><div class="options"><div><strong>Parakeet + ONNX Runtime</strong><p>Streams words and signals end of utterance.</p></div><div><strong>Whistle + Cactus</strong><p>Streams stable + pending words, or transcribes a whole clip. No turn-end event in the inspected API.</p></div></div></div>
+<div class="arrow">↓ partial words / native endpoint / final transcript · JSONL<br>↑ finish or cancel · framed command</div>
+<div class="process"><span class="label">Agavai session process</span><strong>Turn controller</strong><p>Show partials. End input on Parakeet EOU or Enter; optional VAD uses the same microphone feed. Flush the worker’s final words, then commit once.</p><div class="arrow">↓ finished request + history + allowed tools</div><strong>Brain coordinator</strong><p>Owns history, escalation and tool execution. No model or router runs on partial words.</p></div>
+<div class="arrow">↓ request → selected small runtime<br>↑ answer / tool calls / unsupported</div>
+<div class="process"><span class="label">Small brain process · replaceable</span><strong>Small Qwen + llama-server, or Needle + Cactus</strong><p>Qwen can be the local brain. Needle can directly request supported tools. Their capabilities differ; the adapter reports unsupported requests explicitly.</p></div>
+<div class="branch"><strong>Handled → session validates tools → actual result → reply.</strong><p>“Open the browser” can finish here. A result acknowledgement does not require a larger-model call.</p></div>
+<div class="branch"><strong>Cannot handle → session escalates ↓</strong><p>Send the request, history and completed tool results. Never repeat an action just because the model changed.</p><div class="process"><span class="label">Larger brain process · separately configured</span>Model + compatible runtime → answer or tool calls → session validation → reply</div></div>
+<div class="arrow">↓ reply text → existing speech synthesis / player → speakers<br>Session state → Quickshell overlay process</div>
 </div>
-<svg id="diagram" role="img" aria-labelledby="diagram-title diagram-description"></svg>
-<p id="caption" class="small muted" aria-live="polite"></p>
-<p id="decision"></p>
-
-<h2>One request: “Open the browser”</h2>
-<ol class="example">
-  <li><strong>The speech worker produces the words.</strong><span class="payload">Microphone audio → “open the browser”. Words appear on screen while you speak; they cannot trigger an action.</span></li>
-  <li><strong>The session waits for the sentence to finish.</strong><span class="payload" id="commit-example"></span></li>
-  <li><strong>The router selects the relevant tool group.</strong><span class="payload" id="route-example"></span></li>
-  <li><strong>Qwen chooses a tool; the session runs it.</strong><span class="payload">Request + launch-tool definitions → Qwen → launch(target="browser") → the session's allowlist → desktop command.</span></li>
-  <li><strong>Qwen reads the result and writes the answer.</strong><span class="payload">Desktop result → session → Qwen → “Browser opened.” A tool request usually needs this second Qwen call.</span></li>
-  <li><strong>Kokoro turns that answer into audio.</strong><span class="payload">“Browser opened.” → Kokoro → WAV file → audio player → speakers. The session then listens for the next request.</span></li>
-</ol>
-
-<h2>What latency should we expect?</h2>
-<p>The candidates have <strong>no measurements on this machine yet</strong>. Swapping them in does not remove the Qwen calls or the need to decide when speech ends.</p>
-<div class="table-wrap">
-<table>
-<thead><tr><th>What the user waits for</th><th>Current baseline*</th><th>Eval target</th></tr></thead>
-<tbody>
-<tr><td>Speech starts → first words</td><td>0.67 s</td><td>0.5 s</td></tr>
-<tr><td>Speech ends → request submitted</td><td>5.90 s<br><small>4/12 missing within 8 s</small></td><td>0.5 s</td></tr>
-<tr><td>Request submitted → desktop changes</td><td>4.87 s</td><td>3.0 s</td></tr>
-<tr><td>Request submitted → reply audio, with a tool</td><td>6.44 s</td><td>4.0 s</td></tr>
-</tbody>
-</table>
-</div>
-<p class="small muted">*Historical medians from run 20261010-1250: Ryzen 9 3900X, Qwen3-4B, keyword routing. Recognition used synthesized clips; desktop actions were simulated. Reply audio was estimated from turn time + warm synthesis + a playback allowance. These rows overlap; do not add them together.</p>
-<p><strong>The largest measured delay before the model is turn ending.</strong> Whistle does not supply that decision. It is a transcription experiment until we choose how its turns end.</p>
-
-<details>
-<summary>What changes in the code—and what stays</summary>
-<ul>
-<li><strong>Speech recognition:</strong> add a Whistle worker behind the same audio-in/text-events-out interface as Parakeet. Select the worker and its model files in ASR configuration. Whistle's roughly one-second chunks are not a measured first-word latency.</li>
-<li><strong>Routing:</strong> implement Needle behind the existing <code>select(utterance) → head IDs</code> interface. It selects a group such as <code>launch</code>; it does not execute Needle-generated desktop actions.</li>
-<li><strong>Engines:</strong> Parakeet uses ONNX Runtime; Whistle and Needle use Cactus's native runtime and different model files. Changing a weights path alone cannot swap engines. Whistle and Needle need separate workers because the inspected Cactus binding stores one loaded model per process.</li>
-<li><strong>Qwen:</strong> stays on llama-server. Its GGUF weights are already configurable. Needle cannot replace conversation handling and answer generation in this design.</li>
-<li><strong>Testing:</strong> compare transcription accuracy separately from turn-ending behavior, and compare Needle routing against keyword/Jev routing. Record the selected engine, model hashes and endpoint policy so the runs are comparable.</li>
-</ul>
-</details>
-<details>
-<summary>Process lifetimes and the data crossing each boundary</summary>
-<ul>
-<li><strong>Session:</strong> one <code>agavai listen</code> process owns conversation, confirmations and the tool allowlist. Audio pumping and worker readers are threads inside it. A follow-up with history can make a Qwen context-classification call before routing; exact controls such as Yes/No can bypass models.</li>
-<li><strong>Capture / speech worker:</strong> <code>parec</code> opens per utterance; the model worker stays loaded for the listening session. Audio passes through the session to the worker as length-prefixed 16 kHz mono PCM. Worker responses are JSON lines: partial text, boundary/end events, ready, reset or error. The diagram shortens this to “audio → words”.</li>
-<li><strong>Router:</strong> Jev is a remote HTTPS service; keyword fallback runs inside the session. Proposed Needle is a session-owned local child with JSON request/response pipes. A missing or failed candidate worker must be reported; it must not silently be scored as Needle while using keywords.</li>
-<li><strong>Qwen:</strong> a separate, long-running llama-server process. The session exchanges messages, tool definitions, tool calls and replies over localhost HTTP on port 18766. Neither the router nor Qwen executes desktop commands.</li>
-<li><strong>Desktop commands:</strong> spawned by the session's allowlisted tool functions when needed. Results return to the session, then to Qwen; tool functions also publish UI results.</li>
-<li><strong>Overlay:</strong> a separate Quickshell process watches <code>ui.json</code> for partial words, tool progress and results. Its stop/cancel controls signal the session through the CLI.</li>
-<li><strong>Speech / playback:</strong> Kokoro is a warm local process with a 600 s idle timeout. Reply text goes over a Unix socket; synthesized audio is written to a WAV. A separate <code>pw-play</code> or <code>paplay</code> child plays it. Cancel stops that playback; spoken interruption is not implemented. Kokoro failure falls back to eSpeak, then notification.</li>
-<li><strong>Local candidate setup:</strong> pin model/library files, pass explicit local weights and <code>NEEDLE3_LIB_PATH</code>, set <code>NEEDLE_TELEMETRY=0</code> and <code>HF_HUB_OFFLINE=1</code>. Disable automatic date injection for frozen-clock evals.</li>
-</ul>
-</details>
-<details>
-<summary>Evidence and sources</summary>
-<p>The process layout follows the current <a href="../audio.md">audio contract</a>, <a href="../flow.md">session flow</a> and implementation: <a href="../../src/agavai/asr.py">ASR parent</a>, <a href="../../src/agavai/router.py">router</a>, <a href="../../src/agavai/orchestrator.py">orchestrator</a>, <a href="../../src/agavai/llm.py">Qwen client</a>, <a href="../../src/agavai/tts.py">speech client</a>, <a href="../../scripts/kokoro_synth.py">Kokoro worker</a>.</p>
-<p>The latency values come from the <a href="../../evals/results/20261010-1250/report.json">stored report</a>; targets come from <a href="../../evals/budgets.toml">eval budgets</a>. They are not SLAs. Warm Kokoro synthesis alone took 0.49–0.73 s for the short measured replies. Jev's documented 70–500 ms is not a local benchmark.</p>
-<p>Candidate roles and runtime constraints come from the 2026-10-21 package-source investigation in this thread: <a href="https://huggingface.co/Cactus-Compute/whistle">Whistle</a>, <a href="https://github.com/cactus-compute/needle">Needle</a>, <a href="https://pypi.org/project/cactus-needle/">cactus-needle</a>. Recheck the pinned package at implementation time. This document proposes integration; it does not implement it.</p>
-</details>
-</main>
-<script>
-(() => {
-  'use strict';
-  const root = document.getElementById('model-design');
-  const diagram = document.getElementById('diagram');
-  const ns = 'http://www.w3.org/2000/svg';
-  let proposed = true;
-
-  function element(tag, attributes = {}, text = '') {
-    const node = document.createElementNS(ns, tag);
-    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
-    if (text) node.textContent = text;
-    return node;
-  }
-
-  function label(x, y, text, className, anchor = 'start') {
-    diagram.append(element('text', { x, y, class: className, 'text-anchor': anchor }, text));
-  }
-
-  function arrow(points, bidirectional = false) {
-    const attributes = {
-      d: points.map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join(' '),
-      class: 'arrow',
-      'marker-end': 'url(#arrow-end)'
-    };
-    if (bidirectional) attributes['marker-start'] = 'url(#arrow-end)';
-    diagram.append(element('path', attributes));
-  }
-
-  function box([x, y, width, height], name, process, lines, candidate = false, session = false) {
-    diagram.append(element('rect', {
-      x, y, width, height, rx: 6,
-      class: 'node' + (candidate ? ' candidate' : '') + (session ? ' session' : '')
-    }));
-    label(x + 13, y + 19, process, 'process-label');
-    label(x + 13, y + 43, name, 'node-name');
-    lines.forEach((line, i) => label(x + 13, y + 63 + i * 21, line, 'role'));
-  }
-
-  function draw() {
-    const width = Math.round(root.clientWidth);
-    const mobile = width < 700;
-    diagram.replaceChildren();
-    diagram.append(element('title', { id: 'diagram-title' }, 'Agavai process architecture'));
-    diagram.append(element('desc', { id: 'diagram-description' },
-      'Capture sends audio to the Agavai session, which forwards it to a speech worker and receives words back. The session sends words to a router, prompts to Qwen, tool calls to desktop commands and reply text to Kokoro. Tool results return through the session to Qwen. The overlay receives screen updates. Kokoro writes a WAV for the audio player. Each box is a process, except desktop commands which may spawn several.'));
-    const defs = element('defs');
-    const marker = element('marker', {
-      id: 'arrow-end', viewBox: '0 0 10 10', refX: 9, refY: 5,
-      markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse'
-    });
-    marker.append(element('path', { d: 'M1,1 L9,5 L1,9 Z', class: 'arrow-head' }));
-    defs.append(marker);
-    diagram.append(defs);
-
-    const speechName = proposed ? 'Whistle' : 'Parakeet';
-    const speechEngine = proposed ? 'Cactus engine' : 'ONNX Runtime';
-    const routeName = proposed ? 'Needle' : 'Jev';
-    const routeProcess = proposed ? 'NEW LOCAL WORKER' : 'REMOTE SERVICE';
-    const routeEngine = proposed ? 'Cactus engine' : 'OpenRouter HTTPS';
-
-    if (!mobile) {
-      const column = (width - 200) / 3;
-      const middle = column + 100;
-      const right = 2 * middle;
-      const sessionWidth = 2 * column + 100;
-      const asrCenter = middle + column / 2;
-      const rightCenter = right + column / 2;
-      const leftCenter = column / 2;
-      diagram.setAttribute('viewBox', `0 0 ${width} 638`);
-      diagram.style.height = '638px';
-
-      arrow([[leftCenter, 86], [leftCenter, 170]]);
-      label(leftCenter + 10, 131, 'audio', 'arrow-label');
-      arrow([[asrCenter, 170], [asrCenter, 86]], true);
-      label(asrCenter + 10, 113, 'audio ↑', 'arrow-label');
-      label(asrCenter + 10, 143, '↓ words', 'arrow-label');
-      arrow([[sessionWidth - 20, 170], [sessionWidth - 20, 126], [rightCenter, 126], [rightCenter, 86]]);
-      label((sessionWidth - 20 + rightCenter) / 2, 116, 'screen updates', 'arrow-label', 'middle');
-      arrow([[sessionWidth, 229], [right, 229]], true);
-      label(sessionWidth + 50, 214, 'prompt →', 'arrow-label', 'middle');
-      label(sessionWidth + 50, 251, '← call / reply', 'arrow-label', 'middle');
-      arrow([[leftCenter, 310], [leftCenter, 420]], true);
-      label(leftCenter + 12, 352, 'sentence ↓', 'arrow-label');
-      label(leftCenter + 12, 376, '↑ tool group', 'arrow-label');
-      arrow([[asrCenter, 310], [asrCenter, 420]], true);
-      label(asrCenter + 12, 352, 'tool call ↓', 'arrow-label');
-      label(asrCenter + 12, 376, '↑ result', 'arrow-label');
-      arrow([[sessionWidth - 20, 310], [sessionWidth - 20, 394], [rightCenter, 394], [rightCenter, 420]]);
-      label((sessionWidth - 20 + rightCenter) / 2, 384, 'reply text', 'arrow-label', 'middle');
-      arrow([[rightCenter, 516], [rightCenter, 563]]);
-      label(rightCenter + 10, 545, 'WAV', 'arrow-label');
-
-      box([0, 0, column, 86], 'Microphone', 'LOCAL PROCESS', ['capture · parec']);
-      box([middle, 0, column, 86], speechName, 'LOCAL SPEECH WORKER', [speechEngine], proposed);
-      box([right, 0, column, 86], 'Overlay', 'LOCAL UI PROCESS', ['words and results']);
-      box([0, 170, sessionWidth, 140], 'Agavai session', 'ONE LOCAL PROCESS', [
-        'Waits for the sentence; owns conversation and confirmations.',
-        'Calls the router, Qwen and the allowlisted tools.',
-        'Tool results go back to Qwen until it returns a reply.'
-      ], false, true);
-      box([right, 170, column, 112], 'Qwen', 'LOCAL LLAMA-SERVER', ['chooses tool + reply', 'llama.cpp engine']);
-      box([0, 420, column, 96], routeName, routeProcess, [routeEngine, 'chooses a tool group'], proposed);
-      box([middle, 420, column, 96], 'Desktop', 'LOCAL CHILD PROCESSES', ['open app, set volume…']);
-      box([right, 420, column, 96], 'Kokoro', 'LOCAL SPEECH PROCESS', ['text → speech audio', 'ONNX Runtime']);
-      box([right, 563, column, 75], 'Audio player', 'LOCAL CHILD PROCESS', ['pw-play → speakers']);
-    } else {
-      const x = 30;
-      const nodeWidth = width - x;
-      const center = x + nodeWidth / 2;
-      arrow([[center, 77], [center, 126]]);
-      label(center + 10, 107, 'audio', 'arrow-label');
-      arrow([[x, 180], [8, 180], [8, 990]]);
-      const nodes = [
-        [300, speechName, 'LOCAL SPEECH WORKER', ['audio ↔ words', speechEngine], proposed],
-        [430, 'Overlay', 'LOCAL UI PROCESS', ['screen updates from session'], false],
-        [560, routeName, routeProcess, ['sentence ↔ tool group', routeEngine], proposed],
-        [690, 'Qwen', 'LOCAL LLAMA-SERVER', ['prompt ↔ tool call / reply', 'llama.cpp engine'], false],
-        [820, 'Desktop commands', 'LOCAL CHILD PROCESSES', ['tool call ↔ result'], false],
-        [950, 'Kokoro', 'LOCAL SPEECH PROCESS', ['reply text → WAV', 'ONNX Runtime'], false]
-      ];
-      nodes.forEach(([y, name, process, lines, candidate]) => {
-        arrow([[8, y + 40], [x, y + 40]], name === speechName || name === routeName || name === 'Qwen' || name === 'Desktop commands');
-        box([x, y, nodeWidth, 94], name, process, lines, candidate);
-      });
-      arrow([[center, 1044], [center, 1073]]);
-      box([x, 0, nodeWidth, 77], 'Microphone', 'LOCAL PROCESS', ['capture · parec']);
-      box([x, 126, nodeWidth, 115], 'Agavai session', 'ONE LOCAL PROCESS', ['conversation + confirmations + allowlist', 'tool results return to Qwen'], false, true);
-      box([x, 1073, nodeWidth, 77], 'Audio player', 'LOCAL CHILD PROCESS', ['WAV → pw-play → speakers']);
-      diagram.setAttribute('viewBox', `0 0 ${width} 1150`);
-      diagram.style.height = '1150px';
-    }
-  }
-
-  function update(next) {
-    proposed = next;
-    document.getElementById('proposed').setAttribute('aria-pressed', String(proposed));
-    document.getElementById('current').setAttribute('aria-pressed', String(!proposed));
-    document.getElementById('caption').textContent = proposed
-      ? 'Each worker runs in its own local process; desktop actions may spawn several commands. Whistle and Needle are proposed. Tool results return through the session to Qwen.'
-      : 'Jev is the only remote service shown. If Jev is unavailable, keyword routing runs inside the session. Parakeet and Qwen remain local.';
-    document.getElementById('decision').innerHTML = proposed
-      ? '<strong>Unresolved: how does Whistle know you are done?</strong> It supplies words, not an end-of-turn signal. Start with transcription tests using known clip boundaries; live use needs Enter or an approved endpointing design.'
-      : '<strong>Today:</strong> Parakeet can signal the end of an utterance; Enter also submits it. A pause or partial sentence does not run tools.';
-    document.getElementById('commit-example').textContent = proposed
-      ? 'Whistle has no native “sentence finished” event. In a first live integration the user would press Enter; automatic submission is not designed yet.'
-      : 'Parakeet emits an end-of-utterance event, or the user presses Enter. Only then does the session submit the words.';
-    document.getElementById('route-example').textContent = proposed
-      ? '“open the browser” → Needle → launch group. Qwen receives the tools for launching apps, not every tool in the system.'
-      : '“open the browser” → Jev (or local keyword fallback) → launch group. Qwen receives the tools for launching apps.';
-    draw();
-  }
-
-  document.getElementById('proposed').addEventListener('click', () => update(true));
-  document.getElementById('current').addEventListener('click', () => update(false));
-  new ResizeObserver(draw).observe(root);
-  update(true);
-})();
-</script>
-</body>
-</html>
+<h2>What becomes replaceable?</h2>
+<table><thead><tr><th>Boundary</th><th>Contract</th></tr></thead><tbody>
+<tr><td>Speech backend</td><td>Start → feed audio → finish or cancel. Partial text is optional; one final transcript is required.</td></tr>
+<tr><td>Turn-end policy</td><td>Native EOU, manual Enter, or proposed VAD. Stable words alone never submit a request.</td></tr>
+<tr><td>Brain backend</td><td>History + tools in; answer, tool calls, clarification, unsupported or error out.</td></tr>
+<tr><td>Runtime selection</td><td>Choose a compatible model/runtime pair at startup. ONNX weights, Cactus weights and GGUF are not interchangeable.</td></tr>
+</tbody></table>
+<h2>Where the time goes</h2>
+<table><thead><tr><th>Wait</th><th>Expected cost</th></tr></thead><tbody>
+<tr><td>First words</td><td>Chunk buffering + decode. Parakeet steps: 160 ms. Whistle suggests ~1 s chunks; faster compute does not remove buffering.</td></tr>
+<tr><td>Finish speaking → submit</td><td>Endpoint wait + remaining decode. Existing eval target: 0.5 s. Whistle unmeasured locally.</td></tr>
+<tr><td>Small model handles it</td><td>Small inference + tool time if needed. No larger-model wait.</td></tr>
+<tr><td>Escalation</td><td>Small attempt + larger inference, plus load time if cold.</td></tr>
+</tbody></table>
+<p>Whistle is expected to decode faster. Confirm on this Omarchy machine with identical recordings; vendor Apple M4 Pro results are not local latency measurements.</p>
+<details><summary>Concrete changes and unresolved choices</summary><ul>
+<li>Split capture/turn control from the Parakeet-specific worker. Give finish and cancel distinct commands.</li>
+<li>Add Whistle streaming and batch adapters; keep workers warm and reject incompatible configuration at startup.</li>
+<li>Wrap existing llama calls and add a Needle adapter. Remove mandatory Qwen calls before the small attempt.</li>
+<li>Run live and replay evaluations through the same adapters; record engine, weights, endpoint policy and hardware.</li>
+<li>Start Whistle with Enter-to-submit. Automatic VAD needs pause/cutoff evaluation and a deliberate update to the current native-EOU-only specification.</li>
+<li>Exact small/large model assignments and acceptance rules for general answers remain to be selected.</li>
+</ul><p><a href="../model-engines.md">Full design, failure handling and sources</a> · Whistle API verified in cactus-needle 3.2.8.</p></details>
+</main></body></html>
