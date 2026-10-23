@@ -164,7 +164,7 @@ device = "cpu"      # gpu is used only when an NVIDIA GPU is present
 
 ## Tool loop
 
-1. System prompt: local Omarchy assistant, tools only, short spoken answers, no remote agents.
+1. System prompt: local Omarchy assistant, tools only, short spoken answers, no remote agents. A turn with no desktop tools gets a shorter chat prompt that puts lists and steps on the canvas through `show_answer`.
 2. User text (transcript or `ask`).
 3. **Router**: a small decision model picks tool **heads** for the utterance, and Qwen is given only those heads’ schemas (default Jev; keyword fallback offline). See below.
 4. Up to `max_tool_rounds` (default 6):

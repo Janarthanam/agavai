@@ -14,7 +14,7 @@ The surface stays open and listening until the user dismisses it, in either comp
 
 A finished desktop action, such as setting the wallpaper, shows a Done line with what changed. The spoken reply says the same thing. A failed action shows Not completed with the reason. Looking something up does not use that line. The listening ring remains, with the hint that Escape dismisses.
 
-The surface transitions from Listening → Working → Results. During tool execution, show a human-readable activity such as “Searching files”, with the tool identifier available in details. Results appear in the expanded view of the same surface instead of opening a second window. A brief spoken answer accompanies the richer screen content.
+The surface transitions from Listening → Working → Results. During tool execution, show a human-readable activity such as “Searching files”, with the tool identifier available in details. Results appear in the expanded view of the same surface instead of opening a second window. A brief spoken answer accompanies the richer screen content. An answer that reads better than it sounds, such as a list or steps, appears the same way: a titled Markdown answer opens the expanded view, and only a one-sentence summary is spoken. Short answers stay spoken only.
 
 Results persist until dismissed, replaced by new results, or cleared when the context response identifies a new conversation. Escape closes the surface. A new conversation resets selection, transcription, tool status, and previous previews without changing the listening session identity. An invalid or failed context response shows an error and retains the earlier results and model history for a retry. Partial speech never triggers a context decision.
 

@@ -29,6 +29,11 @@ def file_item(raw: Any, index: int) -> dict[str, Any] | None:
     return item
 
 
+def answer_block(title: str, text: str, kind: str = "markdown") -> dict[str, Any]:
+    """Full-width formatted answer for the canvas."""
+    return {"kind": "answer", "title": title, "text": text, "html": rich_text(text, kind)}
+
+
 def display_for(tool: str, result: str) -> dict[str, Any] | None:
     try:
         data = json.loads(result)
@@ -69,7 +74,7 @@ def display_for(tool: str, result: str) -> dict[str, Any] | None:
             {"id": str(i), "kind": "text", "title": str(row.get("text") or row.get("message") or row) if isinstance(row, dict) else str(row), "subtitle": "Reminder", "openable": False}
             for i, row in enumerate(data[:MAX_ITEMS])]}
     if isinstance(data, dict) and data.get("kind") in {"markdown", "html"} and isinstance(data.get("text"), str):
-        return {"kind": "answer", "title": str(data.get("title") or "Answer"), "text": data["text"], "html": rich_text(data["text"], data["kind"])}
+        return answer_block(str(data.get("title") or "Answer"), data["text"], data["kind"])
     return None
 
 

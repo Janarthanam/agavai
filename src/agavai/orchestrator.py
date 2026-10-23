@@ -11,7 +11,7 @@ from agavai.config import Config
 from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import select_head_ids
-from agavai.canvas import model_view, read_aloud
+from agavai.canvas import answer_block, model_view, read_aloud
 from agavai.tools import DISPATCH, call_tool
 from agavai.ui import ChatUi, PendingAction
 
@@ -26,6 +26,18 @@ When the user asks to see wallpaper, background, or screensaver images, call wal
 Later messages are the same person continuing. Use the earlier list and call wallpaper_set with the image they name. Do not ask them to pick an image that was not listed.
 When a tool succeeds, say exactly what finished in one sentence, naming the wallpaper, reminder, or other change.
 File, folder, image, and video results give you a kind and a readable name. When listing results, give a brief summary and point to the canvas instead of reading every filename. Refer to an individual item by its readable name. Never speak a filesystem path or file extension.
+Current local time: {now}
+"""
+
+# Turns offered only show_answer get their own prompt. With the desktop lines
+# above, Qwen3-4B showed 1 or 2 of 5 list answers, and it showed fewer when the
+# rule came after the short-answer rule.
+CHAT_SYSTEM = """You are Agavai, a local Omarchy Linux voice assistant.
+Your final message is spoken aloud automatically.
+Use show_answer for any list, steps, or several items. Answer anything else in one or two short spoken sentences, with no markdown.
+Never say you cannot speak, talk, generate voice, or say a word. If asked to say something, say it.
+You have no desktop tools this turn. Never claim you launched an app, changed a setting, or clicked something.
+Do not call remote models or coding agents. Do not ask for a shell.
 Current local time: {now}
 """
 
@@ -48,9 +60,31 @@ def control_command(text: str) -> str | None:
     return word if word in {"yes", "no", "continue", "agavai"} else None
 
 
+_SHOW_ANSWER = {
+    "type": "function",
+    "function": {
+        "name": "show_answer",
+        "description": "Show an answer that is easier to read than hear, such as a list or steps, on screen, and speak a one-sentence summary. Not for short answers.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short heading for the answer."},
+                "markdown": {"type": "string", "description": "The full answer. Use '- ' bullets or '1. ' numbered lines, short paragraphs, and '## ' headings."},
+                "summary": {"type": "string", "description": "One short spoken sentence saying what is on screen."},
+            },
+            "required": ["title", "markdown", "summary"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
 def _turn_tools(head_ids: list[str], cfg: Config, ui: ChatUi | None) -> list[dict[str, Any]]:
     can_confirm = ui is not None and cfg.router.max_tools > 1
     selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools - int(can_confirm))
+    # Questions with no desktop tools can still put a structured answer on the canvas.
+    if ui is not None and not selected and cfg.router.max_tools > 0:
+        return [_SHOW_ANSWER]
     if can_confirm and selected:
         selected.append({
             "type": "function",
@@ -72,14 +106,24 @@ def _turn_tools(head_ids: list[str], cfg: Config, ui: ChatUi | None) -> list[dic
     return selected
 
 
-def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi) -> str:
+def _system_message(selected_names: set[str]) -> dict[str, str]:
+    prompt = CHAT_SYSTEM if selected_names == {"show_answer"} else SYSTEM
+    return {"role": "system", "content": prompt.format(now=datetime.now().strftime("%A, %Y-%m-%d %H:%M"))}
+
+
+def _call_arguments(call: dict[str, Any], label: str) -> dict[str, Any]:
     raw = (call.get("function") or {}).get("arguments")
     try:
-        proposal = json.loads(raw) if isinstance(raw, str) else raw
+        arguments = json.loads(raw) if isinstance(raw, str) else raw
     except json.JSONDecodeError as exc:
-        raise LlmError("Invalid confirmation arguments JSON.") from exc
-    if not isinstance(proposal, dict):
-        raise LlmError("Confirmation arguments must be an object.")
+        raise LlmError(f"Invalid {label} arguments JSON.") from exc
+    if not isinstance(arguments, dict):
+        raise LlmError(f"{label.capitalize()} arguments must be an object.")
+    return arguments
+
+
+def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi) -> str:
+    proposal = _call_arguments(call, "confirmation")
     name = proposal.get("name")
     arguments = proposal.get("arguments")
     question = proposal.get("question")
@@ -89,6 +133,29 @@ def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: Ch
         raise LlmError("Confirmation needs resolved arguments and a question.")
     ui.pending_action = PendingAction(str(ui.data["session_id"]), name, arguments)
     return read_aloud(question, ui.data.get("display"))
+
+
+def _show_answer(call: dict[str, Any], ui: ChatUi) -> str:
+    """Publish the model's structured answer on the canvas; its summary is the spoken reply."""
+    answer = _call_arguments(call, "on-screen answer")
+    title, markdown, summary = (answer.get(key) for key in ("title", "markdown", "summary"))
+    if not all(isinstance(value, str) and value.strip() for value in (title, markdown, summary)):
+        raise LlmError("An on-screen answer needs a title, Markdown, and a spoken summary.")
+    ui.display(answer_block(title.strip(), markdown.strip()))
+    return read_aloud(summary, None)
+
+
+def _finish_with_local_call(
+    calls: list[dict[str, Any]], note: str, reply: str,
+    messages: list[dict[str, Any]], ui: ChatUi, head_ids: list[str],
+) -> str:
+    """End the turn on a call handled here, without another model round."""
+    messages.append({"role": "assistant", "content": None, "tool_calls": calls})
+    messages.append({"role": "tool", "tool_call_id": calls[0].get("id") or calls[0]["function"]["name"], "content": note})
+    messages.append({"role": "assistant", "content": reply})
+    _remember(ui, messages, head_ids)
+    ui.assistant(reply)
+    return reply
 
 
 def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation: bool) -> str | None:
@@ -299,10 +366,7 @@ def run_turn(
         selected = _turn_tools(head_ids, cfg, ui)
         selected_names = {item["function"]["name"] for item in selected}
         messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": SYSTEM.format(now=datetime.now().strftime("%A, %Y-%m-%d %H:%M")),
-            },
+            _system_message(selected_names),
             *prior_messages,
             {"role": "user", "content": text},
         ]
@@ -334,17 +398,17 @@ def run_turn(
             content = (message.get("content") or "").strip()
             if ui and ui.cancelled():
                 return ""
-            confirmations = [call for call in calls if (call.get("function") or {}).get("name") == "request_confirmation"]
-            if confirmations:
+            names = [(call.get("function") or {}).get("name") for call in calls]
+            if "request_confirmation" in names:
                 if len(calls) != 1 or "request_confirmation" not in selected_names:
                     raise LlmError("A confirmation must be requested alone in an interactive turn.")
-                reply = _prepare_confirmation(confirmations[0], selected_names, ui)
-                messages.append({"role": "assistant", "content": None, "tool_calls": calls})
-                messages.append({"role": "tool", "tool_call_id": confirmations[0].get("id") or "request_confirmation", "content": "Awaiting user confirmation. No action has executed."})
-                messages.append({"role": "assistant", "content": reply})
-                _remember(ui, messages, head_ids)
-                ui.assistant(reply)
-                return reply
+                reply = _prepare_confirmation(calls[0], selected_names, ui)
+                return _finish_with_local_call(calls, "Awaiting user confirmation. No action has executed.", reply, messages, ui, head_ids)
+            if "show_answer" in names and "show_answer" in selected_names:
+                if len(calls) != 1:
+                    raise LlmError("An on-screen answer must be shown alone.")
+                reply = _show_answer(calls[0], ui)
+                return _finish_with_local_call(calls, "Shown on screen.", reply, messages, ui, head_ids)
             if not calls:
                 _list_images(text, cfg, ui, messages)
                 reply = read_aloud(_strip_think(content) or "Done.", ui.data.get("display") if ui else None)
@@ -365,6 +429,7 @@ def run_turn(
                 head_ids.extend(extra_heads)
                 selected = _turn_tools(head_ids, cfg, ui)
                 selected_names = {item["function"]["name"] for item in selected}
+                messages[0] = _system_message(selected_names)
                 continue
             messages.append(
                 {

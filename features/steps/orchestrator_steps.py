@@ -8,7 +8,7 @@ from behave import given, then, when
 
 from agavai.config import Config
 from agavai.llm import LlmError
-from agavai.orchestrator import CONTEXT_SYSTEM, _strip_think, run_turn, wants_followup
+from agavai.orchestrator import CHAT_SYSTEM, CONTEXT_SYSTEM, SYSTEM, _strip_think, run_turn, wants_followup
 from agavai.ui import cancel_ui
 
 
@@ -71,9 +71,11 @@ def step_script_retry(context, first, second, reply):
         {"content": reply, "tool_calls": []},
     ]
     context.offered: list[set[str]] = []
+    context.prompts = []
 
-    def fake_chat(_cfg, _messages, tools=None):
+    def fake_chat(_cfg, messages, tools=None):
         context.offered.append({t["function"]["name"] for t in (tools or [])})
+        context.prompts.append(messages[0]["content"])
         return scripted.pop(0)
 
     context.health_patch = patch("agavai.orchestrator.health", return_value=True)
@@ -147,6 +149,7 @@ def step_keyword_ui(context):
 def step_reply_only(context, reply):
     context.context_requests = []
     context.action_requests = []
+    context.prompts = []
 
     def fake_chat(cfg, messages, tools=None):
         if messages[0]["content"] == CONTEXT_SYSTEM:
@@ -160,6 +163,7 @@ def step_reply_only(context, reply):
             return {"content": context.context_response, "tool_calls": getattr(context, "context_tool_calls", [])}
         context.action_requests.append(deepcopy(context.ui.data))
         context.seen_messages = messages
+        context.prompts.append(messages[0]["content"])
         context.model_tools = {item["function"]["name"] for item in (tools or [])}
         return {"content": reply, "tool_calls": []}
 
@@ -359,3 +363,78 @@ def step_same_session(context):
 @then("the conversation snapshot was unchanged")
 def step_same_snapshot(context):
     assert context.ui.data == context.before_turn
+
+
+@given("llama-server shows this answer")
+def step_show_answer(context):
+    context.model_rounds = 0
+    context.prompts = []
+    call = {"id": "a1", "function": {"name": "show_answer", "arguments": context.text}}
+
+    def fake_chat(_cfg, messages, tools=None):
+        context.model_rounds += 1
+        context.prompts.append(messages[0]["content"])
+        context.model_tools = {item["function"]["name"] for item in (tools or [])}
+        return {"content": "", "tool_calls": [call]} if context.model_rounds == 1 else {"content": "Here are the planets in a second round.", "tool_calls": []}
+
+    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
+    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
+    context.health_patch.start()
+    context.chat_patch.start()
+    context.add_cleanup(context.health_patch.stop)
+    context.add_cleanup(context.chat_patch.stop)
+
+
+@then('the canvas shows the answer "{title}" with "{html}"')
+def step_canvas_answer(context, title, html):
+    display = context.ui.data.get("display") or {}
+    assert display.get("kind") == "answer" and display.get("title") == title, display
+    assert html in display.get("html", ""), display
+
+
+@then("the canvas is empty")
+def step_canvas_empty(context):
+    assert "display" not in context.ui.data, context.ui.data.get("display")
+
+
+@then('the model was asked once and offered only "{name}"')
+def step_one_round(context, name):
+    assert context.model_rounds == 1, context.model_rounds
+    assert context.model_tools == {name}, context.model_tools
+
+
+@then('the model was offered "{name}"')
+def step_model_offered(context, name):
+    assert name in context.model_tools, context.model_tools
+
+
+@then('the model was not offered "{name}"')
+def step_model_not_offered(context, name):
+    assert name not in context.model_tools, context.model_tools
+
+
+@then("the remembered conversation keeps the shown Markdown")
+def step_remembered_answer(context):
+    calls = [call for message in context.ui.model_messages for call in message.get("tool_calls") or []]
+    assert any("Venus" in call["function"]["arguments"] for call in calls), context.ui.model_messages
+
+
+_INSTRUCTIONS = {"chat": CHAT_SYSTEM, "desktop": SYSTEM}
+
+
+def _instruction_kind(prompt):
+    kinds = [kind for kind, template in _INSTRUCTIONS.items() if prompt.startswith(template.split("{now}")[0])]
+    assert len(kinds) == 1, prompt
+    return kinds[0]
+
+
+@then("the model was given the {kinds}")
+def step_model_instructions(context, kinds):
+    """Kinds read like 'chat instructions, then the desktop instructions'; repeated rounds count once."""
+    expected = [kind.removesuffix(" instructions") for kind in kinds.split(", then the ")]
+    given = []
+    for prompt in context.prompts:
+        kind = _instruction_kind(prompt)
+        if not given or given[-1] != kind:
+            given.append(kind)
+    assert given == expected, given
