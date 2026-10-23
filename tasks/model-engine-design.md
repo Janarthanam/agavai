@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: implementation and validation finished; awaiting local commit. Owner: Codex session engine-implementation.
+Complete: configurable engine feature committed as `48925bb`. Owner: Codex session engine-implementation.
 
-- [ ] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
+- [x] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
 
 ## Acceptance
@@ -40,3 +40,5 @@ In progress: implementation and validation finished; awaiting local commit. Owne
 - 2026-10-23T20:20:23+05:30 — Codex session engine-implementation — ready for commit. Implemented independent speech/brain registries; Parakeet/Whistle streaming and Whistle batch; bounded worker protocol with explicit finish/cancel and final-only submission; optional larger-brain escalation with per-turn action deduplication; role-aware llama launcher; pinned Cactus provisioning; shared audio/task eval adapters and model-call recording. Current runtime specs and configuration guide updated. Automatic Whistle VAD remains deferred as designed.
   - Changed files: `README.md`, `docs/audio.md`, `docs/engines.md`, `docs/flow.md`, `docs/model-engines.md`, `evals/measure.py`, `evals/runner.py`, `evals/voice.py`, `evals/voice_helper.py`, `features/cactus_worker.feature`, `features/engines.feature`, `features/steps/asr_meter_steps.py`, `features/steps/engine_steps.py`, `features/steps/invocation_steps.py`, `features/steps/orchestrator_steps.py`, `features/steps/voice_control_steps.py`, `features/support/asr_checks.py`, `scripts/agavai-llm`, `scripts/configure.sh`, `scripts/setup-cactus.sh`, `share/config.example.toml`, `src/agavai/__main__.py`, `src/agavai/asr.py`, `src/agavai/asr_worker.py`, `src/agavai/brain.py`, `src/agavai/cactus_runtime.py`, `src/agavai/config.py`, `src/agavai/llm.py`, `src/agavai/needle_worker.py`, `src/agavai/orchestrator.py`, `src/agavai/parakeet_worker.py`, `src/agavai/speech_backends.py`, `src/agavai/ui.py`, `src/agavai/worker.py`, `tasks/model-engine-design.md`, `tests/README.md`.
   - Validation: full Behave suite passed 280 scenarios / 1472 steps, including native Parakeet and four native Cactus scenarios. Final targeted lifecycle/engine/control review passed 88 scenarios / 657 steps after final refinements. Native Needle browser task succeeded against the simulated desktop; Whistle replay helper checked in its independent environment. Shell syntax, Python compilation, example TOML, doc references, whitespace and self-review passed. Runtime artifacts were provisioned only under ignored `.venv/cactus`; no live microphone, host configuration, service activation or comparative performance benchmark.
+
+- 2026-10-23T20:20:36+05:30 — Codex session engine-implementation — complete. Runtime, configuration, setup, evals, tests and documentation committed as `48925bb`; validation and changed-file record above. This entry changes task bookkeeping only.
