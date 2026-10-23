@@ -52,3 +52,9 @@ Feature: Tool heads and routing
   Scenario: wallpaper_set rejects parent paths
     When I set wallpaper to "../etc/passwd"
     Then the tool result should contain "invalid wallpaper path"
+
+  Scenario: Taking notes selects the recordings head
+    Given the keyword router
+    When I route the utterance "take notes"
+    Then the selected heads should include "recordings"
+    And the selected tool names should include "start_recording"

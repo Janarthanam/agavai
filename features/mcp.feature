@@ -12,3 +12,11 @@ Feature: MCP stdio tools
   Scenario: MCP refuses unknown tools
     When I call MCP tool "exec"
     Then the MCP text result should contain "unknown tool"
+
+  Scenario: Recording tools stay with the person at the machine
+    When I send MCP tools/list
+    Then MCP should not list the tool "start_recording"
+    And MCP should not list the tool "list_recordings"
+    When an MCP client asks to start a recording
+    Then the MCP text result should contain "unknown tool"
+    And no recording was started over MCP

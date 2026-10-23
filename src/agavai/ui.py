@@ -31,6 +31,9 @@ _QUIET_TOOLS = {
     "screen_context",
     "list_agents",
     "clock_now",
+    # The recording itself, with its chime, is the feedback.
+    "start_recording",
+    "list_recordings",
 }
 
 

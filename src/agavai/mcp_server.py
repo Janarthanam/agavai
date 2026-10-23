@@ -9,11 +9,16 @@ from typing import Any
 from agavai.config import load_config
 from agavai.tools import OPENAPI_TOOLS, call_tool
 
+# The microphone and what it recorded stay with the person at the machine.
+LOCAL_ONLY = {"start_recording", "list_recordings"}
+
 
 def _mcp_tools() -> list[dict[str, Any]]:
     out = []
     for item in OPENAPI_TOOLS:
         fn = item["function"]
+        if fn["name"] in LOCAL_ONLY:
+            continue
         out.append(
             {
                 "name": fn["name"],
@@ -46,7 +51,7 @@ def handle(msg: dict[str, Any]) -> dict[str, Any] | None:
         params = msg.get("params") or {}
         name = params.get("name") or ""
         args = params.get("arguments") or {}
-        text = call_tool(str(name), args, cfg)
+        text = f"unknown tool {name}" if name in LOCAL_ONLY else call_tool(str(name), args, cfg)
         return {
             "jsonrpc": "2.0",
             "id": mid,

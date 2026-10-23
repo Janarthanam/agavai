@@ -199,3 +199,18 @@ Feature: Recordings keep the audio, a timed transcript, and corrections
   Scenario: Pausing with nothing recording is an error
     When I run "agavai record pause" with nothing running
     Then the command exits with 1
+
+  Scenario: Saying "take notes" records right after the reply, then the assistant listens again
+    When the assistant hears "take notes" and the model starts a recording
+    Then the recording is saved with its audio compressed
+    And the assistant went back to listening with the review on screen
+
+  Scenario: Saved recordings are listed newest first, by title
+    Given a saved recording "Standup" from "2026-10-22T09:00:00" lasting 90 seconds
+    And a saved recording "Lecture" from "2026-10-23T10:02:00" lasting 3130 seconds
+    When the assistant lists the recordings
+    Then the canvas lists the recordings
+      | title    | subtitle                  |
+      | Lecture  | Fri 23 Oct, 10:02 · 52:10 |
+      | Standup  | Thu 22 Oct, 09:00 · 01:30 |
+    And the model hears the recordings by title, without their folders

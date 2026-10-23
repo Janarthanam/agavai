@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "listen":
         return listen_session(cfg, ChatUi(cfg), record=args.record)
     if args.cmd == "record":
-        return _record_cmd(cfg, args.action)
+        return request_recording(cfg, args.action)
     if args.cmd == "stop":
         if _signal_listener(cfg):
             return 0
@@ -207,7 +207,8 @@ class _RecordRequests:
         return actions
 
 
-def _record_cmd(cfg, action: str) -> int:
+def request_recording(cfg, action: str) -> int:
+    """`agavai record`: hand the action to the running listener, or start a recording session."""
     pid = read_listener(cfg)
     state = read_state(cfg)
     if action != "toggle" and (pid is None or state != "recording"):

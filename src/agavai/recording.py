@@ -243,6 +243,23 @@ def _recover(folder: Path, meta: dict[str, Any]) -> None:
     _finalize(folder, meta)
 
 
+def recordings(cfg: Config) -> list[dict[str, Any]]:
+    """Saved recordings, newest first."""
+    root = cfg.recordings.dir
+    rows = []
+    for folder in root.iterdir() if root.is_dir() else []:
+        meta = _read_meta(folder)
+        if meta and meta.get("status") == "ready":
+            rows.append({
+                "title": meta["title"],
+                "started": meta["started"],
+                "duration_ms": meta["duration_ms"],
+                "lines": len(meta["segments"]),
+                "path": str(folder),
+            })
+    return sorted(rows, key=lambda row: row["started"], reverse=True)
+
+
 def correct(folder: Path, segment_id: int, text: str) -> None:
     """Keep the recognizer's words and lay the user's correction over them."""
     meta = _read_meta(folder)

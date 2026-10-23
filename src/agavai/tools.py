@@ -11,6 +11,8 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from agavai.config import Config
+from agavai.recording import recordings
+from agavai.state import read_state
 
 ToolFn = Callable[[dict[str, Any], Config], str]
 
@@ -507,6 +509,21 @@ def list_reminders(_args: dict[str, Any], _cfg: Config) -> str:
     return _ok(proc.stdout) or "[]"
 
 
+def start_recording(_args: dict[str, Any], cfg: Config) -> str:
+    # Imported here, as app.py does: __main__ owns the listener and imports this module.
+    from agavai.__main__ import request_recording
+
+    if read_state(cfg) == "recording":
+        return "A recording is already running."
+    if request_recording(cfg, "toggle") != 0:
+        return "Could not start a recording."
+    return "Recording starts right after your reply, so reply in a few words."
+
+
+def list_recordings(_args: dict[str, Any], cfg: Config) -> str:
+    return json.dumps(recordings(cfg), ensure_ascii=False)
+
+
 def clear_reminders(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "reminder", "clear"])
     if proc.returncode != 0:
@@ -931,6 +948,22 @@ OPENAPI_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "start_recording",
+            "description": "Record the microphone, keeping the audio and a timed transcript: notes, a meeting, a lecture, or a voice memo. Not for recording the screen.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_recordings",
+            "description": "List saved recordings, newest first.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "clear_reminders",
             "description": "Clear all pending desktop reminders.",
             "parameters": {"type": "object", "properties": {}},
@@ -1036,6 +1069,8 @@ DISPATCH: dict[str, ToolFn] = {
     "screenshot": screenshot,
     "list_reminders": list_reminders,
     "clear_reminders": clear_reminders,
+    "start_recording": start_recording,
+    "list_recordings": list_recordings,
     "send_notification": send_notification,
     "clock_now": clock_now,
     "close_window": close_window,

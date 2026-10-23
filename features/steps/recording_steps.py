@@ -13,8 +13,10 @@ from unittest.mock import patch
 from behave import given, then, when
 
 from agavai.__main__ import _cancel_path, _record_request_path, listen_session, main
+from agavai.canvas import display_for, model_view
 from agavai.recording import correct, line_text
 from agavai.state import write_state
+from agavai.tools import call_tool
 from agavai.ui import cancel_ui
 
 
@@ -201,6 +203,69 @@ def _record_cmd_idle(context, argv):
             patch("agavai.__main__.start_session", return_value=True) as start:
         context.exit_code = main(argv)
         context.start_calls = start.call_args_list
+
+
+@when('the assistant hears "{text}" and the model starts a recording')
+def step_voice_start(context, text):
+    assistant = _AssistantScript([[("eou", text)], []])
+    recording = _ContinuousScript(context, "audio 1000\nrequest toggle")
+    context.streams = []
+
+    def open_stream(cfg, *, continuous=False):
+        context.streams.append(continuous)
+        return recording if continuous else assistant
+
+    def model_turn(cfg, ui, stop_requested, *, continue_conversation=False, text=""):
+        # The model's tool call; its spoken reply comes before the recording starts.
+        context.tool_result = call_tool("start_recording", {}, cfg)
+        return "Recording."
+
+    def no_process(*_args, **_kwargs):
+        raise AssertionError("a voice start must reuse this session, not start a process")
+
+    patches = _quiet_session() + [
+        patch("agavai.__main__.open_stream", side_effect=open_stream),
+        patch("agavai.__main__._run_stop_body", side_effect=model_turn),
+        patch("agavai.__main__.read_listener", return_value=os.getpid()),
+        patch("agavai.__main__.start_session", side_effect=no_process),
+    ]
+    for item in patches:
+        item.start()
+    try:
+        context.listen_result = listen_session(context.cfg, context.ui)
+    finally:
+        for item in reversed(patches):
+            item.stop()
+    assert context.tool_result.startswith("Recording starts"), context.tool_result
+
+
+@given('a saved recording "{title}" from "{started}" lasting {seconds:d} seconds')
+def step_saved_recording(context, title, started, seconds):
+    folder = context.cfg.recordings.dir / f"{started} {title}"
+    folder.mkdir(parents=True)
+    (folder / "recording.json").write_text(json.dumps({
+        "title": title, "started": started, "status": "ready", "audio": "audio.opus",
+        "duration_ms": seconds * 1000, "segments": [], "marks": [], "pauses": []}))
+
+
+@when("the assistant lists the recordings")
+def step_list_recordings(context):
+    context.listed = call_tool("list_recordings", {}, context.cfg)
+
+
+@then("the canvas lists the recordings")
+def step_canvas_recordings(context):
+    block = display_for("list_recordings", context.listed)
+    assert block["kind"] == "recordings", block
+    rows = [{"title": item["title"], "subtitle": item["subtitle"]} for item in block["items"]]
+    assert rows == [dict(row.items()) for row in context.table], rows
+    assert all(Path(item["path"]).parent == context.cfg.recordings.dir for item in block["items"]), block
+
+
+@then("the model hears the recordings by title, without their folders")
+def step_model_recordings(context):
+    text = model_view("list_recordings", context.listed)
+    assert "Lecture" in text and str(context.cfg.recordings.dir) not in text, text
 
 
 @when('I run "agavai record" with nothing running')

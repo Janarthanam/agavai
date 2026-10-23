@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from agavai.recording import clock
 from agavai.richtext import rich_text
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
@@ -73,6 +75,12 @@ def display_for(tool: str, result: str) -> dict[str, Any] | None:
         return {"kind": "list", "title": "Reminders", "items": [
             {"id": str(i), "kind": "text", "title": str(row.get("text") or row.get("message") or row) if isinstance(row, dict) else str(row), "subtitle": "Reminder", "openable": False}
             for i, row in enumerate(data[:MAX_ITEMS])]}
+    if tool == "list_recordings" and isinstance(data, list):
+        return {"kind": "recordings", "title": "Recordings", "items": [
+            {"id": str(i), "kind": "recording", "title": str(row.get("title") or "Recording"),
+             "subtitle": f"{datetime.fromisoformat(row['started']):%a %d %b, %H:%M} · {clock(int(row.get('duration_ms') or 0))}",
+             "path": str(row.get("path") or ""), "openable": False}
+            for i, row in enumerate(data[:MAX_ITEMS]) if isinstance(row, dict) and row.get("started")]}
     if isinstance(data, dict) and data.get("kind") in {"markdown", "html"} and isinstance(data.get("text"), str):
         return answer_block(str(data.get("title") or "Answer"), data["text"], data["kind"])
     return None

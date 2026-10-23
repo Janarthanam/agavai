@@ -79,6 +79,12 @@ HEADS: tuple[ToolHead, ...] = (
         ("screenshot", "screen_context"),
     ),
     ToolHead(
+        "recordings",
+        "Record the microphone to keep the audio and a transcript (take notes, transcribe a meeting), or list past recordings.",
+        ("record", "recording", "recordings", "take notes", "transcribe", "transcript"),
+        ("start_recording", "list_recordings"),
+    ),
+    ToolHead(
         "reminders",
         "Reminders, notifications, current time.",
         ("remind", "reminder", "notify", "notification", "time", "clock", "date"),

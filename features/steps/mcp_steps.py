@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from behave import then, when
 
 from agavai.mcp_server import handle
@@ -43,6 +45,21 @@ def step_call(context, name):
             "params": {"name": name, "arguments": {}},
         }
     )
+
+
+@when("an MCP client asks to start a recording")
+def step_mcp_record(context):
+    # A regression must fail here, not start a real recording on this machine.
+    fake = MagicMock(return_value="started")
+    with patch.dict("agavai.tools.DISPATCH", {"start_recording": fake}):
+        context.mcp_call = handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                                   "params": {"name": "start_recording", "arguments": {}}})
+    context.mcp_recording = fake
+
+
+@then("no recording was started over MCP")
+def step_mcp_not_recording(context):
+    assert not context.mcp_recording.called
 
 
 @then('the MCP text result should contain "{text}"')
