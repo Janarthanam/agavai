@@ -380,6 +380,9 @@ def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
         "speech_engine": {
             "backend": cfg.asr.backend, "endpoint": cfg.asr.endpoint, "mode": cfg.asr.mode,
             "chunk_ms": cfg.asr.chunk_ms, "device": cfg.asr.device,
+            "vad": {key: getattr(cfg.vad, key) for key in ("backend", "rate", "frame_ms", "silence_ms", "min_speech_ms",
+                     "open_threshold_dbfs", "close_threshold_dbfs", "noise_margin_db", "start_timeout_ms", "max_record_ms")}
+                     if cfg.asr.endpoint == "vad" else None,
             "model_sha256": {p.name: _sha256(p) for p in ([cfg.asr.model_path] if cfg.asr.backend == "whistle-cactus" else
                                 [cfg.asr.model_dir / name for name in ("encoder.onnx", "decoder_joint.onnx", "vocab.txt")]) if p.is_file()},
             "runtime_sha256": _sha256(cfg.asr.runtime_library) if cfg.asr.runtime_library and cfg.asr.runtime_library.is_file() else "",

@@ -19,13 +19,13 @@ flowchart LR
 
 One capture reads the default microphone at 16 kHz, one channel, 16-bit. That is the format the streaming ASR model expects. A second capture is not opened to decide when the person has stopped. If the orb still grows and shrinks with the voice, that meter must not start or stop a request.
 
-The capture pump also measures RMS dBFS from those same PCM packets. The session thread publishes the latest level to the snapshot at most 10 times per second, independently of recognizer hypotheses. No second microphone stream or VAD gate is used. In both orb views, a breathing listening ring remains visible during silence; speech makes the orb respond more strongly.
+The capture pump also measures RMS dBFS from those same PCM packets. The session thread publishes the latest level to the snapshot at most 10 times per second, independently of recognizer hypotheses. No second microphone stream is used. Under the explicit `vad` endpoint policy, the same capture also feeds the existing energy endpointer; native and manual policies do not use it. In both orb views, a breathing listening ring remains visible during silence; speech makes the orb respond more strongly.
 
 Voxtype is not in this capture. Dictation keeps its own file interface. The assistant does not start, stop, or cancel a Voxtype recording.
 
 ## Streaming ASR
 
-The default backend below is Parakeet. Select `whistle-cactus` in `[asr]` for streaming or batch Whistle through the same audio lifecycle; see [engine configuration](engines.md). Whistle uses manual Enter to finish input and flush its pending tail before submission. Batch mode has no partial transcript. Escape discards either mode. The backend and endpoint policy are validated before microphone capture; no silence timer is introduced.
+The default backend below is Parakeet. Select `whistle-cactus` in `[asr]` for streaming or batch Whistle through the same audio lifecycle; see [engine configuration](engines.md). Whistle can use `endpoint = "vad"` to request finish after a configured quiet period, or `endpoint = "manual"` to require Enter. Both flush the pending tail before submission. Batch mode has no partial transcript. Escape discards either mode. The backend and endpoint policy are validated before microphone capture; the energy endpoint policy must be explicitly selected. Its 900 ms quiet window and 250 ms minimum speech are configurable, not a native Whistle turn-end signal.
 
 The model is [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1), a cache-aware streaming FastConformer with an RNN-T decoder, about 120 million parameters. Audio arrives in short chunks while the person is still talking. The encoder keeps a cache, so each chunk continues the sentence instead of re-reading it from the start. The attention context shipped with the model is 70 frames of the past and 1 frame of lookahead, about 80 ms. The model card states a design latency of 80–160 ms. On its end-of-utterance test the median delay is 160 ms and the 90th percentile is 280 ms.
 
@@ -48,16 +48,16 @@ The official checkpoint is English and does not emit punctuation or capitals.
 
 ## Turn taking
 
-Turn taking is the only stage that may decide the user has finished. It reads the streaming ASR output.
+Turn taking is the only stage that may decide the user has finished. It reads native ASR endpoint events, Enter, or the explicitly configured VAD policy over the same audio stream.
 
 - An interim hypothesis is written to user context as a partial transcript. The overlay shows it. The LLM is not called.
-- A native end-of-utterance marker (Parakeet), or Enter (either backend), ends input. The worker finishes the buffered tail and returns final text before the session commits once.
+- A native end-of-utterance marker (Parakeet), configured VAD trailing silence (Whistle), or Enter (either backend) ends input. The worker finishes the buffered tail and returns final text before the session commits once.
 - Escape drops the stream, clears the hypothesis, and does not commit.
 - An end-of-boundary marker does not commit.
 
-Isolated controls use this same commit boundary. A partial `yes` may grow into `yes, show me the wallpaper`; neither that partial nor an EOB triggers confirmation. Only the entire EOU/Enter-committed text is checked for an exact control phrase. No new silence timer is used. A falsely early EOU remains an ASR endpointing error, not something the text handler can detect.
+Isolated controls use this same commit boundary. A partial `yes` may grow into `yes, show me the wallpaper`; neither that partial nor an EOB triggers confirmation. Only the entire EOU/Enter-committed text is checked for an exact control phrase. The explicit VAD policy can split a sentence at a long pause; native Parakeet endpointing does not use that timer. A falsely early EOU remains an ASR endpointing error, not something the text handler can detect.
 
-Nothing else in the listen session may commit a turn. If the end-of-utterance token is late or missing, that is something to measure. It is not a reason to put the 900 ms timer back in front of the model.
+Nothing else in the listen session may commit a turn. If the end-of-utterance token is late or missing, that is something to measure. Native Parakeet keeps its own turn-end decision. Whistle requires a separate selected endpoint policy because it supplies no native turn end.
 
 ## User context
 
@@ -83,4 +83,4 @@ The speakers play the reply. The overlay shows the partial during recognition, t
 
 ## What this removes
 
-The previous assistant ear was a parallel `parec` tap. It waited 900 ms of quiet after at least 250 ms of speech, ignored the first 300 ms, and reset after 5 s of silence without ending the session. Those numbers existed because recognition started only after the recording stopped. This loop removes them from the assistant path, along with the Silero gate and the long transcribing wait.
+The previous assistant ear was a parallel `parec` tap. It waited 900 ms of quiet after at least 250 ms of speech, ignored the first 300 ms, and reset after 5 s of silence without ending the session. Those numbers existed because recognition started only after the recording stopped. Parakeet removes them from its path, along with the Silero gate and the long transcribing wait. Whistle can explicitly reuse the existing energy endpointer on the shared capture, while continuing streaming recognition; it does not restore the parallel microphone or Voxtype recording path.

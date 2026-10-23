@@ -112,9 +112,12 @@ ShellRoot {
                     check(expandedAt.x === orbAt.x && expandedAt.y === orbAt.y, "Expanding must not move the orb");
                     checkPosition(stage, panel, orb);
                     check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.OnDemand, "Expanded view must let other windows receive input");
-                    chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", display: {id: "canvas1", items: [{title: "Notes"}]}}));
+                    chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", asr_endpoint: "manual", display: {id: "canvas1", items: [{title: "Notes"}]}}));
                 } else if (step === 3) {
                     check(!chat.compact && chat.items.length === 1, "Snapshots must preserve the chosen expanded view");
+                    check(find(chat, "agavaiListeningHint").text === "Press Enter to send. Escape cancels.", "Manual endpointing must not promise automatic submission");
+                    chat.applySnapshot(JSON.stringify({session_id: "test", phase: "listening", asr_endpoint: "vad", display: {id: "canvas1", items: [{title: "Notes"}]}}));
+                    check(find(chat, "agavaiListeningHint").text.indexOf("It sends when you finish") >= 0, "Automatic endpointing must describe automatic submission");
                     checkPosition(stage, panel, orb);
                     find(chat, "agavaiMinimize").clicked();
                 } else if (step === 5) {

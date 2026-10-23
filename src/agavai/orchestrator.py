@@ -495,6 +495,11 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 if escalation_calls:
                     _validate_call(escalation_calls[0], [ESCALATE])
                     reason = json.loads(escalation_calls[0]["function"]["arguments"])["reason"]
+                log.info("Brain unsupported backend=%s reason=%s tools=%s", active_cfg.backend, reason,
+                            [tool["function"]["name"] for tool in offered])
+                if cfg.large_brain is None or escalated:
+                    suggestion = "Try asking me to open an app or find a file." if backend.tool_only else "Please try rephrasing it."
+                    raise LlmError(f"I could not handle that request. {suggestion}")
                 escalate(str(reason))
                 messages.append({"role": "system", "content": f"Escalation reason: {reason}. Continue from the recorded history and tool results; do not repeat completed actions."})
                 continue

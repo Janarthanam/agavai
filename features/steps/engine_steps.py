@@ -55,6 +55,10 @@ def invalid_config(context, setting):
         'whistle native': '[asr]\nbackend="whistle-cactus"',
         'whistle gpu': '[asr]\nbackend="whistle-cactus"\nendpoint="manual"\ndevice="gpu"',
         'zero deadline': '[asr]\nfinish_timeout_secs=0',
+        'vad disabled': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nenabled=false',
+        'vad backend': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nbackend="silero"',
+        'vad frame': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nframe_ms=40',
+        'vad zero silence': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nsilence_ms=0',
         'unknown brain': '[brain.small]\nbackend="unknown"\nmodel_path="/m"',
         'missing brain model': '[brain.small]\nbackend="needle-cactus"',
     }
@@ -150,11 +154,14 @@ def second_only(context):
 WORKER = '''
 import json, struct, sys
 print(json.dumps({'kind':'ready','protocol':1,'native_endpoint':False}), flush=True)
+audio_bytes = 0
 while header := sys.stdin.buffer.read(4):
     frame = sys.stdin.buffer.read(struct.unpack('>I', header)[0])
     kind, uid = struct.unpack('>cI', frame[:5])
-    if kind == b'F':
-        open(sys.argv[1], 'w').write('finished')
+    if kind == b'A':
+        audio_bytes += len(frame[5:])
+    elif kind == b'F':
+        open(sys.argv[1], 'w').write(str(audio_bytes))
         if sys.argv[2] != 'timeout':
             print(json.dumps({'kind':'final','utterance_id':uid,'text':'open the browser'}), flush=True)
     elif kind == b'C':
@@ -162,35 +169,50 @@ while header := sys.stdin.buffer.read(4):
 '''
 CAPTURE = '''
 import sys,time
+if len(sys.argv) > 1:
+    with open(sys.argv[1], 'rb') as audio:
+        while chunk := audio.read(137):
+            sys.stdout.buffer.write(chunk); sys.stdout.buffer.flush(); time.sleep(.001)
+    sys.exit(0)
 while True:
     sys.stdout.buffer.write(bytes(640)); sys.stdout.buffer.flush(); time.sleep(.02)
 '''
 
 
-def worker_session(context, mode):
+def worker_session(context, mode, *, endpoint='manual', pcm=None):
     from agavai.__main__ import listen_session, _cancel_path
     cfg = context.cfg
     cfg.asr.backend = 'whistle-cactus'
-    cfg.asr.endpoint = 'manual'
-    cfg.asr.mode = 'batch' if mode in {'cancel', 'batch_finish'} else 'streaming'
+    cfg.asr.endpoint = endpoint
+    cfg.asr.mode = 'batch' if mode == 'cancel' or mode.startswith('batch_finish') else 'streaming'
     cfg.asr.model_path = context.runtime_dir / 'whistle.cact'
     cfg.asr.runtime_library = context.runtime_dir / 'libneedle.so'
     cfg.asr.model_path.touch()
     cfg.asr.runtime_library.touch()
     cfg.asr.venv = Path(sys.executable).resolve().parents[1]
     cfg.asr.finish_timeout_secs = .2
+    cfg.asr.max_utterance_secs = 5
+    audio = context.runtime_dir / 'endpoint.pcm'
+    if pcm is not None:
+        audio.write_bytes(pcm)
     marker = context.runtime_dir / 'finished'
     spawn = subprocess.Popen
+    context.capture_count = 0
     def popen(argv, **kwargs):
         if argv[0] == 'parec':
-            return spawn([sys.executable, '-c', CAPTURE], **kwargs)
+            context.capture_count += 1
+            return spawn([sys.executable, '-c', CAPTURE, *([str(audio)] if pcm is not None else [])], **kwargs)
         return spawn([sys.executable, '-c', WORKER, str(marker), mode], **kwargs)
     stopped = False
     def level(*_):
         nonlocal stopped
+        if mode == 'short_noise' and context.capture_count == 1:
+            return
+        if mode not in {'finish', 'timeout', 'cancel', 'batch_finish', 'short_noise'}:
+            return
         if not stopped:
             stopped = True
-            if mode == 'cancel':
+            if mode in {'cancel', 'short_noise'}:
                 _cancel_path(cfg).touch()
             os.kill(os.getpid(), signal.SIGTERM)
     def submitted(*args, **kwargs):
@@ -204,6 +226,54 @@ def worker_session(context, mode):
         if submit.called:
             context.submitted_line = submit.call_args.kwargs['text']
     context.did_finalize = marker.exists()
+    context.finalized_bytes = int(marker.read_text()) if marker.exists() else 0
+
+
+@when('Whistle "{mode}" hears speech with a short pause then trailing silence')
+def automatic_whistle(context, mode):
+    context.cfg.vad.silence_ms = 900
+    context.cfg.vad.max_record_ms = 120000
+    speech = struct.pack('<h', 8192) * 6400
+    pcm = bytes(6000 * 32) + speech + bytes(700 * 32) + speech + bytes(1400 * 32)
+    worker_session(context, 'batch_finish_auto' if mode == 'batch' else 'auto', endpoint='vad', pcm=pcm)
+    context.expected_endpoint_bytes = (6000 + 400 + 700 + 400 + 900) * 32
+
+
+@then('only the long trailing pause finishes recognition')
+def automatic_endpoint(context):
+    assert context.finalized_bytes == context.expected_endpoint_bytes, context.finalized_bytes
+    assert context.ui.data['asr_endpoint'] == 'vad'
+
+
+@when('Whistle with "{endpoint}" endpointing hears "{sound}" without Enter')
+def no_automatic_turn(context, endpoint, sound):
+    pcm = bytes(6000 * 32)
+    if sound == 'speech and silence':
+        pcm = struct.pack('<h', 8192) * 6400 + bytes(1000 * 32)
+    worker_session(context, 'auto', endpoint=endpoint, pcm=pcm)
+
+
+@when('I cancel Whistle with VAD before its trailing pause')
+def cancel_vad(context):
+    worker_session(context, 'cancel', endpoint='vad')
+
+
+@when('Whistle hears a brief noise with VAD before I cancel')
+def short_noise(context):
+    pcm = struct.pack('<h', 8192) * 1600 + bytes(1200 * 32)
+    worker_session(context, 'short_noise', endpoint='vad', pcm=pcm)
+    assert context.capture_count == 2, context.capture_count
+
+
+@when('Whistle with VAD exceeds its configured speech duration')
+def long_speech(context):
+    context.cfg.vad.max_record_ms = 500
+    worker_session(context, 'auto', endpoint='vad', pcm=struct.pack('<h', 8192) * 16000)
+
+
+@when('Enter finishes Whistle while VAD is enabled')
+def enter_vad(context):
+    worker_session(context, 'finish', endpoint='vad')
 
 
 @when('Enter finishes a real worker with a pending speech tail')
@@ -229,7 +299,7 @@ def not_finalized(context):
 BROWSER = {'content': '', 'tool_calls': [{'id':'browser', 'function': {'name':'launch', 'arguments':'{"target":"browser"}'}}]}
 
 
-def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_responses=None):
+def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_responses=None, text='open the browser'):
     cfg = context.cfg
     cfg.router.backend = 'keyword'
     cfg.small_brain = LlmConfig(backend='needle-cactus' if tool_only else 'llama-server', model_id='small')
@@ -252,7 +322,7 @@ def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_
     large_script = iter(large_responses or [{'content':'Larger answer.'}])
     large.respond.side_effect = record
     with patch('agavai.orchestrator.create_brain', side_effect=factory), patch('agavai.orchestrator.call_tool', return_value='Opened browser.') as tool:
-        context.reply = run_turn('open the browser', cfg, context.ui)
+        context.reply = run_turn(text, cfg, context.ui)
     context.small_engine, context.large_engine = small, large
     context.executed_tools = tool.call_count
 
@@ -295,6 +365,63 @@ def empty_only(context):
 @then('the reply does not claim completion')
 def failure_not_success(context):
     assert 'could not handle' in context.reply and context.reply != 'Done.'
+
+
+@when('Needle cannot match "{text}" and no larger brain is configured')
+def needle_no_match(context, text):
+    brain_turn(context, [{'unsupported':'No matching tool call'}], tool_only=True, larger=False, text=text)
+
+
+@then('the reply explains the limitation and suggests a desktop request')
+def useful_unsupported(context):
+    assert context.reply == 'I could not handle that request. Try asking me to open an app or find a file.'
+    assert context.executed_tools == 0
+    assert context.ui.data['error'] == context.reply
+    context.large_engine.respond.assert_not_called()
+
+
+@when('I replay recorded speech and silence through the installed "{mode}" Whistle listener')
+def native_vad(context, mode):
+    import wave
+    from agavai.asr import StreamingRecognizer
+    root = installed_cactus()
+    cfg = Config()
+    cfg.asr.backend, cfg.asr.endpoint, cfg.asr.mode = 'whistle-cactus', 'vad', mode
+    cfg.asr.model_path, cfg.asr.runtime_library, cfg.asr.venv = root/'whistle.cact', root/'libneedle.so', root/'venv'
+    cfg.asr.max_utterance_secs = 15
+    cfg.vad.max_record_ms = 15000
+    with wave.open(str(Path(__file__).resolve().parents[1]/'fixtures/asr-sentence.wav')) as audio:
+        pcm = audio.readframes(audio.getnframes()) + bytes(1500 * 32)
+    capture = directory(context) / 'recorded.pcm'
+    capture.write_bytes(pcm)
+    spawn = subprocess.Popen
+    def popen(argv, **kwargs):
+        if argv[0] == 'parec':
+            return spawn([sys.executable, '-c', CAPTURE, str(capture)], **kwargs)
+        return spawn(argv, **kwargs)
+    with patch('agavai.asr.subprocess.Popen', side_effect=popen):
+        stream = StreamingRecognizer(cfg)
+        try:
+            context.endpoint_events = list(stream.events(lambda _: None))
+        finally:
+            stream.close()
+    from evals.voice import recognize
+    wav_path = capture.with_suffix('.wav')
+    with wave.open(str(wav_path), 'wb') as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(16000)
+        audio.writeframes(pcm)
+    context.endpoint_replay = recognize(cfg, [{'id':'fixture', 'path':str(wav_path)}])
+
+
+@then('one final transcript includes the full recorded request without Enter')
+def native_vad_final(context):
+    finals = [text for kind, text in context.endpoint_events if kind == 'eou']
+    assert len(finals) == 1, context.endpoint_events
+    assert 'meeting notes' in finals[0].lower() and 'open the document' in finals[0].lower(), finals
+    commits = context.endpoint_replay['clips'][0]['commits']
+    assert len(commits) == 1 and commits[0]['text'] == finals[0], commits
 
 
 @when('the small engine launches the browser then escalates')

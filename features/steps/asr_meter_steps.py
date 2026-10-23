@@ -40,7 +40,7 @@ with open(sys.argv[1], 'rb') as audio:
 """
 
 
-def capture(context, *, cancel=False, empty=False):
+def capture(context, *, cancel=False, empty=False, vad=False):
     model = context.runtime_dir / "model"
     model.mkdir()
     for name in ("encoder.onnx", "decoder_joint.onnx", "vocab.txt"):
@@ -48,6 +48,12 @@ def capture(context, *, cancel=False, empty=False):
     context.cfg.asr.model_dir = model
     context.cfg.asr.venv = Path(sys.executable).resolve().parents[1]
     context.audio = b"" if empty else bytes(6400) + struct.pack("<h", 8192) * 3840 + bytes(6400)
+    if vad:
+        context.cfg.asr.backend, context.cfg.asr.endpoint = "whistle-cactus", "vad"
+        context.cfg.asr.model_path, context.cfg.asr.runtime_library = model / "whistle.cact", model / "libneedle.so"
+        context.cfg.asr.model_path.touch()
+        context.cfg.asr.runtime_library.touch()
+        context.audio += struct.pack("<h", 42)
     audio = context.runtime_dir / "mic.pcm"
     audio.write_bytes(context.audio)
     context.recorded = context.runtime_dir / "worker.pcm"
@@ -56,9 +62,9 @@ def capture(context, *, cancel=False, empty=False):
     spawn = subprocess.Popen
     publish_level = context.ui.level
 
-    def level(db):
+    def level(db, vad_state, vad_backend):
         context.levels.append((time.monotonic(), db))
-        publish_level(db)
+        publish_level(db, vad_state, vad_backend)
         if cancel and len(context.levels) == 3:
             _cancel_path(context.cfg).touch()
             os.kill(os.getpid(), signal.SIGTERM)
@@ -78,6 +84,11 @@ def capture(context, *, cancel=False, empty=False):
 @when("streaming capture receives silence and speech without recognition output")
 def captured(context):
     capture(context)
+
+
+@when("VAD capture receives audio ending in a short frame")
+def vad_tail(context):
+    capture(context, vad=True)
 
 
 @when("I cancel streaming capture after microphone levels arrive")

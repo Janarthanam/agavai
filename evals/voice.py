@@ -118,8 +118,10 @@ def ensure_clips(cfg: Config, specs: list[dict[str, Any]]) -> dict[str, dict[str
 
 
 def recognize(cfg: Config, clips: list[dict[str, str]]) -> dict[str, Any]:
+    from dataclasses import asdict
     from agavai.asr import worker_settings
-    return helper(cfg, {"mode": "recognize", "asr": worker_settings(cfg.asr), "clips": clips})
+    vad = {key: str(value) if isinstance(value, Path) else value for key, value in asdict(cfg.vad).items()}
+    return helper(cfg, {"mode": "recognize", "asr": worker_settings(cfg.asr), "vad": vad, "clips": clips})
 
 
 def _norm(text: str) -> str:

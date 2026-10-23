@@ -148,7 +148,7 @@ def not_cancelled(context):
 
 @when("the mic input level is {db:g} dB")
 def mic_level(context, db):
-    context.ui.level(db)
+    context.ui.level(db, "speech", "energy")
 
 
 @then("the native microphone level is absent")

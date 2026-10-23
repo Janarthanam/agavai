@@ -82,7 +82,7 @@ device = "cpu"
 # venv = "~/.local/share/agavai/tts-venv"
 # To use Whistle, replace the values above and set these paths:
 # backend = "whistle-cactus"
-# endpoint = "manual"  # Enter flushes/submits; Escape discards
+# endpoint = "vad"     # Explicit energy endpointing; or "manual" for Enter-only
 # mode = "streaming"   # or "batch" (no partial words)
 # model_path = "~/.local/share/agavai/cactus/whistle.cact"
 # runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
@@ -91,6 +91,31 @@ chunk_ms = 1000
 startup_timeout_secs = 120
 finish_timeout_secs = 30
 max_utterance_secs = 120
+
+[vad]
+# Used by [asr] endpoint="vad". Native Parakeet and manual mode ignore it.
+# Streaming VAD requires energy, 16000 Hz and 20 ms frames; no backend fallback.
+# Tune silence_ms for pauses and thresholds for microphone/background levels.
+# The separate legacy Silero experiment is not supported by this ASR policy.
+enabled = true
+backend = "energy"
+open_threshold_dbfs = -35.0
+close_threshold_dbfs = -42.0
+noise_margin_db = 12.0
+silence_ms = 900
+min_speech_ms = 250
+max_record_ms = 15000
+start_timeout_ms = 5000
+lead_in_ignore_ms = 300
+rate = 16000
+frame_ms = 20
+
+# Silero-only keys (read when backend = "silero"):
+model_path = "~/.local/share/agavai/vad/silero_vad-v5.1.2.onnx"
+threshold = 0.5
+response_timeout_ms = 250
+device = "cpu"
+venv = "~/.local/share/agavai/tts-venv"
 
 # Optional brain roles. Without these tables, [llm] is the small local brain.
 # The larger runtime is called only on explicit escalation, empty/unsupported

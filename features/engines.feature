@@ -19,6 +19,10 @@ Feature: Select speech and brain engines independently
       | zero deadline | deadline |
       | unknown brain | Unknown brain |
       | missing brain model | model_path |
+      | vad disabled | enabled |
+      | vad backend | backend=energy |
+      | vad frame | 20 ms |
+      | vad zero silence | positive |
 
   Scenario Outline: Streaming and batch speech finish the pending tail once
     When a "<mode>" Whistle adapter receives two chunks and a short tail
@@ -120,3 +124,58 @@ Feature: Select speech and brain engines independently
     Given a chat UI in a temp runtime dir
     When the recognizer replaces a partial with an empty final transcript
     Then the voice request is not submitted
+
+  Scenario Outline: Whistle finishes on sustained silence after speech
+    Given a chat UI in a temp runtime dir
+    When Whistle "<mode>" hears speech with a short pause then trailing silence
+    Then only the long trailing pause finishes recognition
+    And the submitted line is "open the browser"
+    And the voice request is submitted once
+    Examples:
+      | mode |
+      | streaming |
+      | batch |
+
+  Scenario Outline: Silence alone and manual mode never submit automatically
+    Given a chat UI in a temp runtime dir
+    When Whistle with "<endpoint>" endpointing hears "<sound>" without Enter
+    Then the voice request is not submitted
+    And batch recognition was not finalized
+    Examples:
+      | endpoint | sound |
+      | vad | silence |
+      | manual | speech and silence |
+
+  Scenario: Escape still cancels when automatic pause detection is enabled
+    Given a chat UI in a temp runtime dir
+    When I cancel Whistle with VAD before its trailing pause
+    Then the voice request is not submitted
+    And batch recognition was not finalized
+
+  Scenario: A brief noise is discarded without finalizing recognition
+    Given a chat UI in a temp runtime dir
+    When Whistle hears a brief noise with VAD before I cancel
+    Then the voice request is not submitted
+    And batch recognition was not finalized
+
+  Scenario: Maximum speech duration is an error rather than submission
+    Given a chat UI in a temp runtime dir
+    When Whistle with VAD exceeds its configured speech duration
+    Then the voice request is not submitted
+    And batch recognition was not finalized
+    And the snapshot phase should be "error"
+
+  Scenario: Enter can finish before VAD detects trailing silence
+    Given a chat UI in a temp runtime dir
+    When Enter finishes Whistle while VAD is enabled
+    Then the voice request is submitted once
+    And the submitted line is "open the browser"
+
+  Scenario Outline: A missing tool match never speaks an internal diagnostic
+    Given a chat UI in a temp runtime dir
+    When Needle cannot match "<request>" and no larger brain is configured
+    Then the reply explains the limitation and suggests a desktop request
+    Examples:
+      | request |
+      | Thank you. Show me all the tools considered there. |
+      | what time is it |

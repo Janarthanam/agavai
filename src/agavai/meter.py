@@ -247,3 +247,16 @@ class Endpointer:
         self.silence_samples = 0
         self.speaking = False
         self.backend.reset()
+
+
+def energy_endpointer(cfg: VadConfig) -> Endpointer:
+    """Explicit streaming policy; do not inherit the legacy backend fallback."""
+    if not cfg.enabled or cfg.backend != "energy":
+        raise ValueError("VAD endpointing requires [vad] enabled=true and backend=energy")
+    if cfg.rate != 16000 or cfg.frame_ms != 20:
+        raise ValueError("VAD endpointing requires 16000 Hz and 20 ms frames")
+    if min(cfg.silence_ms, cfg.min_speech_ms, cfg.start_timeout_ms, cfg.max_record_ms) <= 0:
+        raise ValueError("VAD silence, speech and duration limits must be positive")
+    if cfg.close_threshold_dbfs > cfg.open_threshold_dbfs:
+        raise ValueError("VAD close threshold must not exceed its open threshold")
+    return Endpointer(cfg, backend=EnergyBackend(cfg))

@@ -77,8 +77,8 @@ class WhistleBackend:
 
     @staticmethod
     def validate_selection(cfg):
-        if cfg.device != "cpu" or cfg.endpoint != "manual" or cfg.mode not in {"streaming", "batch"}:
-            raise ValueError("Whistle requires CPU, manual endpointing and streaming or batch mode")
+        if cfg.device != "cpu" or cfg.endpoint not in {"manual", "vad"} or cfg.mode not in {"streaming", "batch"}:
+            raise ValueError("Whistle requires CPU, manual or vad endpointing and streaming or batch mode")
 
     @staticmethod
     def settings(cfg):

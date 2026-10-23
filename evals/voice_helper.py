@@ -1,7 +1,7 @@
 """Run synthesis in the TTS environment or recognition in its selected ASR environment.
 
 One JSON request/response on stdin/stdout. Recognition uses the product speech
-adapters with 160 ms PCM packets. Native EOU commits automatically; manual mode
+adapters with 160 ms PCM packets (20 ms for VAD). Native EOU or VAD commits automatically; manual mode
 simulates Enter at clip end. Replay timing excludes live capture/IPC jitter.
 """
 
@@ -88,10 +88,13 @@ def synth(req: dict) -> dict:
 
 def recognize(req: dict) -> dict:
     from types import SimpleNamespace
+    from agavai.config import VadConfig
+    from agavai.meter import energy_endpointer
     from agavai.speech_backends import create_backend
 
     events: list[dict] = []
     cfg = SimpleNamespace(**req["asr"])
+    endpointer = energy_endpointer(VadConfig(**req["vad"])) if cfg.endpoint == "vad" else None
     started = time.perf_counter()
     stream = create_backend(cfg, lambda kind, text: events.append({"kind": kind, "text": text}))
     load_s = time.perf_counter() - started
@@ -104,30 +107,45 @@ def recognize(req: dict) -> dict:
         if len(pcm) > cfg.max_utterance_secs * RATE * 2:
             raise ValueError("Replay exceeds maximum utterance duration")
         stream.start()
+        if endpointer is not None:
+            endpointer.reset()
         events.clear()
         timeline, commits, step_seconds = [], [], []
         pending = ""
         ready_at = 0.0
-        for offset in range(0, len(pcm), CHUNK * 2):
+        chunk_bytes = 640 if endpointer is not None else CHUNK * 2
+        for offset in range(0, len(pcm), chunk_bytes):
             seen = len(events)
             tick = time.perf_counter()
-            stream.feed(pcm[offset:offset + CHUNK * 2])
+            chunk = pcm[offset:offset + chunk_bytes]
+            stream.feed(chunk)
+            reason = endpointer.feed(chunk) if endpointer is not None else None
             step_s = time.perf_counter() - tick
             step_seconds.append(step_s)
-            at = min(len(pcm), offset + CHUNK * 2) / (RATE * 2)
+            at = min(len(pcm), offset + chunk_bytes) / (RATE * 2)
             ready_at = max(ready_at, at) + step_s
+            finish = reason == "silence"
             for event in events[seen:]:
                 timeline.append({**event, "t": round(at, 3), "ready_t": round(ready_at, 3)})
                 if event["kind"] == "endpoint" and cfg.endpoint == "native":
+                    finish = True
+                else:
+                    pending = event["text"]
+            if reason == "max_duration":
+                raise ValueError("Maximum utterance duration exceeded; request was not submitted")
+            if reason == "start_timeout":
+                endpointer.reset()
+            if finish or reason == "min_speech":
+                if finish:
                     tick = time.perf_counter()
                     text = stream.finish()
                     ready_at += time.perf_counter() - tick
                     commits.append({"text": text, "t": round(at, 3), "ready_t": round(ready_at, 3)})
-                    pending = ""
-                    stream.cancel()
-                    stream.start()
-                else:
-                    pending = event["text"]
+                pending = ""
+                stream.cancel()
+                stream.start()
+                if endpointer is not None:
+                    endpointer.reset()
         if cfg.endpoint == "manual":
             tick = time.perf_counter()
             final = stream.finish()

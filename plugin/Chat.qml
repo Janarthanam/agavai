@@ -72,7 +72,7 @@ Item {
         dismissedSession = sessionId;
         opened = false;
         compact = true;
-        if (phase === "listening" || phase === "thinking" || phase === "speaking")
+        if (phase === "listening" || phase === "transcribing" || phase === "thinking" || phase === "speaking")
             Quickshell.execDetached(["agavai", "cancel"]);
         if (shell && typeof shell.hide === "function")
             shell.hide((manifest && manifest.id) || "janar.agavai");
@@ -350,7 +350,7 @@ Item {
                             }
                             NativeButton {
                                 quiet: true
-                                visible: !root.listening && root.phase !== "thinking" && root.phase !== "speaking"
+                                visible: !root.listening && root.phase !== "thinking" && root.phase !== "transcribing" && root.phase !== "speaking"
                                 text: root.transcript ? "Ask again" : "Listen"
                                 onClicked: root.start()
                             }
@@ -420,10 +420,11 @@ Item {
                                 elide: Text.ElideRight
                             }
                             Text {
+                                objectName: "agavaiListeningHint"
                                 visible: root.listening || !(root.turn.assistant || root.snapshot.error)
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
-                                text: root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                                text: root.listening ? (root.snapshot.asr_endpoint === "manual" ? "Press Enter to send. Escape cancels." : (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter."))) : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                                 textFormat: Text.PlainText
                                 color: root.inkMuted
                                 font.family: Style.font.family

@@ -16,6 +16,12 @@ Feature: The orb reveals microphone listening
     And the snapshot phase should be "idle"
     And the voice request is not submitted
 
+  Scenario: VAD framing preserves a final partial audio frame
+    Given a chat UI in a temp runtime dir
+    When VAD capture receives audio ending in a short frame
+    Then recognition and metering use one unchanged audio stream
+    And the voice request is not submitted
+
   Scenario: An unavailable capture does not animate microphone input
     Given a chat UI in a temp runtime dir
     When streaming capture ends before any microphone audio arrives

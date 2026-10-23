@@ -393,7 +393,8 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
 
     try:
         for kind, text in stream.events(
-            on_level=ui.level,
+            on_level=lambda db: ui.level(db, "active" if cfg.asr.endpoint == "vad" else "off",
+                                         cfg.vad.backend if cfg.asr.endpoint == "vad" else "off"),
             should_stop=stop_requested,
             should_cancel=lambda: stop_requested() and cancel_requested(),
         ):

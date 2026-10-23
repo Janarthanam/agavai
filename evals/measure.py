@@ -166,7 +166,7 @@ def run_measure(out: Path, *, log: Callable[[str], None]) -> dict[str, Any]:
         basis = "recognizer replay with sequential compute and audio arrival; excludes live IPC/capture jitter"
         if cfg.asr.mode == "streaming":
             speed.append(check("first_words", first, budgets["speed"]["first_words_s"], marginal, basis))
-        if cfg.asr.endpoint == "native":
+        if cfg.asr.endpoint in {"native", "vad"}:
             speed.append(check("commit", commit, budgets["speed"]["commit_s"], marginal, basis + "; missing commits count as over"))
     changed, tool_reply, plain_reply, tool_texts, plain_texts = [], [], [], [], []
     for _ in range(samples):

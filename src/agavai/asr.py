@@ -13,7 +13,7 @@ import threading
 import time
 
 from agavai.config import Config
-from agavai.meter import ParecSource, rms_dbfs
+from agavai.meter import ParecSource, energy_endpointer, rms_dbfs
 from agavai.worker import WorkerError, WorkerProcess
 
 MIC_ERROR = "Microphone input is unavailable. Check your input device and try again."
@@ -40,6 +40,10 @@ class StreamingRecognizer:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         settings = worker_settings(cfg.asr)
+        try:
+            self._endpointer = energy_endpointer(cfg.vad) if cfg.asr.endpoint == "vad" else None
+        except ValueError as exc:
+            raise AsrError(str(exc)) from exc
         python = Path(cfg.asr.venv) / "bin/python"
         if not python.is_file():
             raise AsrError(f"ASR runtime is missing: {python}")
@@ -70,6 +74,9 @@ class StreamingRecognizer:
         self._stop_pump.clear()
         self._pump_done.clear()
         self._pump_error = ""
+        self._endpoint_reason = ""
+        if self._endpointer is not None:
+            self._endpointer.reset()
         self._level_db = None
         self._send(b"S", uid)
         finished = False
@@ -85,16 +92,24 @@ class StreamingRecognizer:
             while True:
                 if should_cancel and should_cancel():
                     return
-                if should_stop and should_stop():
+                if self._pump_error:
+                    raise AsrError(self._pump_error)
+                reason = "enter" if should_stop and should_stop() else self._endpoint_reason
+                if reason:
                     self._stop_capture()
+                    log.info("ASR endpoint utterance=%s policy=%s reason=%s", uid, self.cfg.asr.endpoint, reason)
+                    if reason == "min_speech":
+                        self._send(b"C", uid)
+                        self._wait_terminal(uid, "cancelled")
+                        finished = True
+                        yield "eou", ""
+                        return
                     if self.cfg.asr.mode == "batch":
                         yield "finishing", ""
                     message = self._finish(uid)
                     finished = True
                     yield "eou", message.get("text") or ""
                     return
-                if self._pump_error:
-                    raise AsrError(self._pump_error)
                 if time.monotonic() - started >= self.cfg.asr.max_utterance_secs:
                     raise AsrError("Maximum utterance duration exceeded; request was not submitted.")
                 db = self._level_db
@@ -117,6 +132,8 @@ class StreamingRecognizer:
                 if self._pump_done.is_set():
                     if self._pump_error:
                         raise AsrError(self._pump_error)
+                    if self._endpoint_reason:
+                        continue
                     # A disconnected mic is not the user submitting a command.
                     return
         finally:
@@ -164,12 +181,28 @@ class StreamingRecognizer:
                     break
                 got = True
                 data = tail + data
-                tail = data[len(data) - len(data) % 2:]
-                data = data[:len(data) - len(data) % 2]
-                if not data:
+                frame_bytes = 640 if self._endpointer is not None else len(data) - len(data) % 2
+                if not frame_bytes:
+                    tail = data
                     continue
-                self._level_db = rms_dbfs(data)
-                self._send(b"A", uid, data)
+                offset = 0
+                while len(data) - offset >= frame_bytes:
+                    frame = data[offset:offset + frame_bytes]
+                    offset += frame_bytes
+                    self._level_db = rms_dbfs(frame)
+                    self._send(b"A", uid, frame)
+                    if self._endpointer is not None:
+                        reason = self._endpointer.feed(frame)
+                        if reason == "start_timeout":
+                            self._endpointer.reset()
+                        elif reason == "max_duration":
+                            raise AsrError("Maximum utterance duration exceeded; request was not submitted.")
+                        elif reason:
+                            self._endpoint_reason = reason
+                            return
+                tail = data[offset:]
+            if len(tail) >= 2:
+                self._send(b"A", uid, tail[:len(tail) - len(tail) % 2])
         except (OSError, AsrError) as exc:
             if not self._stop_pump.is_set():
                 self._pump_error = f"Microphone/ASR input failed: {exc}"
