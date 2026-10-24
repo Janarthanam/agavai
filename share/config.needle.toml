@@ -1,7 +1,7 @@
-# Full-tool Needle experiment: Whistle → Needle3 → local Qwen fallback.
+# Needle as router and agent: Whistle → Needle3 (one inference) → local Qwen fallback.
 # This is a complete config, not an include. Install models with setup-cactus.sh.
 # Native probes show wrong Needle selections for some general/time questions;
-# use tool_selection="routed" below for the conservative path.
+# for the conservative path, route with keyword and give Needle routed tools.
 
 [asr]
 backend = "whistle-cactus"
@@ -20,13 +20,13 @@ min_speech_ms = 250
 max_record_ms = 120000
 
 [router]
-# Used only by tiers with tool_selection="routed". Needle below skips it.
-# Choices: keyword, jev, needle-cactus, none. none gives both tiers all tools.
-# Needle routing requires [router.needle]; see config.needle-router.toml.
-backend = "keyword"
+# No [router.needle]: the router shares the Needle [brain.small], so Needle
+# selects and calls tools in one inference over the full allowlist.
+# After escalation, Qwen gets the fallback heads instead of a second Needle call.
+backend = "needle-cactus"
 fallback = "keyword"
 max_tools = 8
-timeout_secs = 2
+timeout_secs = 10
 
 [brain.small]
 backend = "needle-cactus"
@@ -34,7 +34,6 @@ model = "needle3"
 model_path = "~/.local/share/agavai/cactus/needle3.cact"
 runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
 venv = "~/.local/share/agavai/cactus/venv"
-tool_selection = "all"
 timeout_secs = 10
 max_tokens = 512
 max_tool_rounds = 6

@@ -14,7 +14,7 @@ from agavai.config import Config
 from agavai.brain import create_brain
 from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
-from agavai.router import select_head_ids
+from agavai.router import fallback_head_ids, routes_itself, select_head_ids
 from agavai.canvas import answer_block, model_view, read_aloud
 from agavai.tools import DISPATCH, OPENAPI_TOOLS, call_tool
 from agavai.ui import ChatUi, PendingAction
@@ -414,12 +414,16 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
         rounds = 0
         completed_calls = {}
         selection_changed = False
+        # Escalating from a Needle tier that is also the router: that tier's call
+        # was the routing attempt, so the next tier must not ask Needle again.
+        routing_spent = False
 
         def escalate(reason):
-            nonlocal backend, active_cfg, escalated, rounds, selection_changed
+            nonlocal backend, active_cfg, escalated, rounds, selection_changed, routing_spent
             if escalated or cfg.large_brain is None:
                 raise LlmError(reason)
             log.warning("Escalating from %s: %s", active_cfg.backend, reason)
+            routing_spent = routes_itself(active_cfg, cfg)
             active_cfg = cfg.large_brain
             backend = create_brain(active_cfg, chat=chat, health=health)
             escalated = True
@@ -447,8 +451,13 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 ui.user(text)
 
         def select_tools():
-            all_tools = active_cfg.tool_selection == "all" or cfg.router.backend == "none"
-            heads = [] if all_tools else _merge_heads(select_head_ids(text, cfg), prior_heads)
+            all_tools = active_cfg.tool_selection == "all" or cfg.router.backend == "none" or routes_itself(active_cfg, cfg)
+            if all_tools:
+                heads = []
+            elif routing_spent:
+                heads = _merge_heads(fallback_head_ids(text, cfg), prior_heads)
+            else:
+                heads = _merge_heads(select_head_ids(text, cfg), prior_heads)
             return heads, _turn_tools(heads, cfg, ui, all_tools=all_tools)
 
         head_ids, selected = select_tools()

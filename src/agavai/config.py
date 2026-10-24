@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -481,10 +481,17 @@ def load_config(path: Path | None = None) -> Config:
     if cfg.router.fallback not in {"keyword", "none"} or cfg.router.max_tools < 1 or cfg.router.timeout_secs <= 0:
         raise ValueError("Invalid router fallback, schema budget or timeout")
     if cfg.router.backend == "needle-cactus":
-        cfg.router.needle = _load_brain_config(
-            {**(router.get("needle") or {}), "backend": "needle-cactus", "timeout_secs": cfg.router.timeout_secs},
-            "router.needle", cfg,
-        )
+        small = cfg.small_brain or cfg.llm
+        if "needle" not in router and small.backend == "needle-cactus":
+            # Needle for both roles: the agent's own model routes, in the agent's call.
+            cfg.router.needle = replace(small, timeout_secs=cfg.router.timeout_secs)
+        elif "needle" not in router:
+            raise ValueError("Needle routing needs [router.needle], or a Needle [brain.small] to share")
+        else:
+            cfg.router.needle = _load_brain_config(
+                {**router["needle"], "backend": "needle-cactus", "timeout_secs": cfg.router.timeout_secs},
+                "router.needle", cfg,
+            )
     if cfg.asr.backend not in SPEECH_BACKENDS:
         raise ValueError(f"Unknown ASR backend: {cfg.asr.backend}")
     if cfg.asr.endpoint not in {"native", "manual", "vad"} or cfg.asr.mode not in {"streaming", "batch"}:

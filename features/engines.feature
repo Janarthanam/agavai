@@ -26,7 +26,8 @@ Feature: Select speech and brain engines independently
       | unknown tool selection | tool_selection must be all/routed |
       | unknown router | Unknown router backend |
       | zero tool budget | Invalid router |
-      | missing router model | [router.needle] needs model_path |
+      | missing router model | Needle routing needs [router.needle], or a Needle [brain.small] |
+      | router model path missing | [router.needle] needs model_path |
       | zero router tokens | Invalid limits in [router.needle] |
       | cloud deferred | Cloud models are not supported yet |
       | vad disabled | enabled |
@@ -105,6 +106,21 @@ Feature: Select speech and brain engines independently
       | whistle-cactus | routed | needle-cactus |
       | parakeet-onnx | all | needle-cactus |
       | whistle-cactus | all | needle-cactus |
+
+  Scenario Outline: A Needle agent that is also the router selects and calls tools in one inference
+    Given a chat UI in a temp runtime dir
+    When Needle is both router and agent through "<router_config>" with "<policy>" tools
+    Then one Needle inference offered the full allowlist and no separate routing ran
+    Examples:
+      | router_config | policy |
+      | shared | routed |
+      | shared | all |
+      | same paths | routed |
+
+  Scenario: Escalating from a self-routed Needle uses the router fallback instead of a second Needle call
+    Given a chat UI in a temp runtime dir
+    When self-routed Needle cannot match "turn the volume up" and routed Qwen is configured
+    Then Qwen is offered only the keyword "audio" tools and Needle ran once
 
   Scenario: A routed agent can fall back to a full-tool agent
     Given a chat UI in a temp runtime dir

@@ -65,6 +65,7 @@ def invalid_config(context, setting):
         'unknown router': '[router]\nbackend="guess"',
         'zero tool budget': '[router]\nmax_tools=0',
         'missing router model': '[router]\nbackend="needle-cactus"',
+        'router model path missing': '[router]\nbackend="needle-cactus"\n[router.needle]\nmax_tokens=64',
         'zero router tokens': '[router]\nbackend="needle-cactus"\n[router.needle]\nmodel_path="/needle.cact"\nmax_tokens=0',
         'cloud deferred': '[brain.cloud]\nbackend="openai-compatible"',
     }
@@ -935,3 +936,97 @@ def native_needle_router_eval_result(context):
     assert route['offered'] == [t['function']['name'] for t in OPENAPI_TOOLS]
     assert all(m['kind'] == 'action' and m['backend'] == 'llama-server' for m in agent), agent
     assert len(turn['tools']) == 1 and json.loads(turn['tools'][0]['arguments']) == {'action': 'raise'}, turn
+
+
+SHARED_NEEDLE_AGENT = '''[brain.small]
+backend = "needle-cactus"
+model = "needle3"
+model_path = "/cactus/needle3.cact"
+runtime_library = "/cactus/libneedle.so"
+venv = "/cactus/venv"
+tool_selection = "{policy}"
+'''
+
+
+@when('Needle is both router and agent through "{router_config}" with "{policy}" tools')
+def needle_router_and_agent(context, router_config, policy):
+    router = '[router]\nbackend = "needle-cactus"\nfallback = "keyword"\ntimeout_secs = 7\n'
+    if router_config == 'same paths':
+        router += ('[router.needle]\nmodel_path = "/cactus/needle3.cact"\n'
+                   'runtime_library = "/cactus/libneedle.so"\nvenv = "/cactus/venv"\n')
+    path = directory(context) / 'config.toml'
+    path.write_text(router + SHARED_NEEDLE_AGENT.format(policy=policy))
+    cfg = load_config(path)
+    needle = Mock(tool_only=True)
+    needle.ready.return_value = True
+    needle.respond.return_value = {'tool_calls': [{'id': 'volume', 'function': {'name': 'set_volume', 'arguments': '{"action":"raise"}'}}]}
+    with patch('agavai.router.create_brain') as router_factory, \
+            patch('agavai.orchestrator.create_brain', return_value=needle), \
+            patch('agavai.orchestrator.call_tool', return_value='Volume raised.') as tool:
+        context.reply = run_turn('turn the volume up', cfg, context.ui)
+    context.both = SimpleNamespace(cfg=cfg, config=router_config, needle=needle, router=router_factory, tool=tool)
+
+
+@then('one Needle inference offered the full allowlist and no separate routing ran')
+def needle_router_and_agent_result(context):
+    from agavai.tools import OPENAPI_TOOLS
+    both = context.both
+    if both.config == 'shared':
+        assert both.cfg.router.needle.model_path == both.cfg.small_brain.model_path
+        assert both.cfg.router.needle.timeout_secs == 7 and both.cfg.small_brain.timeout_secs != 7
+    both.router.assert_not_called()
+    both.needle.respond.assert_called_once()
+    offered = [t['function']['name'] for t in both.needle.respond.call_args.args[1]]
+    assert offered == [t['function']['name'] for t in OPENAPI_TOOLS] + ['request_confirmation'], offered
+    both.tool.assert_called_once()
+    assert both.tool.call_args.args[0] == 'set_volume' and context.reply == 'Volume raised.'
+
+
+@when('self-routed Needle cannot match "{text}" and routed Qwen is configured')
+def needle_router_and_agent_escalates(context, text):
+    path = directory(context) / 'config.toml'
+    path.write_text('[router]\nbackend = "needle-cactus"\nfallback = "keyword"\nmax_tools = 8\n'
+                    + SHARED_NEEDLE_AGENT.format(policy='routed') + '''[brain.large]
+backend = "llama-server"
+model = "qwen3-4b-instruct"
+model_path = "/models/qwen.gguf"
+port = 19000
+tool_selection = "routed"
+''')
+    cfg = load_config(path)
+    needle = Mock(tool_only=True)
+    needle.ready.return_value = True
+    needle.respond.return_value = {'unsupported': 'No matching tool call'}
+    qwen = Mock(tool_only=False)
+    qwen.ready.return_value = True
+    offers = []
+    replies = iter([
+        {'tool_calls': [{'id': 'volume', 'function': {'name': 'set_volume', 'arguments': '{"action":"raise"}'}}]},
+        {'content': 'Volume raised.'},
+    ])
+
+    def qwen_respond(messages, tools):
+        offers.append([t['function']['name'] for t in tools])
+        return next(replies)
+
+    qwen.respond.side_effect = qwen_respond
+    brains = {'needle-cactus': needle, 'llama-server': qwen}
+    with patch('agavai.router.create_brain') as router_factory, \
+            patch('agavai.orchestrator.create_brain', side_effect=lambda tier, **_: brains[tier.backend]), \
+            patch('agavai.orchestrator.call_tool', return_value='Volume raised.') as tool:
+        context.reply = run_turn(text, cfg, context.ui)
+    context.both = SimpleNamespace(cfg=cfg, text=text, needle=needle, offers=offers, router=router_factory, tool=tool)
+
+
+@then('Qwen is offered only the keyword "{head}" tools and Needle ran once')
+def needle_router_and_agent_escalation_result(context, head):
+    from agavai.heads import schemas_for_heads
+    from agavai.router import KeywordRouter
+    both = context.both
+    assert KeywordRouter().select(both.text) == [head]
+    both.router.assert_not_called()
+    both.needle.respond.assert_called_once()
+    expected = [t['function']['name'] for t in schemas_for_heads([head], limit=both.cfg.router.max_tools - 1)]
+    assert both.offers == [expected + ['request_confirmation']] * 2, both.offers
+    both.tool.assert_called_once()
+    assert both.tool.call_args.args[0] == 'set_volume' and context.reply == 'Volume raised.'

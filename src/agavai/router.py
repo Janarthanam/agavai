@@ -146,6 +146,22 @@ def make_router(cfg: Config) -> ToolRouter:
     return JevRouter(cfg)
 
 
+def routes_itself(tier, cfg: Config) -> bool:
+    """A Needle tier that is also the configured router picks its tools in its own call."""
+    needle = cfg.router.needle
+    return (
+        cfg.router.backend == "needle-cactus" and needle is not None and tier.backend == "needle-cactus"
+        and (tier.model_path, tier.runtime_library, tier.venv) == (needle.model_path, needle.runtime_library, needle.venv)
+    )
+
+
+def fallback_head_ids(utterance: str, cfg: Config) -> list[str]:
+    """Heads used when routing failed or found nothing."""
+    if cfg.router.fallback == "none":
+        return []
+    return KeywordRouter().select(utterance)[:2]
+
+
 def select_head_ids(utterance: str, cfg: Config) -> list[str]:
     started = time.monotonic()
     if cfg.router.backend == "none":
@@ -156,8 +172,7 @@ def select_head_ids(utterance: str, cfg: Config) -> list[str]:
         heads = router.select(utterance)
     except Exception as exc:
         log.warning("router backend=%s failed (%s: %s); fallback=%s", cfg.router.backend, type(exc).__name__, exc, cfg.router.fallback)
-        source = cfg.router.fallback
-        heads = [] if cfg.router.fallback == "none" else KeywordRouter().select(utterance)
+        heads = []
     out = []
     for hid in heads:
         if hid in {"chat", ""}:
@@ -166,10 +181,9 @@ def select_head_ids(utterance: str, cfg: Config) -> list[str]:
             out.append(hid)
     # Jev may call a screensaver or wallpaper request chit-chat. The words still
     # name a head, and without its tools the model can only talk.
-    if not out and cfg.router.fallback != "none":
-        for hid in KeywordRouter().select(utterance):
-            if hid not in out:
-                out.append(hid)
-                source = "keyword"
+    if not out:
+        out = fallback_head_ids(utterance, cfg)
+        if out:
+            source = "keyword"
     log.info("router backend=%s source=%s heads=%s secs=%.2f", cfg.router.backend, source, ",".join(out[:2]) or "none", time.monotonic() - started)
     return out[:2]

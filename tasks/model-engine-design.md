@@ -2,10 +2,12 @@
 
 ## Status
 
-Complete: standalone `needle-cactus` router committed as `038cd52`, with independent agent selection, examples and validation. Owner: Codex session needle-router. Cloud deferred.
+In progress: Needle as router + agent in one inference, configuration-driven services and a setup/download/explain CLI. Owner: Claude session needle-both-services-setup. Cloud deferred.
 
 - [x] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
+- [ ] P1 voice A Needle `brain.small` that is also the router selects and calls tools in one inference; without `brain.large` no llama-server runs.
+- [ ] P1 voice Services follow configuration changes; a CLI downloads models, writes the role config and explains the resulting flow.
 
 ## Acceptance
 
@@ -89,3 +91,5 @@ Complete: standalone `needle-cactus` router committed as `038cd52`, with indepen
   - Native simulated-desktop probes using the new profile: volume passed (8.667 s total, 1.957 s cold routing), browser passed (6.807 s total, 0.161 s warm routing). Reminder clock-time case selected the correct reminders head (0.187 s routing) but Qwen scheduled 370 minutes instead of the expected 45. Keyword-router baseline with the same Qwen/profile also failed (375 minutes). Follow-up: investigate existing reminder timing behavior separately; no timing/prompt changes folded into this router correction. No real desktop actions or live microphone used. Evidence: ignored `.venv/needle-router-full.log`, `.venv/needle-router-native.json`, `.venv/needle-router-keyword-baseline.json`.
 
 - 2026-10-24T16:17:26+05:30 — Codex session needle-router — complete. Runtime/config correction, tests, examples and specifications committed as `038cd52`; full suite 337/1656 passed and native outcomes recorded above. Working tree was clean before this task-only completion entry. Installed config remains unchanged. Existing Qwen reminder timing failure is a separate follow-up.
+
+- 2026-10-24T18:44:47+05:30 — Claude session needle-both-services-setup — in progress, starting `1eadd3f`, clean tree on `t3/test-whistle-needle-engines`. User request: when Needle is `brain.small` it acts as router and agent; skip the larger brain and its service when not configured; services must follow configuration changes; a CLI downloads models, configures roles and publishes a walkthrough. Context read: `docs/engines.md`, config/brain/router/orchestrator, `scripts/agavai-llm`, `systemd/agavai-llm.service`, setup/install/download scripts, engine/setup BDD steps; host state read-only (Whistle/VAD, Needle small routed via Jev, Qwen large, `agavai-llm` enabled/active). Decisions: (1) merge when the router is Needle with the same model/runtime as a Needle tier; `[router] backend = "needle-cactus"` without `[router.needle]` inherits a Needle `brain.small`; escalation from a self-routed tier uses the router fallback instead of a second Needle inference. (2) `agavai services sync` reconciles llama-server units with the llama roles in config (enable/start, restart when the launched settings differ, stop/disable when unneeded); a systemd path unit runs it when `config.toml` changes. (3) `agavai setup|models|explain` reuse the existing download scripts. Planned as three commits. Host config/services will not be changed without asking.
