@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress: enable and verify Needle3 → Qwen3 fallback on the deployed Omarchy setup. Owner: Codex session needle-qwen-fallback.
+Complete: Needle3 → Qwen3 fallback enabled, validated and deployed as `4f4d90a`. Owner: Codex session needle-qwen-fallback.
 
 - [x] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
@@ -68,3 +68,5 @@ In progress: enable and verify Needle3 → Qwen3 fallback on the deployed Omarch
 - 2026-10-24T06:43:51+05:30 — Codex session needle-qwen-fallback — implementation/deployment validated, awaiting local commit. Restricted escalation schema/instruction to chat backends and clarified direct knowledge answers. Host config selects Needle3/Cactus small + Qwen3-4B-Instruct-2507 Q4_K_M/llama-server large; service enabled, active and healthy. Launchers resolve to this worktree; no listener was active. Backup/config/rollback saved at `~/.local/share/agavai/deployments/20261024T063813+0530/`. Host changes: `~/.config/agavai/config.toml` and Qwen service enablement/state; Whistle/VAD unchanged.
   - Repository changed files: `src/agavai/orchestrator.py`, `features/engines.feature`, `features/steps/engine_steps.py`, `docs/engines.md`, `docs/flow.md`, `docs/debug-whistle-needle.md`, this task. Native simulated probes: browser Needle-only 0.569 s; no-call time→Qwen 11.188 s; Paris→Qwen 1.454 s; sky→Qwen 4.932 s; all passed and no actual desktop actions ran. Final traces: ignored `.venv/needle-qwen-final-checks.json`.
   - Validation: full explicit-example-config suite with installed Cactus passed 299 scenarios / 1539 steps (44.992 s), covering optional escalation, failure limits, no duplicate actions, confirmations and native workers/UI. Initial targeted run had one undefined step because Behave's string parser cannot match an empty example value; changed it to `none`, then the full suite passed. Whitespace and complete diff self-review passed. Actual microphone/TTS was not replayed for this brain-only change.
+
+- 2026-10-24T06:44:10+05:30 — Codex session needle-qwen-fallback — complete. Runtime fixes, regressions, current specs and deployment report committed as `4f4d90a`; validation and host rollback record above. This entry and status change are bookkeeping only. The next listening session uses Needle3 first and local Qwen3-4B only on fallback.
