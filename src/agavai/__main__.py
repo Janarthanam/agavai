@@ -17,6 +17,7 @@ from agavai.feedback import finish, hide_listen, prepare_listen
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.orchestrator import control_command, run_turn
+from agavai.setup import ROUTERS, SPEECH
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
@@ -49,12 +50,24 @@ def main(argv: list[str] | None = None) -> int:
     model.add_argument("name", nargs="?", help="Model id for 'set'")
     services = sub.add_parser("services", help="Show or sync the llama-server services that config.toml needs")
     services.add_argument("action", nargs="?", default="status", choices=["status", "sync"])
+    setup = sub.add_parser("setup", help="Choose, download and configure the speech and brain models")
+    setup.add_argument("--speech", choices=SPEECH)
+    setup.add_argument("--small", metavar="needle|GGUF-ID", help="the first model to handle each request")
+    setup.add_argument("--large", metavar="none|GGUF-ID", help="the model that takes over when the small one cannot")
+    setup.add_argument("--router", choices=ROUTERS)
+    setup.add_argument("--yes", action="store_true", help="apply without asking")
+    setup.add_argument("--dry-run", action="store_true", help="show the plan and change nothing")
+    download = sub.add_parser("download", help="List the models, or download the named ones")
+    download.add_argument("ids", nargs="*", metavar="ID")
+    sub.add_parser("explain", help="Explain what happens to a request with the current configuration")
     args = parser.parse_args(argv)
     # The hotkey and the detached listener have no terminal, so a bad config
     # must reach the journal before the configured level is known.
     journal.setup("info")
     if args.cmd == "services":
         return _services_cmd(args.action)
+    if args.cmd in {"setup", "download", "explain"}:
+        return _setup_cmd(args)
     try:
         cfg = load_config()
     except Exception:
@@ -155,15 +168,28 @@ def _services_cmd(action: str) -> int:
     return 0
 
 
-def _apply_services() -> None:
-    """Bring the model services in line after this CLI changed config.toml."""
-    from agavai.services import ServiceError, service_config, sync
+def _setup_cmd(args) -> int:
+    from agavai import setup
 
     try:
-        for line in sync(service_config()):
-            print(line)
-    except (ServiceError, ValueError) as exc:
-        print(f"services not updated: {exc}", file=sys.stderr)
+        if args.cmd == "setup":
+            choices = {"speech": args.speech, "small": args.small, "large": args.large, "router": args.router}
+            return setup.run_setup(choices, yes=args.yes, dry_run=args.dry_run, interactive=sys.stdin.isatty())
+        cfg = load_config()
+        if args.cmd == "explain":
+            print("\n".join(setup.walkthrough(cfg)))
+        elif not args.ids:
+            print("\n".join(setup.download_list(cfg)))
+        else:
+            unknown = [mid for mid in args.ids if mid not in setup.downloads(cfg)]
+            if unknown:
+                raise setup.SetupError(f"unknown model {', '.join(unknown)}; run agavai download to list them")
+            for command in setup.run_downloads(cfg, args.ids):
+                print(f"ran scripts/{command}")
+        return 0
+    except (setup.SetupError, ValueError) as exc:
+        print(f"agavai {args.cmd}: {exc}", file=sys.stderr)
+        return 1
 
 
 def _model_cmd(cfg, action: str, name: str | None) -> int:
@@ -186,7 +212,8 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
             return 1
         print(f"model_id={cfg.llm.model_id}")
         print(f"model_path={cfg.llm.model_path}")
-        _apply_services()
+        from agavai.services import apply_config_change
+        print("\n".join(apply_config_change()))
         return 0
     spec = cfg.llm.active_spec()
     print(f"model_id={cfg.llm.model_id}")

@@ -12,22 +12,6 @@ from agavai.config import dump_llm_env, load_config
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Unit state lives in files: <unit>.active and <unit>.enabled.
-FAKE_SYSTEMCTL = """#!/bin/sh
-echo "$*" >> "$SERVICES_TEST_LOG"
-shift
-verb="$1"; shift
-state="$SERVICES_TEST_STATE"
-case "$verb" in
-  is-active) if [ -e "$state/$1.active" ]; then echo active; exit 0; fi; echo inactive; exit 3 ;;
-  is-enabled) if [ -e "$state/$1.enabled" ]; then echo enabled; exit 0; fi; echo disabled; exit 1 ;;
-  enable) if [ "$1" = --now ]; then shift; touch "$state/$1.active"; fi; touch "$state/$1.enabled" ;;
-  disable) if [ "$1" = --now ]; then shift; rm -f "$state/$1.active"; fi; rm -f "$state/$1.enabled" ;;
-  restart) touch "$state/$1.active" ;;
-esac
-exit 0
-"""
-
 NEEDLE_SMALL = '''[brain.small]
 backend = "needle-cactus"
 model_path = "/cactus/needle3.cact"
@@ -70,7 +54,7 @@ def services_config(context, profile):
     context.add_cleanup(tmp.cleanup)
     root = Path(tmp.name)
     svc = SimpleNamespace(root=root, profile=profile, config=root / "config/agavai/config.toml",
-                          runtime=root / "run", state=root / "state", log=root / "systemctl.log")
+                          runtime=root / "run", state=root / "state", changes=root / "systemctl.changes")
     for folder in (svc.config.parent, svc.runtime, svc.state, root / "bin", root / "data"):
         folder.mkdir(parents=True)
     binary = root / "llama-server"
@@ -82,13 +66,12 @@ def services_config(context, profile):
         qwen=root / "qwen.gguf", big=root / "big.gguf", binary=binary, missing=root / "missing.gguf"))
     if profile != "uninstalled unit":
         shutil.copytree(ROOT / "systemd", root / "config/systemd/user")
-    fake = root / "bin/systemctl"
-    fake.write_text(FAKE_SYSTEMCTL)
-    fake.chmod(0o755)
+    shutil.copy2(ROOT / "features/support/fake-systemctl", root / "bin/systemctl")
     env = {k: v for k, v in os.environ.items() if k not in {"AGAVAI_CONFIG", "AGAVAI_MODEL", "AGAVAI_LLAMA_SERVER"}}
     env.update(PATH=f"{root / 'bin'}:{os.environ['PATH']}", PYTHONPATH=str(ROOT / "src"), HOME=str(root),
                XDG_CONFIG_HOME=str(root / "config"), XDG_RUNTIME_DIR=str(svc.runtime), XDG_DATA_HOME=str(root / "data"),
-               SERVICES_TEST_LOG=str(svc.log), SERVICES_TEST_STATE=str(svc.state))
+               SERVICES_TEST_LOG=str(root / "systemctl.log"), SERVICES_TEST_CHANGES=str(svc.changes),
+               SERVICES_TEST_STATE=str(svc.state))
     if profile == "another config file":
         other = root / "other.toml"
         other.write_text(svc.config.read_text())
@@ -150,9 +133,7 @@ def show_services(context):
 
 
 def _changes(context):
-    calls = context.svc.log.read_text().splitlines() if context.svc.log.exists() else []
-    calls = [c.removeprefix("--user ") for c in calls]
-    return [c for c in calls if not c.startswith(("is-active", "is-enabled"))]
+    return context.svc.changes.read_text().splitlines() if context.svc.changes.exists() else []
 
 
 @then('the service changes are "{changes}"')

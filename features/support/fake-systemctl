@@ -1,0 +1,19 @@
+#!/bin/sh
+# Test double for `systemctl --user`. Unit state lives in files under
+# $SERVICES_TEST_STATE: <unit>.active and <unit>.enabled. Every call is appended
+# to $SERVICES_TEST_LOG; calls that change state also to $SERVICES_TEST_CHANGES.
+echo "$*" >> "$SERVICES_TEST_LOG"
+shift
+verb="$1"; shift
+state="$SERVICES_TEST_STATE"
+case "$verb" in
+  is-active) if [ -e "$state/$1.active" ]; then echo active; exit 0; fi; echo inactive; exit 3 ;;
+  is-enabled) if [ -e "$state/$1.enabled" ]; then echo enabled; exit 0; fi; echo disabled; exit 1 ;;
+esac
+echo "$verb $*" >> "$SERVICES_TEST_CHANGES"
+case "$verb" in
+  enable) if [ "$1" = --now ]; then shift; touch "$state/$1.active"; fi; touch "$state/$1.enabled" ;;
+  disable) if [ "$1" = --now ]; then shift; rm -f "$state/$1.active"; fi; rm -f "$state/$1.enabled" ;;
+  restart) touch "$state/$1.active" ;;
+esac
+exit 0

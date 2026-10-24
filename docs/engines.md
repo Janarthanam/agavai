@@ -14,6 +14,21 @@ Needle has two supported roles. As a router, it selects tool groups for a separa
 
 Speech output remains independently configured in `[tts]`: `prefer = "kokoro"`, `"espeak"` or `"notify"`; Kokoro's example voice is `af_bella`.
 
+## Set up from the command line
+
+`agavai setup` asks about the four roles in turn (speech input, small brain, router, larger brain), says what each choice does and whether it is installed, then prints a plan and the resulting request flow before changing anything. On confirmation it downloads missing models with the scripts below, rewrites only the tables of the roles that change, keeps the previous file as `config.toml.bak-<time>`, and runs `agavai services sync`. Options choose roles without questions, and roles you do not name stay as they are. Without a terminal, `--yes` is required to apply.
+
+```sh
+agavai setup                                    # guided, in a terminal
+agavai setup --small needle --large none --yes  # Needle as router and agent; no llama-server
+agavai setup --large qwen3-4b-instruct --dry-run
+agavai download                                 # models, sizes and install state
+agavai download needle3 whistle
+agavai explain                                  # what happens to a request with this config
+```
+
+Choosing `--small needle` defaults the router to Needle itself, so one inference selects and calls tools; moving the small brain from Needle to a GGUF defaults the router to word matching. A GGUF brain needs `[llm] llama_bin`, since llama-server itself is not downloaded. `agavai explain` prints the same walkthrough at any time, including which services stay running and whether anything leaves the machine; with `AGAVAI_CONFIG` it explains another profile.
+
 ## Whistle speech recognition
 
 Run `scripts/setup-cactus.sh` to install pinned CPU models and the Cactus runtime in `~/.local/share/agavai/cactus`. It does not edit config or restart services. Override the destination with `AGAVAI_CACTUS_DIR` if needed. Then replace your `[asr]` table:
@@ -80,7 +95,7 @@ tool_selection = "routed"
 
 **Full-tool Needle, including Needle as its own router, is an opt-in experiment.** Installed-model probes selected volume and agent-listing correctly, but also mapped “what time is it” to screen inspection and “capital of France” to theme listing. A lean native prompt still mapped “explain quantum mechanics” to changing a theme. These are semantically wrong calls with valid schemas; no-call fallback cannot detect them. Keep `tool_selection = "routed"` for the conservative path. Full-tool plumbing tests do not establish selection accuracy. No host config is switched to all-tools automatically.
 
-For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. `agavai-llm.service` runs the small llama role and `agavai-llm@large.service` the larger one. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML. Remove `[brain.large]` to disable fallback.
+For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. `agavai-llm.service` runs the small llama role and `agavai-llm@large.service` the larger one. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML or with `agavai setup`. Remove `[brain.large]` to disable fallback.
 
 Needle is a specialized tool model; it executes no tools itself. A valid supported call goes through the existing allowlist and confirmation flow. A simple result is acknowledged directly. No matching call, grounded-argument failure or runtime failure escalates if a larger role exists. Without one, the assistant explains that it could not handle the request and suggests a desktop request. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Routed Needle now honors the chosen router rather than forcing keyword selection. Needle retains shared session history but does not perform Qwen's conversation-classification call; unrelated requests retain canvas/history until reset with “Agavai.”
 

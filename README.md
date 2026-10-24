@@ -35,6 +35,8 @@ The 1.5B on `:18765` is only the Voxtype sanitizer. Do not reuse it as the agent
 agavai ask "open the browser"
 ```
 
+Change models any time with `agavai setup`: it explains each choice, downloads what is missing, updates `config.toml` and the services, and shows how a request will flow. `agavai explain` repeats that walkthrough for the current configuration.
+
 `agavai-llm` runs only when a brain role uses llama-server, and follows `config.toml` changes on its own; `agavai services` shows its state. See [engine configuration](docs/engines.md#services-follow-the-configuration).
 
 Spoken replies use **Kokoro-82M on CPU** (Apache-2.0). Whisper stays STT only.

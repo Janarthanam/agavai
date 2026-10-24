@@ -98,7 +98,7 @@ def _problems(cfg: Config, units: dict[str, str | None]) -> list[str]:
             problems.append(f"{label} needs an executable llama_bin: {model.llama_bin}")
         if not model.model_path.is_file():
             problems.append(f"{label} model is missing: {model.model_path}. "
-                            f"Download it with: scripts/download-model.sh {model.model_id}")
+                            f"Download it with: agavai download {model.model_id}")
     return problems
 
 
@@ -132,6 +132,15 @@ def sync(cfg: Config) -> list[str]:
         else:
             lines.append(f"{unit}: running {label} ({model_id}), settings unchanged")
     return lines
+
+
+def apply_config_change() -> list[str]:
+    """Sync after a CLI command changed config.toml. Problems are reported, not raised:
+    the configuration change itself already succeeded."""
+    try:
+        return sync(service_config())
+    except (ServiceError, ValueError) as exc:
+        return [f"services not updated: {exc}"]
 
 
 def status_lines(cfg: Config) -> list[str]:

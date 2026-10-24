@@ -119,6 +119,11 @@ class JevRouter:
         return [choice]
 
 
+def has_jev_key(cfg: Config) -> bool:
+    """Without a key, every Jev selection falls back."""
+    return bool(_api_key(cfg))
+
+
 def _api_key(cfg: Config) -> str:
     env = os.environ.get(cfg.router.api_key_env) or os.environ.get("OPENROUTER_API_KEY") or ""
     if env.strip():
