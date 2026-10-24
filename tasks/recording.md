@@ -1,6 +1,6 @@
 # Recordings: listen, keep the audio, transcript, notes, translation
 
-Waiting for input. P0 is implemented and committed but not deployed. Design: [docs/recording.md](../docs/recording.md).
+Waiting for input. P0 is implemented and committed on branch `feature/recordings`, kept off `main` until it is tested. Not deployed. Design: [docs/recording.md](../docs/recording.md).
 
 Decisions needed:
 
@@ -75,3 +75,4 @@ Decisions needed:
     - Native focus checks depend on the compositor rendering, and probably on the pointer position under `follow_mouse = 1`.
     - `features/asr_worker.feature` reads the live user config.
     - "record my screen" would route to the recordings head; the tool description says it is not for the screen.
+- 2026-10-24T08:59:37+05:30 — Claude Code session overlay-layout — moved to a feature branch at the user's request: "main would probably merge more changes before this can be tested." Commits `02e93f4`..this one are on `feature/recordings`. Local `main` was reset to `origin/main` (`68f2fc7`); none of this was on `origin`, so nothing was force-pushed. To test or deploy, rebase or merge `feature/recordings` onto the current `main` first.
