@@ -75,6 +75,7 @@ BUILTIN_MODELS: dict[str, ModelSpec] = {
 @dataclass
 class LlmConfig:
     backend: str = "llama-server"
+    tool_selection: str = "routed"
     venv: Path = field(default_factory=lambda: xdg_data() / "agavai/cactus-venv")
     runtime_library: Path | None = None
     host: str = "127.0.0.1"
@@ -268,6 +269,8 @@ def load_config(path: Path | None = None) -> Config:
         cfg.llm.port = int(llm["port"])
     if "alias" in llm:
         cfg.llm.alias = str(llm["alias"])
+    if "tool_selection" in llm:
+        cfg.llm.tool_selection = str(llm["tool_selection"])
     if "ctx_size" in llm:
         cfg.llm.ctx_size = int(llm["ctx_size"])
     if "n_gpu_layers" in llm:
@@ -429,6 +432,8 @@ def load_config(path: Path | None = None) -> Config:
     from agavai.speech_backends import SPEECH_BACKENDS
 
     brain = data.get("brain") or {}
+    if "cloud" in brain:
+        raise ValueError("Cloud models are not supported yet; use brain.large for local fallback")
     for role, attr in (("small", "small_brain"), ("large", "large_brain")):
         if role in brain:
             spec = brain[role]
@@ -436,10 +441,20 @@ def load_config(path: Path | None = None) -> Config:
             if backend not in BRAIN_BACKENDS:
                 raise ValueError(f"Unknown brain backend: {backend}")
             model = spec.get("model_path")
+            model_id = str(spec.get("model", role))
+            catalog_model = catalog.get(model_id) if backend == "llama-server" else None
+            if not model and catalog_model:
+                model = str(catalog_model.path)
             if not model:
                 raise ValueError(f"[brain.{role}] needs model_path")
-            tier = LlmConfig(backend=backend, model_path=_expand(str(model)), model_id=str(spec.get("model", role)), llama_bin=cfg.llm.llama_bin)
-            for key in ("host", "alias"):
+            tier = LlmConfig(backend=backend, model_id=model_id, llama_bin=cfg.llm.llama_bin, models=catalog)
+            tier.model_path = _expand(str(model))
+            if catalog_model:
+                if catalog_model.ctx_size is not None:
+                    tier.ctx_size = catalog_model.ctx_size
+                if catalog_model.n_gpu_layers is not None:
+                    tier.n_gpu_layers = catalog_model.n_gpu_layers
+            for key in ("host", "alias", "tool_selection"):
                 if key in spec:
                     setattr(tier, key, str(spec[key]))
             for key in ("port", "max_tokens", "max_tool_rounds", "timeout_secs", "ctx_size", "n_gpu_layers"):
@@ -453,6 +468,13 @@ def load_config(path: Path | None = None) -> Config:
             if tier.max_tool_rounds < 1 or tier.timeout_secs <= 0 or tier.max_tokens < 1:
                 raise ValueError(f"Invalid limits in [brain.{role}]")
             setattr(cfg, attr, tier)
+    for tier in (cfg.llm, cfg.small_brain, cfg.large_brain):
+        if tier and tier.tool_selection not in {"all", "routed"}:
+            raise ValueError("Brain tool_selection must be all/routed")
+    if cfg.router.backend not in {"jev", "keyword", "local", "none"}:
+        raise ValueError(f"Unknown router backend: {cfg.router.backend}")
+    if cfg.router.fallback not in {"keyword", "none"} or cfg.router.max_tools < 1 or cfg.router.timeout_secs <= 0:
+        raise ValueError("Invalid router fallback, schema budget or timeout")
     if cfg.asr.backend not in SPEECH_BACKENDS:
         raise ValueError(f"Unknown ASR backend: {cfg.asr.backend}")
     if cfg.asr.endpoint not in {"native", "manual", "vad"} or cfg.asr.mode not in {"streaming", "batch"}:

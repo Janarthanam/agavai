@@ -16,7 +16,7 @@ from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import select_head_ids
 from agavai.canvas import answer_block, model_view, read_aloud
-from agavai.tools import DISPATCH, call_tool
+from agavai.tools import DISPATCH, OPENAPI_TOOLS, call_tool
 from agavai.ui import ChatUi, PendingAction
 
 log = logging.getLogger(__name__)
@@ -92,9 +92,14 @@ _SHOW_ANSWER = {
 }
 
 
-def _turn_tools(head_ids: list[str], cfg: Config, ui: ChatUi | None) -> list[dict[str, Any]]:
-    can_confirm = ui is not None and cfg.router.max_tools > 1
-    selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools - int(can_confirm))
+def _turn_tools(
+    head_ids: list[str], cfg: Config, ui: ChatUi | None, *, all_tools: bool = False,
+) -> list[dict[str, Any]]:
+    can_confirm = ui is not None and (all_tools or cfg.router.max_tools > 1)
+    if all_tools:
+        selected = list(OPENAPI_TOOLS)
+    else:
+        selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools - int(can_confirm))
     # Questions with no desktop tools can still put a structured answer on the canvas.
     if ui is not None and not selected and cfg.router.max_tools > 0:
         return [_SHOW_ANSWER]
@@ -408,9 +413,10 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
         escalated = False
         rounds = 0
         completed_calls = {}
+        selection_changed = False
 
         def escalate(reason):
-            nonlocal backend, active_cfg, escalated, rounds
+            nonlocal backend, active_cfg, escalated, rounds, selection_changed
             if escalated or cfg.large_brain is None:
                 raise LlmError(reason)
             log.warning("Escalating from %s: %s", active_cfg.backend, reason)
@@ -418,6 +424,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             backend = create_brain(active_cfg, chat=chat, health=health)
             escalated = True
             rounds = 0
+            selection_changed = True
             if not backend.ready():
                 raise LlmError("The larger model is not running. Check its configured endpoint.")
 
@@ -438,18 +445,21 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 prior_messages = []
                 prior_heads = []
                 ui.user(text)
-        routing_cfg = replace(cfg, router=replace(cfg.router, backend="keyword", fallback="keyword")) if backend.tool_only else cfg
-        head_ids = _merge_heads(select_head_ids(text, routing_cfg), prior_heads)
-        selected = _turn_tools(head_ids, cfg, ui)
+
+        def select_tools():
+            all_tools = active_cfg.tool_selection == "all" or cfg.router.backend == "none"
+            heads = [] if all_tools else _merge_heads(select_head_ids(text, cfg), prior_heads)
+            return heads, _turn_tools(heads, cfg, ui, all_tools=all_tools)
+
+        head_ids, selected = select_tools()
+        selection_changed = False
         selected_names = {item["function"]["name"] for item in selected}
         messages: list[dict[str, Any]] = [
             _system_message(selected_names),
             *prior_messages,
             {"role": "user", "content": text},
         ]
-        if cfg.large_brain and not backend.tool_only and not escalated:
-            messages[0]["content"] += "\nIf you cannot handle the request, call escalate_to_larger_model alone with a reason."
-        if "wallpaper_list" in selected_names and _asking_for_images(text):
+        if "wallpaper" in head_ids and "wallpaper_list" in selected_names and _asking_for_images(text):
             listed = call_tool("wallpaper_list", "{}", cfg)
             if ui:
                 ui.tool_start("wallpaper_list", "{}")
@@ -472,11 +482,20 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
         for _ in range(active_cfg.max_tool_rounds + (cfg.large_brain.max_tool_rounds + 1 if cfg.large_brain else 0)):
             if ui and ui.cancelled():
                 return ""
-            offered = [*selected, ESCALATE] if cfg.large_brain and not escalated and not backend.tool_only else selected
+            if selection_changed:
+                head_ids, selected = select_tools()
+                selected_names = {item["function"]["name"] for item in selected}
+                selection_changed = False
+                retried = False
+            can_escalate = cfg.large_brain is not None and not escalated
+            offered = [*selected, ESCALATE] if can_escalate and not backend.tool_only else selected
+            messages[0] = _system_message(selected_names)
+            if can_escalate and not backend.tool_only:
+                messages[0]["content"] += "\nIf you cannot handle the request, call escalate_to_larger_model alone with a reason."
             if rounds >= active_cfg.max_tool_rounds:
-                if escalated:
+                if not can_escalate:
                     break
-                escalate("The small model exhausted its tool steps.")
+                escalate("The model exhausted its tool steps.")
                 continue
             rounds += 1
             try:
@@ -492,13 +511,13 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if escalation_calls or message.get("unsupported") or (not calls and not _strip_think(content)):
                 if escalation_calls and len(calls) != 1:
                     raise LlmError("Escalation must be requested alone; no action has executed.")
-                reason = message.get("unsupported") or "The small model could not handle this request."
+                reason = message.get("unsupported") or "The model could not handle this request."
                 if escalation_calls:
                     _validate_call(escalation_calls[0], [ESCALATE])
                     reason = json.loads(escalation_calls[0]["function"]["arguments"])["reason"]
                 log.info("Brain unsupported backend=%s reason=%s tools=%s", active_cfg.backend, reason,
                             [tool["function"]["name"] for tool in offered])
-                if cfg.large_brain is None or escalated:
+                if not can_escalate:
                     suggestion = "Try asking me to open an app or find a file." if backend.tool_only else "Please try rephrasing it."
                     raise LlmError(f"I could not handle that request. {suggestion}")
                 escalate(str(reason))
@@ -535,7 +554,6 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 head_ids.extend(extra_heads)
                 selected = _turn_tools(head_ids, cfg, ui)
                 selected_names = {item["function"]["name"] for item in selected}
-                messages[0] = _system_message(selected_names)
                 continue
             for call in calls:
                 name = (call.get("function") or {}).get("name") or ""

@@ -19,6 +19,10 @@ Feature: Installed Cactus engines use the product worker interfaces
     When I evaluate the browser task using the installed Needle engine
     Then the simulated browser task succeeds and its model exchange is recorded
 
+  Scenario: Needle selects volume from the full tool allowlist without routing
+    When I evaluate the volume task using full-tool Needle
+    Then the simulated volume increases with all tools offered and no routing
+
   Scenario Outline: Whistle recognizes end of recorded speech through the capture path
     When I replay recorded speech and silence through the installed "<mode>" Whistle listener
     Then one final transcript includes the full recorded request without Enter

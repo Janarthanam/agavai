@@ -1,6 +1,18 @@
-# Select speech and brain engines
+# Configure model roles
 
 Speech recognition and the local brain are configured independently in `~/.config/agavai/config.toml`. Restart the listening session after editing. Defaults remain Parakeet/ONNX and the existing `[llm]` Qwen/llama-server configuration.
+
+| Role | Configuration | Supported choices |
+|---|---|---|
+| Voice input | `[asr]` | `parakeet-onnx` (native endpoint), `whistle-cactus` (energy VAD or manual finish; streaming or batch) |
+| Router / decision | `[router]` | `keyword`, `jev` with a configured model, `none` to bypass routing; `local` is an alias for keyword, not another model |
+| Local agent / tool calling | `[brain.small]`, or `[llm]` when absent | Needle3 with `needle-cactus`; Qwen3 or a configured tool-capable GGUF with `llama-server` |
+| Local fallback | optional `[brain.large]` | Same brain backends; current setup uses local Qwen3-4B |
+| Cloud | Deferred | OpenAI/cloud adapters are not implemented; `[brain.cloud]` is rejected |
+
+Needle can perform both tool selection and argument generation. It does not need to be configured twice as a router and an agent. The complete [Whistle + full-tool Needle + local Qwen example](../share/config.needle.toml) can be loaded with `AGAVAI_CONFIG="$PWD/share/config.needle.toml" agavai status`. It does not edit the installed config. The [default example](../share/config.example.toml) uses Parakeet + Jev + Qwen. Neither profile depends on a particular speech/brain pairing. OpenAI Whisper is not an implemented recognizer; Whistle is the supported Cactus model.
+
+Speech output remains independently configured in `[tts]`: `prefer = "kokoro"`, `"espeak"` or `"notify"`; Kokoro's example voice is `af_bella`.
 
 ## Whistle speech recognition
 
@@ -48,6 +60,7 @@ model = "needle3"
 model_path = "~/.local/share/agavai/cactus/needle3.cact"
 runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
 venv = "~/.local/share/agavai/cactus/venv"
+tool_selection = "all"
 timeout_secs = 10
 max_tokens = 512
 max_tool_rounds = 6
@@ -59,16 +72,60 @@ model_path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
 host = "127.0.0.1"
 port = 18766
 alias = "agavai"
+tool_selection = "routed"
 # llama_bin = "/path/to/llama-server"
 ```
 
+`tool_selection = "all"` supplies all 35 registered desktop schemas (plus confirmation in interactive sessions) and skips both Jev and keyword routing. It includes `list_agents`, which is absent from the routed heads. `tool_selection = "routed"` (default) uses the configured router and its `max_tools` budget. These choices apply to both brain backends and both roles. With Needle/all and Qwen/routed, the router runs only after escalation to Qwen. Set `[router] backend = "none"` to give both roles all tools, regardless of their per-role policy.
+
+**Full-tool Needle is an opt-in experiment.** Installed-model probes selected volume and agent-listing correctly, but also mapped “what time is it” to screen inspection and “capital of France” to theme listing. A lean native prompt still mapped “explain quantum mechanics” to changing a theme. These are semantically wrong calls with valid schemas; no-call fallback cannot detect them. Keep `tool_selection = "routed"` for the conservative path. Full-tool plumbing tests do not establish selection accuracy. No host config is switched to all-tools automatically.
+
 The normal `agavai-llm` service launches the first configured llama tier: small if it uses llama, otherwise large. Restart that service after changing its model. Needle workers are launched by the session and need no service. A Needle-only configuration works without a running llama server.
 
-For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles, distinct host/port pairs and explicit model paths. The service launches the small role; run `scripts/agavai-llm large` separately for the larger role. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML.
+For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. The service launches the small llama role; run `scripts/agavai-llm large` separately for the larger llama role. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML. Remove `[brain.large]` to disable fallback.
 
-Needle is a specialized tool model. It receives locally selected tool schemas; it executes no tools itself. A valid supported call goes through the existing allowlist and confirmation flow. A simple result is acknowledged directly. No matching call, grounded-argument failure or runtime failure escalates if a larger role exists. Without one, the assistant explains that it could not handle the request and suggests a desktop request. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Needle retains shared session history but does not perform Qwen's conversation-classification call; unrelated requests retain canvas/history until reset with “Agavai.”
+Needle is a specialized tool model; it executes no tools itself. A valid supported call goes through the existing allowlist and confirmation flow. A simple result is acknowledged directly. No matching call, grounded-argument failure or runtime failure escalates if a larger role exists. Without one, the assistant explains that it could not handle the request and suggests a desktop request. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Routed Needle now honors the chosen router rather than forcing keyword selection. Needle retains shared session history but does not perform Qwen's conversation-classification call; unrelated requests retain canvas/history until reset with “Agavai.”
 
-Chat models can call `escalate_to_larger_model` when unable to handle a request. This control tool is never offered to Needle; Needle's no-match response triggers escalation in the coordinator. Empty output and exhausted tool steps also trigger escalation. The larger model receives the same history and completed tool results. It can answer general knowledge and conversational questions directly without tools; desktop actions still require an available tool and a successful result. Repeated identical calls after escalation reuse results from that turn instead of executing actions again. An answer or clarification from the small model completes the turn directly; the application does not infer universal correctness from a confidence score.
+Chat models can call `escalate_to_larger_model` when unable to handle a request. This control tool is never offered to Needle; Needle's no-match response triggers escalation in the coordinator. Empty output and exhausted tool steps also trigger escalation. On escalation, the coordinator reselects tools according to the larger role's policy and passes the same history and completed tool results. It can answer general knowledge and conversational questions directly without tools; desktop actions still require an available tool and a successful result. Repeated identical calls after escalation reuse results from that turn instead of executing actions again. An answer or clarification from the small model completes the turn directly; the application does not infer universal correctness from a confidence score.
+
+To keep Needle with Parakeet, replace only the `[asr]` table in the full example:
+
+```toml
+[asr]
+backend = "parakeet-onnx"
+model_dir = "~/.local/share/agavai/models/parakeet-realtime-eou-120m"
+venv = "~/.local/share/agavai/tts-venv"
+device = "cpu"
+mode = "streaming"
+endpoint = "native"
+```
+
+To use Qwen as the primary agent with either recognizer, replace only `[brain.small]` and remove `[brain.large]` unless a distinct larger local model is configured:
+
+```toml
+[brain.small]
+backend = "llama-server"
+model = "qwen3-4b-instruct"
+host = "127.0.0.1"
+port = 18766
+alias = "agavai"
+tool_selection = "routed"
+```
+
+To choose Jev for routed tiers, replace the router tables:
+
+```toml
+[router]
+backend = "jev"
+fallback = "keyword"
+max_tools = 8
+timeout_secs = 2
+
+[router.jev]
+base_url = "https://openrouter.ai/api/alpha/decisions"
+model = "typesafe/jev-1.13"
+api_key_env = "OPENROUTER_API_KEY"
+```
 
 ## Failure bounds and tests
 
@@ -77,7 +134,8 @@ Workers use a bounded response queue and input deadlines. Maximum audio duration
 Run the standard BDD suite with optional native checks excluded:
 
 ```sh
-PYTHONPATH=src .venv/bin/behave --tags=-asr_model --tags=-cactus_model
+PYTHONPATH=src AGAVAI_CONFIG="$PWD/share/config.example.toml" \
+  .venv/bin/behave --tags=-asr_model --tags=-cactus_model
 ```
 
 For native Cactus checks, set `AGAVAI_CACTUS_TEST_DIR` to the setup destination and run `features/cactus_worker.feature`. These replay recorded speech and generate schema-only tool calls without changing the desktop. Parakeet native checks retain the `@asr_model` tag.

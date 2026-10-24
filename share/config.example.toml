@@ -8,6 +8,7 @@
 [llm]
 # Catalog id. Builtin default is qwen3-4b-instruct (~2.5 GB Q4_K_M).
 model = "qwen3-4b-instruct"
+tool_selection = "routed" # all bypasses routing and offers the full allowlist
 host = "127.0.0.1"
 port = 18766
 alias = "agavai"
@@ -49,11 +50,13 @@ venv = "~/.local/share/agavai/tts-venv"
 card_dir = "~/.config/agavai/a2a"
 
 [router]
-# jev | keyword | local  (local uses the same contract; plug in a small model later)
+# jev | keyword | none. local is an alias for keyword, not a local model.
+# Only routed tiers use this section; none gives all tools to both tiers.
 backend = "jev"
 fallback = "keyword"
 timeout_secs = 2
 max_tools = 8
+# max_tools limits routed schemas only. All-tool mode keeps confirmation too.
 
 [router.jev]
 base_url = "https://openrouter.ai/api/alpha/decisions"
@@ -122,6 +125,8 @@ venv = "~/.local/share/agavai/tts-venv"
 # output, inference failure or exhausted tool steps. Run setup-cactus.sh first.
 # [brain.small]
 # backend = "needle-cactus"
+# model = "needle3"
+# tool_selection = "all" # Explicit full-tool experiment; default is routed
 # model_path = "~/.local/share/agavai/cactus/needle3.cact"
 # venv = "~/.local/share/agavai/cactus/venv"
 # runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
@@ -129,8 +134,11 @@ venv = "~/.local/share/agavai/tts-venv"
 #
 # [brain.large]
 # backend = "llama-server"
+# model = "qwen3-4b-instruct"
+# tool_selection = "routed"
 # model_path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
 # host = "127.0.0.1"
 # port = 18766
 # alias = "agavai"
 # max_tool_rounds = 6
+# Full working example: share/config.needle.toml. Cloud/OpenAI is deferred.

@@ -12,6 +12,8 @@ The small local brain runs first. Optional `[brain.large]` handles explicit esca
 
 Only chat backends receive the escalation-control tool; Needle reports no matching call directly to the coordinator. Chat backends can answer general knowledge and conversational questions without tools. Desktop actions still require available tools and actual results.
 
+Model roles are independent: `[asr]` selects recognition, `[router]` selects optional head routing, `[brain.small]` selects the agent, and optional `[brain.large]` selects the local fallback. Each brain chooses `tool_selection = "all"` or `"routed"` (default). All mode skips the router and its schema budget, giving the agent the full registered allowlist plus interactive confirmation. Routed mode uses the configured router, including for Needle; `backend = "none"` disables routing and supplies the full allowlist to both tiers. Recompute tool selection at each fallback boundary, preserving history, confirmation rules and completed actions. The same committed transcript enters this coordinator regardless of speech backend. Cloud/OpenAI support is deferred; cloud configuration is rejected rather than silently ignored.
+
 These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
 
 ## Requirements

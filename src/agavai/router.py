@@ -117,6 +117,8 @@ def make_router(cfg: Config) -> ToolRouter:
 
 def select_head_ids(utterance: str, cfg: Config) -> list[str]:
     started = time.monotonic()
+    if cfg.router.backend == "none":
+        return []
     router = make_router(cfg)
     source = cfg.router.backend
     try:

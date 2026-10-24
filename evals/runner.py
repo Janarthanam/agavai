@@ -388,7 +388,7 @@ def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
             "runtime_sha256": _sha256(cfg.asr.runtime_library) if cfg.asr.runtime_library and cfg.asr.runtime_library.is_file() else "",
         },
         "brain_engines": {role: {
-            "backend": model.backend, "model_path": str(model.model_path),
+            "backend": model.backend, "model_path": str(model.model_path), "tool_selection": model.tool_selection,
             "model_sha256": _sha256(model.model_path) if model.model_path.is_file() else "",
             "endpoint": model.base_url if model.backend == "llama-server" else "worker",
             "runtime_sha256": _sha256(model.runtime_library) if model.runtime_library and model.runtime_library.is_file() else "",

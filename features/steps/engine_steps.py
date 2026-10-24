@@ -61,6 +61,10 @@ def invalid_config(context, setting):
         'vad zero silence': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nsilence_ms=0',
         'unknown brain': '[brain.small]\nbackend="unknown"\nmodel_path="/m"',
         'missing brain model': '[brain.small]\nbackend="needle-cactus"',
+        'unknown tool selection': '[brain.small]\nmodel="qwen3-4b-instruct"\ntool_selection="guess"',
+        'unknown router': '[router]\nbackend="guess"',
+        'zero tool budget': '[router]\nmax_tools=0',
+        'cloud deferred': '[brain.cloud]\nbackend="openai-compatible"',
     }
     context.engine_path.write_text(variants[setting])
 
@@ -87,6 +91,34 @@ def config_selected(context):
 @then('engine configuration fails with "{message}"')
 def bad_config(context, message):
     assert message.lower() in (context.engine_error or '').lower(), context.engine_error
+
+
+@when('I select catalog models for the agent and fallback')
+def role_catalog(context):
+    path = directory(context) / 'config.toml'
+    path.write_text('''[llm.models.test-agent]
+path = "/test-agent.gguf"
+ctx_size = 4096
+n_gpu_layers = 3
+[brain.small]
+model = "test-agent"
+tool_selection = "all"
+port = 18767
+ctx_size = 2048
+[brain.large]
+model = "qwen3-4b-instruct"
+''')
+    context.engines = load_config(path)
+
+
+@then('both local models resolve with their own tool policy and runtime limits')
+def role_catalog_result(context):
+    small, large = context.engines.small_brain, context.engines.large_brain
+    assert small.model_path == Path('/test-agent.gguf') and small.ctx_size == 2048 and small.n_gpu_layers == 3
+    assert small.tool_selection == 'all' and small.port == 18767
+    assert large.model_path.name == 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf' and large.ctx_size == 8192
+    assert large.tool_selection == 'routed' and large.port == 18766
+    assert small.active_spec().id == 'test-agent' and large.active_spec().id == 'qwen3-4b-instruct'
 
 
 class FakeWhistle:
@@ -299,11 +331,11 @@ def not_finalized(context):
 BROWSER = {'content': '', 'tool_calls': [{'id':'browser', 'function': {'name':'launch', 'arguments':'{"target":"browser"}'}}]}
 
 
-def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_responses=None, text='open the browser'):
+def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_responses=None, text='open the browser', small_selection='routed', large_selection='routed'):
     cfg = context.cfg
     cfg.router.backend = 'keyword'
-    cfg.small_brain = LlmConfig(backend='needle-cactus' if tool_only else 'llama-server', model_id='small')
-    cfg.large_brain = LlmConfig(model_id='large') if larger else None
+    cfg.small_brain = LlmConfig(backend='needle-cactus' if tool_only else 'llama-server', model_id='small', tool_selection=small_selection)
+    cfg.large_brain = LlmConfig(model_id='large', tool_selection=large_selection) if larger else None
     small = Mock(tool_only=tool_only)
     small.ready.return_value = True
     small.respond.side_effect = small_responses
@@ -311,10 +343,12 @@ def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_
     large.ready.return_value = True
     large.respond.side_effect = large_responses or [{'content':'Larger answer.'}]
     context.engine_requests = []
+    context.engine_tools = []
     def factory(spec, **_):
         return small if spec.model_id == 'small' else large
     def record(messages, tools):
         context.engine_requests.append(deepcopy(messages))
+        context.engine_tools.append(deepcopy(tools))
         item = next(large_script)
         if isinstance(item, Exception):
             raise item
@@ -360,14 +394,16 @@ def larger_answer(context):
 @when('Needle cannot match "{text}" and a larger brain is configured')
 def needle_fallback(context, text):
     context.fallback_request = text
-    brain_turn(context, [{'unsupported':'No matching tool call'}], tool_only=True, text=text)
+    brain_turn(context, [{'unsupported':'No matching tool call'}], tool_only=True, text=text, small_selection='all')
 
 
-@then('Needle offers only "{schemas}" and the larger engine answers the original request')
+@then('Needle offers the full allowlist and Qwen offers only "{schemas}" before answering')
 def needle_fallback_answer(context, schemas):
+    from agavai.tools import OPENAPI_TOOLS
     context.small_engine.respond.assert_called_once()
     messages, offered = context.small_engine.respond.call_args.args
-    assert [item['function']['name'] for item in offered] == ([] if schemas == 'none' else schemas.split(','))
+    assert [item['function']['name'] for item in offered] == [item['function']['name'] for item in OPENAPI_TOOLS] + ['request_confirmation']
+    assert [item['function']['name'] for item in context.engine_tools[0]] == ([] if schemas == 'none' else schemas.split(','))
     assert 'escalate_to_larger_model' not in messages[0]['content']
     context.large_engine.respond.assert_called_once()
     history = context.engine_requests[0]
@@ -445,7 +481,7 @@ def native_vad_final(context):
 
 @when('the small engine launches the browser then escalates')
 def after_tool(context):
-    brain_turn(context, [BROWSER, {'content':''}], large_responses=[BROWSER, {'content':'Already opened.'}])
+    brain_turn(context, [BROWSER, {'content':''}], large_responses=[BROWSER, {'content':'Already opened.'}], small_selection='all')
 
 
 @then('the browser is launched once despite the larger engine repeating its call')
@@ -459,7 +495,7 @@ def once_only(context):
 def bad_args(context):
     malformed = deepcopy(BROWSER)
     malformed['tool_calls'][0]['function']['arguments'] = '{}'
-    brain_turn(context, [malformed], tool_only=True)
+    brain_turn(context, [malformed], tool_only=True, small_selection='all')
 
 
 @then('no desktop tool is executed')
@@ -652,15 +688,24 @@ def registered_brain(context):
 
 @when('I evaluate the browser task using the installed Needle engine')
 def native_eval(context):
+    evaluate_native_case(context, 'desktop.launch.browser', 'routed')
+
+
+@when('I evaluate the volume task using full-tool Needle')
+def native_all_eval(context):
+    evaluate_native_case(context, 'desktop.volume.up', 'all')
+
+
+def evaluate_native_case(context, case_id, selection):
     from agavai.brain import close_brains
     from evals.cases import load_cases
     from evals.runner import run_case
     root = installed_cactus()
     cfg = Config()
     cfg.router.backend = 'keyword'
-    cfg.small_brain = LlmConfig(backend='needle-cactus', venv=root/'venv', model_path=root/'needle3.cact', runtime_library=root/'libneedle.so', timeout_secs=20)
+    cfg.small_brain = LlmConfig(backend='needle-cactus', venv=root/'venv', model_path=root/'needle3.cact', runtime_library=root/'libneedle.so', timeout_secs=20, tool_selection=selection)
     try:
-        case = next(case for case in load_cases() if case.id == 'desktop.launch.browser')
+        case = next(case for case in load_cases() if case.id == case_id)
         context.native_evaluation = run_case(case, cfg, set())
     finally:
         close_brains()
@@ -675,6 +720,17 @@ def native_eval_record(context):
     assert exchanges[0]['tool_calls'][0]['name'] == 'launch', exchanges
 
 
+@then('the simulated volume increases with all tools offered and no routing')
+def native_all_eval_record(context):
+    from agavai.tools import OPENAPI_TOOLS
+    result = context.native_evaluation
+    assert result['outcome'] == 'done', result
+    turn = result['turns'][0]
+    assert turn['heads'] == [] and len(turn['model']) == 1, turn
+    assert turn['model'][0]['offered'] == [t['function']['name'] for t in OPENAPI_TOOLS] + ['request_confirmation']
+    assert turn['model'][0]['tool_calls'][0]['name'] == 'set_volume'
+
+
 @when('the recognizer replaces a partial with an empty final transcript')
 def empty_final(context):
     from agavai.__main__ import _await_utterance
@@ -685,3 +741,91 @@ def empty_final(context):
                                         stop_requested=lambda:False, cancel_requested=lambda:False)
     assert outcome == 'ignore' and not text
     context.submit_count = 0
+
+
+@when('I use "{speech}" with "{agent}" and "{policy}" tools through "{router}"')
+def mixed_roles(context, speech, agent, policy, router):
+    path = directory(context) / 'config.toml'
+    endpoint = 'native' if speech == 'parakeet-onnx' else 'manual'
+    path.write_text(f'''[asr]
+backend = "{speech}"
+endpoint = "{endpoint}"
+[router]
+backend = "{router}"
+max_tools = 2
+[brain.small]
+backend = "{agent}"
+model_path = "/fixture"
+tool_selection = "{policy}"
+''')
+    cfg = load_config(path)
+    full = policy == 'all' or router == 'none'
+    call = {'tool_calls':[{'id':'agents','function':{'name':'list_agents','arguments':'{}'}}]} if full else BROWSER
+    brain = Mock(tool_only=agent == 'needle-cactus')
+    brain.ready.return_value = True
+    context.mixed_offers = []
+    def respond(messages, tools):
+        context.mixed_offers.append(deepcopy(tools))
+        return next(responses)
+    responses = iter([call, {'content':'Finished.'}])
+    brain.respond.side_effect = respond
+    with patch('agavai.orchestrator.create_brain', return_value=brain), patch('agavai.orchestrator.select_head_ids', return_value=['launch']) as route, patch('agavai.orchestrator.call_tool', return_value='Finished.') as tool:
+        context.reply = run_turn('inspect local agents' if full else 'open the browser', cfg, context.ui)
+    context.mixed_route_calls = route.call_count
+    context.mixed_tool_calls = tool.call_args_list
+    assert cfg.asr.backend == speech and cfg.small_brain.backend == agent
+
+
+@then('the agent uses "{scope}" schemas with "{routing:d}" router calls')
+def mixed_roles_result(context, scope, routing):
+    from agavai.tools import OPENAPI_TOOLS
+    assert context.mixed_route_calls == routing
+    expected = [t['function']['name'] for t in OPENAPI_TOOLS] if scope == 'all' else ['launch']
+    for tools in context.mixed_offers:
+        assert [t['function']['name'] for t in tools] == expected + ['request_confirmation']
+        confirmation = tools[-1]['function']['parameters']['properties']['name']['enum']
+        assert confirmation == expected
+    assert len(context.mixed_tool_calls) == 1 and context.reply == 'Finished.'
+    assert context.mixed_tool_calls[0].args[0] == ('list_agents' if scope == 'all' else 'launch')
+
+
+@when('full-tool Needle proposes an agent listing for confirmation')
+def all_tools_confirmation(context):
+    context.cfg.router.max_tools = 1
+    proposal = {'tool_calls':[{'id':'confirm','function':{'name':'request_confirmation','arguments':json.dumps({'name':'list_agents','arguments':{},'question':'List local agents?'})}}]}
+    brain_turn(context, [proposal], tool_only=True, small_selection='all')
+
+
+@then('no tool runs until Yes and the confirmed agent listing runs once')
+def all_tools_confirmed(context):
+    assert context.executed_tools == 0
+    assert context.ui.pending_action.name == 'list_agents'
+    with patch('agavai.orchestrator.create_brain') as brain, patch('agavai.orchestrator.call_tool', return_value='Agents listed.') as tool:
+        reply = run_turn('yes', context.cfg, context.ui, continue_conversation=True)
+    brain.assert_not_called()
+    tool.assert_called_once_with('list_agents', '{}', context.cfg)
+    assert reply == 'Agents listed.' and context.ui.pending_action is None
+
+
+@when('a routed small agent fails with full-tool fallback configured')
+def all_tools_fallback(context):
+    brain_turn(context, [LlmError('small failed')], large_selection='all')
+
+
+@then('the fallback receives the full allowlist and no further escalation tool')
+def all_tools_fallback_result(context):
+    from agavai.tools import OPENAPI_TOOLS
+    assert [t['function']['name'] for t in context.engine_tools[0]] == [t['function']['name'] for t in OPENAPI_TOOLS] + ['request_confirmation']
+    assert 'escalate_to_larger_model' not in context.engine_requests[0][0]['content']
+    assert context.reply == 'Larger answer.' and context.executed_tools == 0
+
+
+@when('full-tool Needle requests an unknown shell tool')
+def unknown_all_tool(context):
+    brain_turn(context, [{'tool_calls':[{'function':{'name':'shell','arguments':'{}'}}]}], tool_only=True, small_selection='all')
+
+
+@then('the unknown tool is rejected without executing anything')
+def unknown_all_tool_result(context):
+    assert context.executed_tools == 0
+    assert 'unavailable in this turn: shell' in context.reply

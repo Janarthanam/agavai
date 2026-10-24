@@ -1,4 +1,4 @@
-"""Tool heads. The 4B only sees schemas from the selected head(s)."""
+"""Tool groups and schemas for agents configured to use routing."""
 
 from __future__ import annotations
 
