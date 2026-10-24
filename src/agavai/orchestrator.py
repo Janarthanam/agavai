@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 SYSTEM = """You are Agavai, a local Omarchy Linux voice assistant.
 Your final message is spoken aloud automatically. Always answer in one or two short spoken sentences. No markdown, no code fences, no lists.
 Never say you cannot speak, talk, generate voice, or say a word. If asked to say something, say it.
+Answer general knowledge, reasoning and conversational questions directly; these do not require tools. Missing tools limit desktop actions, not your ability to answer questions.
 Desktop actions exist only through the tools you were given this turn. Never claim you launched an app, changed a setting, or clicked something unless a tool result says so.
 Do not call remote models or coding agents. Do not ask for a shell.
 If a needed desktop action is not among the tools you were given, say you cannot do that action — still in a spoken sentence.
@@ -446,7 +447,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             *prior_messages,
             {"role": "user", "content": text},
         ]
-        if cfg.large_brain:
+        if cfg.large_brain and not backend.tool_only and not escalated:
             messages[0]["content"] += "\nIf you cannot handle the request, call escalate_to_larger_model alone with a reason."
         if "wallpaper_list" in selected_names and _asking_for_images(text):
             listed = call_tool("wallpaper_list", "{}", cfg)
@@ -471,7 +472,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
         for _ in range(active_cfg.max_tool_rounds + (cfg.large_brain.max_tool_rounds + 1 if cfg.large_brain else 0)):
             if ui and ui.cancelled():
                 return ""
-            offered = [*selected, ESCALATE] if cfg.large_brain and not escalated else selected
+            offered = [*selected, ESCALATE] if cfg.large_brain and not escalated and not backend.tool_only else selected
             if rounds >= active_cfg.max_tool_rounds:
                 if escalated:
                     break

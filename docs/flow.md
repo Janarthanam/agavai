@@ -10,6 +10,8 @@ Speech and brain backends are independently selectable; [engines.md](engines.md)
 
 The small local brain runs first. Optional `[brain.large]` handles explicit escalation, unsupported/empty output, inference failure or exhausted steps. Successful small answers and Needle tool results finish directly. Local controls still bypass inference. Qwen can occupy either role. Llama conversation classification uses the small tier; Needle preserves shared history without that classification. Without a configured larger tier, unsupported requests receive a plain explanation and a rephrasing suggestion; raw backend no-match diagnostics stay in logs. The session validates tools, owns confirmations and carries completed results across escalation. No automatic inference-time downloads or silent device substitution are allowed.
 
+Only chat backends receive the escalation-control tool; Needle reports no matching call directly to the coordinator. Chat backends can answer general knowledge and conversational questions without tools. Desktop actions still require available tools and actual results.
+
 These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
 
 ## Requirements

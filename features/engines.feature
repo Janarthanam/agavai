@@ -60,6 +60,15 @@ Feature: Select speech and brain engines independently
     When the small engine handles a browser request
     Then only the small engine and the browser tool run
 
+  Scenario Outline: Needle no-match falls back without a chat control tool
+    Given a chat UI in a temp runtime dir
+    When Needle cannot match "<text>" and a larger brain is configured
+    Then Needle offers only "<schemas>" and the larger engine answers the original request
+    Examples:
+      | text | schemas |
+      | open the browser | launch,open_app,play_url,request_confirmation |
+      | What is the capital of France? | none |
+
   Scenario Outline: Small-model inability escalates once
     Given a chat UI in a temp runtime dir
     When the small engine returns "<outcome>" for an unsupported request

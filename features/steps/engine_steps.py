@@ -357,6 +357,25 @@ def larger_answer(context):
     assert context.executed_tools == 0
 
 
+@when('Needle cannot match "{text}" and a larger brain is configured')
+def needle_fallback(context, text):
+    context.fallback_request = text
+    brain_turn(context, [{'unsupported':'No matching tool call'}], tool_only=True, text=text)
+
+
+@then('Needle offers only "{schemas}" and the larger engine answers the original request')
+def needle_fallback_answer(context, schemas):
+    context.small_engine.respond.assert_called_once()
+    messages, offered = context.small_engine.respond.call_args.args
+    assert [item['function']['name'] for item in offered] == ([] if schemas == 'none' else schemas.split(','))
+    assert 'escalate_to_larger_model' not in messages[0]['content']
+    context.large_engine.respond.assert_called_once()
+    history = context.engine_requests[0]
+    assert [m['content'] for m in history if m['role'] == 'user'] == [context.fallback_request]
+    assert not any(m['role'] == 'tool' or m.get('tool_calls') for m in history)
+    assert context.reply == 'Larger answer.' and context.executed_tools == 0
+
+
 @when('the only brain engine returns an empty response')
 def empty_only(context):
     brain_turn(context, [{'content':''}], larger=False)
