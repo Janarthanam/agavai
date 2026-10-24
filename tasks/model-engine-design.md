@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress: add the omitted standalone `needle-cactus` router. Owner: Codex session needle-router. Existing model-role work committed as `1adbe87`; cloud deferred.
+Complete: standalone `needle-cactus` router committed as `038cd52`, with independent agent selection, examples and validation. Owner: Codex session needle-router. Cloud deferred.
 
 - [x] P1 voice Implement configurable speech/brain adapters, explicit finalization and conditional escalation.
 - [x] P1 docs Show the proposed Whistle/Needle seams, process boundaries, data contracts and latency evidence in an interactive HTML design.
@@ -87,3 +87,5 @@ In progress: add the omitted standalone `needle-cactus` router. Owner: Codex ses
   - Changed files: `README.md`, `docs/engines.md`, `docs/flow.md`, `docs/model-engines.md`, `evals/runner.py`, `features/cactus_worker.feature`, `features/engines.feature`, `features/heads.feature`, `features/steps/engine_steps.py`, `features/steps/heads_steps.py`, `share/config.example.toml`, `share/config.needle.toml`, new `share/config.needle-router.toml`, `src/agavai/config.py`, `src/agavai/heads.py`, `src/agavai/router.py`, this task.
   - Validation: full explicit-example-config suite with installed Cactus passed 337 scenarios / 1656 steps (48.016 s), including both recognizers × both agents × routed/all policies with Needle routing, discarded candidate arguments, unknown/malformed/empty/failed routing, head deduplication/budget, independent config and native worker/eval recording. Initial new test mocks used nonexistent percent/delta volume arguments; corrected to the existing action=raise/lower schema, then the targeted and complete suites passed. Three complete profiles and all seven documented TOML blocks load; whitespace and complete diff self-review passed.
   - Native simulated-desktop probes using the new profile: volume passed (8.667 s total, 1.957 s cold routing), browser passed (6.807 s total, 0.161 s warm routing). Reminder clock-time case selected the correct reminders head (0.187 s routing) but Qwen scheduled 370 minutes instead of the expected 45. Keyword-router baseline with the same Qwen/profile also failed (375 minutes). Follow-up: investigate existing reminder timing behavior separately; no timing/prompt changes folded into this router correction. No real desktop actions or live microphone used. Evidence: ignored `.venv/needle-router-full.log`, `.venv/needle-router-native.json`, `.venv/needle-router-keyword-baseline.json`.
+
+- 2026-10-24T16:17:26+05:30 — Codex session needle-router — complete. Runtime/config correction, tests, examples and specifications committed as `038cd52`; full suite 337/1656 passed and native outcomes recorded above. Working tree was clean before this task-only completion entry. Installed config remains unchanged. Existing Qwen reminder timing failure is a separate follow-up.
