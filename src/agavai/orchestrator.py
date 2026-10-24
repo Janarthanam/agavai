@@ -430,11 +430,11 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             rounds = 0
             selection_changed = True
             if not backend.ready():
-                raise LlmError("The larger model is not running. Check its configured endpoint.")
+                raise LlmError("The larger model is not running. Run: agavai services sync")
 
         try:
             if not backend.ready():
-                raise LlmError("The local model is not running. Start it with: systemctl --user start agavai-llm")
+                raise LlmError("The local model is not running. Run: agavai services sync")
         except LlmError as exc:
             escalate(str(exc))
         if prior_messages and not backend.tool_only and not escalated:

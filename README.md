@@ -20,8 +20,7 @@ Default brain: **Qwen3-4B-Instruct-2507 Q4_K_M (~2.5 GB)**. Switch it without ed
 
 ```bash
 agavai model list
-agavai model set qwen3-4b-instruct
-systemctl --user restart agavai-llm
+agavai model set qwen3-4b-instruct    # restarts agavai-llm with the new model
 ```
 
 Add another GGUF under `[llm.models.<id>]` in `~/.config/agavai/config.toml`. See the architecture doc.
@@ -32,10 +31,11 @@ The 1.5B on `:18765` is only the Voxtype sanitizer. Do not reuse it as the agent
 
 ```bash
 ~/Projects/agavai/scripts/download-model.sh
-~/Projects/agavai/scripts/install.sh
-systemctl --user enable --now agavai-llm
+~/Projects/agavai/scripts/install.sh    # installs and syncs the model services
 agavai ask "open the browser"
 ```
+
+`agavai-llm` runs only when a brain role uses llama-server, and follows `config.toml` changes on its own; `agavai services` shows its state. See [engine configuration](docs/engines.md#services-follow-the-configuration).
 
 Spoken replies use **Kokoro-82M on CPU** (Apache-2.0). Whisper stays STT only.
 

@@ -1,6 +1,6 @@
 # Configure model roles
 
-Speech recognition and the local brain are configured independently in `~/.config/agavai/config.toml`. Restart the listening session after editing. Defaults remain Parakeet/ONNX and the existing `[llm]` Qwen/llama-server configuration.
+Speech recognition and the local brain are configured independently in `~/.config/agavai/config.toml`. Restart the listening session after editing; model services follow the file on their own (see [Services follow the configuration](#services-follow-the-configuration)). Defaults remain Parakeet/ONNX and the existing `[llm]` Qwen/llama-server configuration.
 
 | Role | Configuration | Supported choices |
 |---|---|---|
@@ -80,9 +80,7 @@ tool_selection = "routed"
 
 **Full-tool Needle, including Needle as its own router, is an opt-in experiment.** Installed-model probes selected volume and agent-listing correctly, but also mapped “what time is it” to screen inspection and “capital of France” to theme listing. A lean native prompt still mapped “explain quantum mechanics” to changing a theme. These are semantically wrong calls with valid schemas; no-call fallback cannot detect them. Keep `tool_selection = "routed"` for the conservative path. Full-tool plumbing tests do not establish selection accuracy. No host config is switched to all-tools automatically.
 
-The normal `agavai-llm` service launches the first configured llama tier: small if it uses llama, otherwise large. Restart that service after changing its model. Needle workers are launched by the session and need no service. A Needle-only configuration works without a running llama server.
-
-For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. The service launches the small llama role; run `scripts/agavai-llm large` separately for the larger llama role. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML. Remove `[brain.large]` to disable fallback.
+For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. `agavai-llm.service` runs the small llama role and `agavai-llm@large.service` the larger one. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML. Remove `[brain.large]` to disable fallback.
 
 Needle is a specialized tool model; it executes no tools itself. A valid supported call goes through the existing allowlist and confirmation flow. A simple result is acknowledged directly. No matching call, grounded-argument failure or runtime failure escalates if a larger role exists. Without one, the assistant explains that it could not handle the request and suggests a desktop request. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Routed Needle now honors the chosen router rather than forcing keyword selection. Needle retains shared session history but does not perform Qwen's conversation-classification call; unrelated requests retain canvas/history until reset with “Agavai.”
 
@@ -149,6 +147,12 @@ base_url = "https://openrouter.ai/api/alpha/decisions"
 model = "typesafe/jev-1.13"
 api_key_env = "OPENROUTER_API_KEY"
 ```
+
+## Services follow the configuration
+
+Only llama-server roles run as user services. `agavai-llm.service` runs the first llama role (small if it uses llama, otherwise large); `agavai-llm@large.service` runs the larger role when both roles use llama. Whistle, Needle and Kokoro workers start with each listening session and need no service, so a configuration without a llama role runs no llama-server at all.
+
+`agavai services sync` makes the units match `config.toml`. It starts a needed unit, restarts a running one whose launched settings (binary, model, host, port, context, GPU layers, alias) differ from the file, and stops and disables a unit no role needs. It checks unit files, binaries and model files first and changes nothing if one is missing. `scripts/agavai-llm` records what it launched in `$XDG_RUNTIME_DIR/agavai/llm-<role>.env` for that comparison. `scripts/install.sh` installs `agavai-config.path`, which runs the sync whenever `config.toml` is saved, and syncs once itself. `agavai services` shows what each unit is needed for and whether it runs; `agavai model set` applies its change the same way. Services read `~/.config/agavai/config.toml`, so the command refuses to run with `AGAVAI_CONFIG` pointing elsewhere.
 
 ## Failure bounds and tests
 

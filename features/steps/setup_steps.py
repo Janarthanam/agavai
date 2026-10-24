@@ -74,7 +74,7 @@ def setup_status(context, code):
     assert context.setup_result.returncode == code, context.setup_result.stderr
 
 
-def run_install(context, state, restart_fails=False, editor_status=None):
+def run_install(context, state, start_fails=False, editor_status=None):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         home = root / "home"
@@ -105,8 +105,8 @@ def run_install(context, state, restart_fails=False, editor_status=None):
             text = '#!/bin/sh\n'
             if name == "systemctl":
                 text += 'echo "$*" >> "$SETUP_TEST_LOG"\n'
-                if restart_fails:
-                    text += 'if [ "$2" = restart ]; then exit 1; fi\n'
+                if start_fails:
+                    text += 'if [ "$*" = "--user enable --now agavai-llm.service" ]; then exit 1; fi\n'
             command.write_text(text + "exit 0\n")
             command.chmod(0o755)
         env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
@@ -142,9 +142,9 @@ def install_config(context, state):
     run_install(context, state)
 
 
-@when("service restart fails during installation")
-def install_restart_fails(context):
-    run_install(context, "ready", restart_fails=True)
+@when("service start fails during installation")
+def install_start_fails(context):
+    run_install(context, "ready", start_fails=True)
 
 
 @when("I configure through the installation editor")
@@ -168,9 +168,10 @@ def no_service_commands(context):
     assert not context.service_exists
 
 
-@then("the service is installed and restarted")
-def service_restarted(context):
+@then("the service is installed and started by sync")
+def service_started(context):
     assert context.service_exists
-    assert context.service_commands[-3:] == [
-        "--user daemon-reload", "--user enable agavai-llm.service", "--user restart agavai-llm.service"
+    changes = [c for c in context.service_commands if not c.startswith(("--user is-active", "--user is-enabled"))]
+    assert changes[-3:] == [
+        "--user daemon-reload", "--user enable --now agavai-config.path", "--user enable --now agavai-llm.service"
     ], context.service_commands

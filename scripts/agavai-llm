@@ -6,13 +6,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 ROLE="${1:-service}"
-eval "$(python3 -m agavai dump-llm --role "$ROLE")"
+SETTINGS="$(python3 -m agavai dump-llm --role "$ROLE")"
+eval "$SETTINGS"
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agavai"
+mkdir -p "$RUN_DIR"
 if [[ "$ENGINE" == "none" ]]; then
+  rm -f "$RUN_DIR/llm-$ROLE.env"
   echo "No llama-server configured for role: $ROLE"
   exit 0
 fi
-LOG_DIR="${XDG_RUNTIME_DIR:-/tmp}/agavai"
-mkdir -p "$LOG_DIR"
 
 if [[ ! -x "$BIN" ]]; then
   echo "missing llama-server: $BIN" >&2
@@ -25,6 +27,8 @@ if [[ ! -f "$MODEL" ]]; then
   exit 1
 fi
 
+# agavai services sync compares this record with config.toml to decide on a restart.
+printf '%s\n' "$SETTINGS" > "$RUN_DIR/llm-$ROLE.env"
 cd "$(dirname "$BIN")"
 exec "$BIN" \
   --model "$MODEL" \

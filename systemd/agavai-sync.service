@@ -1,0 +1,6 @@
+[Unit]
+Description=Start, restart or stop Agavai model services to match config.toml
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/agavai services sync

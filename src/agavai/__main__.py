@@ -47,10 +47,14 @@ def main(argv: list[str] | None = None) -> int:
     model = sub.add_parser("model", help="Show, list, or select the on-device GGUF")
     model.add_argument("action", nargs="?", default="show", choices=["show", "list", "set"])
     model.add_argument("name", nargs="?", help="Model id for 'set'")
+    services = sub.add_parser("services", help="Show or sync the llama-server services that config.toml needs")
+    services.add_argument("action", nargs="?", default="status", choices=["status", "sync"])
     args = parser.parse_args(argv)
     # The hotkey and the detached listener have no terminal, so a bad config
     # must reach the journal before the configured level is known.
     journal.setup("info")
+    if args.cmd == "services":
+        return _services_cmd(args.action)
     try:
         cfg = load_config()
     except Exception:
@@ -138,6 +142,30 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def _services_cmd(action: str) -> int:
+    from agavai.services import ServiceError, service_config, status_lines, sync
+
+    try:
+        cfg = service_config()
+        lines = sync(cfg) if action == "sync" else status_lines(cfg)
+    except (ServiceError, ValueError) as exc:
+        print(f"agavai services: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(lines))
+    return 0
+
+
+def _apply_services() -> None:
+    """Bring the model services in line after this CLI changed config.toml."""
+    from agavai.services import ServiceError, service_config, sync
+
+    try:
+        for line in sync(service_config()):
+            print(line)
+    except (ServiceError, ValueError) as exc:
+        print(f"services not updated: {exc}", file=sys.stderr)
+
+
 def _model_cmd(cfg, action: str, name: str | None) -> int:
     if action == "list":
         for mid, spec in sorted(cfg.llm.models.items()):
@@ -158,7 +186,7 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
             return 1
         print(f"model_id={cfg.llm.model_id}")
         print(f"model_path={cfg.llm.model_path}")
-        print("restart the runner: systemctl --user restart agavai-llm")
+        _apply_services()
         return 0
     spec = cfg.llm.active_spec()
     print(f"model_id={cfg.llm.model_id}")
