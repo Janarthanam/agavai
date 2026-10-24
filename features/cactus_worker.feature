@@ -23,6 +23,10 @@ Feature: Installed Cactus engines use the product worker interfaces
     When I evaluate the volume task using full-tool Needle
     Then the simulated volume increases with all tools offered and no routing
 
+  Scenario: Needle routes to a separate agent without executing its candidates
+    When I evaluate installed Needle as a router for a simulated Qwen agent
+    Then the evaluator separates native routing from agent calls and executes only the agent action
+
   Scenario Outline: Whistle recognizes end of recorded speech through the capture path
     When I replay recorded speech and silence through the installed "<mode>" Whistle listener
     Then one final transcript includes the full recorded request without Enter

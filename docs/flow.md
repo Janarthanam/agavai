@@ -16,6 +16,8 @@ Model roles are independent: `[asr]` selects recognition, `[router]` selects opt
 
 These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
 
+`[router] backend = "needle-cactus"` selects Needle independently of the agent. Its `[router.needle]` model/runtime paths and token limit configure the existing Cactus worker; `[router] timeout_secs` bounds inference including worker startup. Needle receives all registered desktop schemas, and its candidate tool names select up to two heads. Candidate arguments are discarded and no candidate is executed. The agent receives those heads under the usual schema budget and generates its own calls. No match or runtime failure follows the configured keyword/none fallback. `list_agents` belongs to the agents head. An agent with `tool_selection = "all"` bypasses this router too; this retains Needle's combined selection-and-calling mode without two Needle calls.
+
 ## Requirements
 
 Agavai is a local Omarchy assistant for one person at the machine.
@@ -36,7 +38,7 @@ These are current tuning knobs, not separate service targets. Defaults are in [s
 | Knob | Default | What it changes |
 |---|---|---|
 | Streaming ASR device | CPU | GPU when the config selects GPU and an NVIDIA GPU is present |
-| `[router] timeout_secs` | 2 s | Cap on the Jev call |
+| `[router] timeout_secs` | 2 s | Cap on router inference; Needle example uses 10 s for cold startup |
 | `[router] max_tools` | 8 | Schemas injected into one completion |
 | `[llm] max_tool_rounds` | 6 | Tool loop cap |
 | `[llm] timeout_secs` | 120 s | Cap on one llama-server call |
@@ -94,7 +96,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **Assistant GGUF, not the dictation sanitizer.** `agavai-llm` loads the configured GGUF on port 18766, in its own user-service cgroup. Port 18765 is Voxtype’s smaller cleanup model. Reusing it would couple assistant restarts to `systemctl restart voxtype`, which [architecture.md](architecture.md) calls out as a hang. Assumption: the selected GGUF emits OpenAI tool calls or Qwen `<tool_call>` JSON. Default `n_gpu_layers = 0` runs that model on CPU. That setting is independent of the streaming ASR device.
 
-**Heads, not the full tool list.** [architecture.md](architecture.md) says the full set is about thirty schemas and about 1.7k tokens, which does not fit a 4B’s useful budget. Jev answers one typed choice (“which head?”). Keyword overlap is the offline path. A local decision model is the same `select()` contract and today runs the keyword router. Keyword-only stays on the machine and matches only the words listed on each head. Jev with `fallback = "none"` returns no tools when the key is missing or the call fails. The chosen path is Jev, then keyword. Assumption: two heads and eight schemas are enough for one utterance. A successful Jev answer of `chat` is not final: if keywords still match a head, those heads are attached anyway.
+**Routed agents receive tool groups.** Jev answers one typed choice (“which head?”). Needle selects candidate tool names from the full registered schemas; the router maps those names to heads without executing the calls. Keyword overlap is the offline path; `local` remains an alias for keywords. Routed agents receive at most two heads and the configured schema budget. A failure or an empty result uses keyword matching unless fallback is `none`. Agents configured with `tool_selection = "all"` bypass this selection and receive the full allowlist.
 
 **In-process tools, not MCP inside the turn.** The voice loop calls `DISPATCH` directly so the 4B does not speak a second protocol. `agavai mcp` exposes the same functions for other clients. Putting MCP on the voice path would add a stdio hop and a second schema encoding without changing what can run. Assumption: every desktop action the model needs is already a named function.
 
@@ -127,7 +129,7 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | Confirmation is malformed, names an unavailable tool, or accompanies other calls | Snapshot shows an error; no pending action or desktop execution is created. |
 | On-screen answer is missing a field or accompanies other calls | Snapshot shows an error; no canvas is published. |
 | Context classification fails or returns an invalid choice | Snapshot shows an error; the earlier canvas and model history remain. No action or answer call runs for that request. |
-| Jev times out, lacks a key, or HTTP fails | Keyword router, unless `[router] fallback` is `none`, in which case the turn has no tools. |
+| Jev/Needle routing fails or produces no matching head | Keyword router, unless `[router] fallback` is `none`, in which case the turn has no tools. |
 | Jev answers `chat` and keywords still match | Keyword heads are used. The remote answer is not authoritative. |
 | No mic frames, or streaming ASR cannot start | Snapshot phase `error`. The session process exits. The turn is not run. |
 | End of utterance with no words | The mic stays open. Nothing is spoken and the model is not called. Enter on an empty line speaks “I did not hear anything.” |
@@ -213,12 +215,12 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 
 [src/agavai/router.py](../src/agavai/router.py) and [src/agavai/heads.py](../src/agavai/heads.py).
 
-- **Deploy.** In-process. Jev is an HTTPS call. Keyword and local do not leave the machine.
+- **Deploy.** Selection runs in-process. Jev calls HTTPS; Needle inference runs in a persistent Cactus child worker. Keyword, local and Needle do not leave the machine.
 - **Lifecycle.** `select(utterance)` returns up to two head ids, or none for chat. Jev posts one `choice` question to the Decisions API. `chat` or an empty choice means no heads from Jev. Keyword scores head keywords and keeps those tied for the top score, at most two. `local` calls keyword. After any successful empty result, keyword still runs when fallback is not `none`.
-- **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. The enforced cap is `[router] timeout_secs` (2 s). Keyword is local string matching; no budget is set. The 2 s cap is what keeps a dead OpenRouter from holding the turn longer than that before fallback.
+- **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. `[router] timeout_secs` caps inference, including Needle worker startup. Default is 2 s; the Needle profile uses 10 s. These are failure bounds. Keyword is local string matching; no budget is set. Eval traces record Needle routing duration separately from agent calls.
 - **Throughput.** One decision per turn. No batching.
-- **Configuration.** `[router] backend` (`jev`, `keyword`, `local`), `fallback`, `timeout_secs`, `max_tools`. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
-- **Observability.** The request log has `router backend=… source=… heads=… secs=…`. `source` names the router whose answer supplied the heads, so a keyword route after a Jev `chat` answer is visible. A Jev failure is a warning naming the exception and the fallback. The chosen head ids are not written to Snapshot.
+- **Configuration.** `[router] backend` (`jev`, `needle-cactus`, `keyword`, `local`, `none`), `fallback`, `timeout_secs`, `max_tools`. `[router.needle]` model id/path, Cactus venv/library and max_tokens. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
+- **Observability.** The request log has `router backend=… source=… heads=… secs=…`. `source` names the router whose answer supplied the heads, so a keyword route after a Jev or Needle `chat` answer is visible. A router failure is a warning naming the exception and the fallback. Eval traces label Needle model exchanges `routing` and fingerprint its model/runtime alongside agent engines. The chosen head ids are not written to Snapshot.
 
 Heads:
 
@@ -233,6 +235,7 @@ Heads:
 | files | `search_files` |
 | capture | `screenshot`, `screen_context` |
 | reminders | `reminder`, `list_reminders`, `clear_reminders`, `send_notification`, `clock_now` |
+| agents | `list_agents` |
 
 ### LlamaServer
 

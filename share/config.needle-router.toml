@@ -1,0 +1,50 @@
+# Whistle → Needle3 router → Qwen agent. Complete config, not an include.
+# Install Cactus with scripts/setup-cactus.sh; Qwen needs agavai-llm running.
+# Needle selects tool groups only. Qwen owns final calls and arguments.
+# Full-schema Needle selection can misroute; see docs/engines.md.
+
+[asr]
+backend = "whistle-cactus"
+model_path = "~/.local/share/agavai/cactus/whistle.cact"
+runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+venv = "~/.local/share/agavai/cactus/venv"
+device = "cpu"
+mode = "streaming"
+endpoint = "vad"
+
+[vad]
+backend = "energy"
+enabled = true
+silence_ms = 900
+min_speech_ms = 250
+max_record_ms = 120000
+
+[router]
+backend = "needle-cactus"
+fallback = "keyword"
+timeout_secs = 10
+max_tools = 8
+
+[router.needle]
+model = "needle3"
+model_path = "~/.local/share/agavai/cactus/needle3.cact"
+runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+venv = "~/.local/share/agavai/cactus/venv"
+max_tokens = 512
+
+[brain.small]
+backend = "llama-server"
+model = "qwen3-4b-instruct"
+host = "127.0.0.1"
+port = 18766
+alias = "agavai"
+tool_selection = "routed"
+timeout_secs = 120
+max_tokens = 512
+max_tool_rounds = 6
+
+[tts]
+prefer = "kokoro"
+voice = "af_bella"
+
+# Optional local fallback is [brain.large]. Cloud/OpenAI is deferred.

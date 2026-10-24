@@ -64,6 +64,8 @@ def invalid_config(context, setting):
         'unknown tool selection': '[brain.small]\nmodel="qwen3-4b-instruct"\ntool_selection="guess"',
         'unknown router': '[router]\nbackend="guess"',
         'zero tool budget': '[router]\nmax_tools=0',
+        'missing router model': '[router]\nbackend="needle-cactus"',
+        'zero router tokens': '[router]\nbackend="needle-cactus"\n[router.needle]\nmodel_path="/needle.cact"\nmax_tokens=0',
         'cloud deferred': '[brain.cloud]\nbackend="openai-compatible"',
     }
     context.engine_path.write_text(variants[setting])
@@ -829,3 +831,107 @@ def unknown_all_tool(context):
 def unknown_all_tool_result(context):
     assert context.executed_tools == 0
     assert 'unavailable in this turn: shell' in context.reply
+
+
+@when('I select Needle routing with "{speech}" and a "{policy}" "{agent_backend}" agent')
+def needle_routed_agent(context, speech, policy, agent_backend):
+    path = directory(context) / 'config.toml'
+    path.write_text(f'''[asr]
+backend = "{speech}"
+endpoint = "{'native' if speech == 'parakeet-onnx' else 'manual'}"
+[router]
+backend = "needle-cactus"
+fallback = "none"
+timeout_secs = 7
+max_tools = 2
+[router.needle]
+model = "needle3"
+model_path = "/routing/needle.cact"
+runtime_library = "/routing/libneedle.so"
+venv = "/routing/venv"
+max_tokens = 128
+[brain.small]
+backend = "{agent_backend}"
+model = "qwen3-4b-instruct"
+model_path = "/agent/model"
+tool_selection = "{policy}"
+''')
+    cfg = load_config(path)
+    router = Mock()
+    router.respond.return_value = {'tool_calls': [{'function': {'name': 'set_volume', 'arguments': '{"action":"lower"}'}}]}
+    agent = Mock(tool_only=agent_backend == 'needle-cactus')
+    agent.ready.return_value = True
+    agent.respond.side_effect = [
+        {'tool_calls': [{'id':'volume', 'function': {'name':'set_volume', 'arguments':'{"action":"raise"}'}}]},
+        {'content': 'Volume increased.'},
+    ]
+    with patch('agavai.router.create_brain', return_value=router) as factory, patch('agavai.orchestrator.create_brain', return_value=agent), patch('agavai.orchestrator.call_tool', return_value='Volume increased.') as tool:
+        context.reply = run_turn('increase playback level', cfg, context.ui)
+    context.routing_cfg, context.routing_policy = cfg, policy
+    context.routing_factory, context.routing_model = factory, router
+    context.routing_agent, context.routing_actions = agent, tool
+
+
+@then('the router only selects schemas and the agent owns the executed arguments')
+def needle_routed_agent_result(context):
+    from agavai.tools import OPENAPI_TOOLS
+    cfg, policy = context.routing_cfg, context.routing_policy
+    model = cfg.router.needle
+    assert model.backend == 'needle-cactus' and model.model_id == 'needle3'
+    assert str(model.model_path) == '/routing/needle.cact'
+    assert str(model.runtime_library) == '/routing/libneedle.so' and str(model.venv) == '/routing/venv'
+    assert model.max_tokens == 128 and model.timeout_secs == cfg.router.timeout_secs == 7
+    assert cfg.small_brain.model_path != model.model_path
+    if policy == 'routed':
+        context.routing_factory.assert_called_once_with(model, chat=None, health=None)
+        assert context.routing_model.respond.call_args.args[1] == OPENAPI_TOOLS
+    else:
+        context.routing_factory.assert_not_called()
+        context.routing_model.respond.assert_not_called()
+    for request in context.routing_agent.respond.call_args_list:
+        offered = [t['function']['name'] for t in request.args[1]]
+        expected = ['set_volume'] if policy == 'routed' else [t['function']['name'] for t in OPENAPI_TOOLS]
+        assert offered == expected + ['request_confirmation'], offered
+        assert 'routing candidates' not in json.dumps(request.args[0])
+    context.routing_actions.assert_called_once()
+    name, args, _ = context.routing_actions.call_args.args
+    assert name == 'set_volume'
+    assert (json.loads(args) if isinstance(args, str) else args) == {'action': 'raise'}
+
+
+@when('I evaluate installed Needle as a router for a simulated Qwen agent')
+def native_needle_router_eval(context):
+    from agavai.brain import close_brains
+    from evals.cases import load_cases
+    from evals.runner import run_case
+    root = installed_cactus()
+    cfg = Config()
+    cfg.router.backend = 'needle-cactus'
+    cfg.router.fallback = 'none'
+    cfg.router.timeout_secs = 20
+    cfg.router.needle = LlmConfig(backend='needle-cactus', model_id='needle3', venv=root/'venv',
+                                 model_path=root/'needle3.cact', runtime_library=root/'libneedle.so', timeout_secs=20)
+    replies = iter([
+        {'tool_calls':[{'id':'volume', 'function':{'name':'set_volume', 'arguments':'{"action":"raise"}'}}]},
+        {'content':'Volume increased.'},
+    ])
+    try:
+        case = next(c for c in load_cases() if c.id == 'desktop.volume.up')
+        with patch('evals.runner.real_chat', side_effect=lambda *a, **k: next(replies)), patch('evals.runner.health', return_value=True):
+            context.native_evaluation = run_case(case, cfg, set())
+    finally:
+        close_brains()
+
+
+@then('the evaluator separates native routing from agent calls and executes only the agent action')
+def native_needle_router_eval_result(context):
+    from agavai.tools import OPENAPI_TOOLS
+    result = context.native_evaluation
+    assert result['outcome'] == 'done', result
+    turn = result['turns'][0]
+    assert turn['heads'] == [['audio']], turn
+    route, *agent = turn['model']
+    assert route['kind'] == 'routing' and route['backend'] == 'needle-cactus' and route['seconds'] > 0, route
+    assert route['offered'] == [t['function']['name'] for t in OPENAPI_TOOLS]
+    assert all(m['kind'] == 'action' and m['backend'] == 'llama-server' for m in agent), agent
+    assert len(turn['tools']) == 1 and json.loads(turn['tools'][0]['arguments']) == {'action': 'raise'}, turn

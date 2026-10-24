@@ -73,4 +73,4 @@ PYTHONPATH=src behave
 PYTHONPATH=src .venv/bin/python -m evals run      # writes evals/results/<run>/report.json and report.html
 ```
 
-Speech, routing, agent and local fallback can be selected independently. See [engine configuration](docs/engines.md) for supported choices and [the full-tool Needle example](share/config.needle.toml) for Whistle → Needle3 → local Qwen. Cloud support is deferred; full-tool Needle is an opt-in experiment because native probes found incorrect selections.
+Speech, routing, agent and local fallback can be selected independently. See [engine configuration](docs/engines.md), [Needle router + Qwen agent](share/config.needle-router.toml), or [full-tool Needle + local Qwen fallback](share/config.needle.toml). Cloud support is deferred; full-tool Needle is an opt-in experiment because native probes found incorrect selections.

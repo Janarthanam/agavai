@@ -21,7 +21,8 @@ max_record_ms = 120000
 
 [router]
 # Used only by tiers with tool_selection="routed". Needle below skips it.
-# Choices: keyword, jev, none. none gives both tiers all tools.
+# Choices: keyword, jev, needle-cactus, none. none gives both tiers all tools.
+# Needle routing requires [router.needle]; see config.needle-router.toml.
 backend = "keyword"
 fallback = "keyword"
 max_tools = 8

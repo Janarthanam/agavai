@@ -50,7 +50,8 @@ venv = "~/.local/share/agavai/tts-venv"
 card_dir = "~/.config/agavai/a2a"
 
 [router]
-# jev | keyword | none. local is an alias for keyword, not a local model.
+# jev | needle-cactus | keyword | none. local is an alias for keyword.
+# For Needle router runtime/model paths, see config.needle-router.toml.
 # Only routed tiers use this section; none gives all tools to both tiers.
 backend = "jev"
 fallback = "keyword"

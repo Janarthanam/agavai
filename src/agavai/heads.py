@@ -84,6 +84,12 @@ HEADS: tuple[ToolHead, ...] = (
         ("remind", "reminder", "notify", "notification", "time", "clock", "date"),
         ("reminder", "list_reminders", "clear_reminders", "send_notification", "clock_now"),
     ),
+    ToolHead(
+        "agents",
+        "List installed assistant agents and their capabilities.",
+        ("agents", "available agents", "installed agents"),
+        ("list_agents",),
+    ),
 )
 
 HEAD_BY_ID = {h.id: h for h in HEADS}

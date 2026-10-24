@@ -5,12 +5,12 @@ Speech recognition and the local brain are configured independently in `~/.confi
 | Role | Configuration | Supported choices |
 |---|---|---|
 | Voice input | `[asr]` | `parakeet-onnx` (native endpoint), `whistle-cactus` (energy VAD or manual finish; streaming or batch) |
-| Router / decision | `[router]` | `keyword`, `jev` with a configured model, `none` to bypass routing; `local` is an alias for keyword, not another model |
+| Router / decision | `[router]` | `needle-cactus` with `[router.needle]`, `keyword`, `jev` with `[router.jev]`, `none` to bypass routing; `local` is an alias for keyword |
 | Local agent / tool calling | `[brain.small]`, or `[llm]` when absent | Needle3 with `needle-cactus`; Qwen3 or a configured tool-capable GGUF with `llama-server` |
 | Local fallback | optional `[brain.large]` | Same brain backends; current setup uses local Qwen3-4B |
 | Cloud | Deferred | OpenAI/cloud adapters are not implemented; `[brain.cloud]` is rejected |
 
-Needle can perform both tool selection and argument generation. It does not need to be configured twice as a router and an agent. The complete [Whistle + full-tool Needle + local Qwen example](../share/config.needle.toml) can be loaded with `AGAVAI_CONFIG="$PWD/share/config.needle.toml" agavai status`. It does not edit the installed config. The [default example](../share/config.example.toml) uses Parakeet + Jev + Qwen. Neither profile depends on a particular speech/brain pairing. OpenAI Whisper is not an implemented recognizer; Whistle is the supported Cactus model.
+Needle has two supported roles. As a router, it selects tool groups for a separate agent such as Qwen. As a full-tool agent, it handles selection and argument generation in one call and skips the router. Complete examples cover [Whistle + Needle router + Qwen agent](../share/config.needle-router.toml) and [Whistle + full-tool Needle agent + local Qwen fallback](../share/config.needle.toml). Load a profile with `AGAVAI_CONFIG="$PWD/share/config.needle-router.toml" agavai status`; this does not edit the installed config. The [default example](../share/config.example.toml) uses Parakeet + Jev + Qwen. Any of these role choices works with either recognizer. OpenAI Whisper is not implemented; Whistle is the supported Cactus model.
 
 Speech output remains independently configured in `[tts]`: `prefer = "kokoro"`, `"espeak"` or `"notify"`; Kokoro's example voice is `af_bella`.
 
@@ -76,7 +76,7 @@ tool_selection = "routed"
 # llama_bin = "/path/to/llama-server"
 ```
 
-`tool_selection = "all"` supplies all 35 registered desktop schemas (plus confirmation in interactive sessions) and skips both Jev and keyword routing. It includes `list_agents`, which is absent from the routed heads. `tool_selection = "routed"` (default) uses the configured router and its `max_tools` budget. These choices apply to both brain backends and both roles. With Needle/all and Qwen/routed, the router runs only after escalation to Qwen. Set `[router] backend = "none"` to give both roles all tools, regardless of their per-role policy.
+`tool_selection = "all"` supplies all 35 registered desktop schemas (plus confirmation in interactive sessions) and skips routing, including Needle routing. `list_agents` is also available through the routed agents head. `tool_selection = "routed"` (default) uses the configured router and its `max_tools` budget. These choices apply to both brain backends and both roles. With Needle/all and Qwen/routed, the router runs only after escalation to Qwen. Set `[router] backend = "none"` to give both roles all tools, regardless of their per-role policy.
 
 **Full-tool Needle is an opt-in experiment.** Installed-model probes selected volume and agent-listing correctly, but also mapped “what time is it” to screen inspection and “capital of France” to theme listing. A lean native prompt still mapped “explain quantum mechanics” to changing a theme. These are semantically wrong calls with valid schemas; no-call fallback cannot detect them. Keep `tool_selection = "routed"` for the conservative path. Full-tool plumbing tests do not establish selection accuracy. No host config is switched to all-tools automatically.
 
@@ -111,6 +111,29 @@ port = 18766
 alias = "agavai"
 tool_selection = "routed"
 ```
+
+## Needle as a separate router
+
+With Qwen configured as the primary agent above, replace the router tables:
+
+```toml
+[router]
+backend = "needle-cactus"
+fallback = "keyword"
+timeout_secs = 10
+max_tools = 8
+
+[router.needle]
+model = "needle3"
+model_path = "~/.local/share/agavai/cactus/needle3.cact"
+runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+venv = "~/.local/share/agavai/cactus/venv"
+max_tokens = 512
+```
+
+The flow is committed speech/text → Needle selects heads → Qwen generates calls → coordinator validates and executes → Qwen replies. Needle sees every registered desktop schema, independent of `max_tools`. Only its tool names select heads, at most two; its arguments are discarded. Qwen receives those heads under `max_tools` and must decide its own calls and arguments. Selecting no head still lets Qwen answer general questions. Runtime failure or no match uses `fallback = "keyword"`, or no heads with `fallback = "none"`. Configure the inference deadline on `[router] timeout_secs`; `[router.needle]` supplies model/runtime settings, not a second timeout.
+
+The router runs in the session through a separate persistent Cactus worker process, using the same adapter as a Needle agent. The example allows 10 seconds including cold startup; this is a failure bound, not an expected latency. Eval traces label these exchanges `routing` separately from agent calls. Needle's full-schema selection errors described above can still choose the wrong head. Qwen reassesses the request but cannot recover a tool that routing omitted through this selection alone; broad semantic accuracy is not established.
 
 To choose Jev for routed tiers, replace the router tables:
 

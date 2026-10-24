@@ -22,6 +22,7 @@ from typing import Any, Callable
 from unittest.mock import patch
 
 import agavai.orchestrator as orchestrator
+import agavai.router as router
 import agavai.tools as tools
 from agavai.config import Config, load_config
 from agavai.llm import chat as real_chat
@@ -159,6 +160,8 @@ class Recorder:
 
     def record_model(self, cfg, messages, tools, invoke):
         kind = "context" if messages and messages[0].get("content") == orchestrator.CONTEXT_SYSTEM else "action"
+        if messages and messages[0].get("content") == router.NEEDLE_ROUTER_SYSTEM:
+            kind = "routing"
         start = time.monotonic()
         entry: dict[str, Any] = {"kind": kind, "backend": cfg.backend, "model": cfg.model_id,
                                  "offered": [t["function"]["name"] for t in tools or []]}
@@ -234,6 +237,7 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
         stack.enter_context(patch.dict(tools.DISPATCH, {"clock_now": lambda _a, _c: clock.now.strftime("%A, %Y-%m-%d %H:%M")}))
         stack.enter_context(patch.object(orchestrator, "chat", recorder.chat))
         stack.enter_context(patch.object(orchestrator, "create_brain", recorder.brain))
+        stack.enter_context(patch.object(router, "create_brain", recorder.brain))
         stack.enter_context(patch.object(orchestrator, "call_tool", recorder.call_tool))
         stack.enter_context(patch.object(orchestrator, "select_head_ids", recorder.select_head_ids))
         ui = ChatUi(cfg)
@@ -393,7 +397,9 @@ def fingerprint(cfg: Config, bindings: dict[str, Any]) -> dict[str, Any]:
             "endpoint": model.base_url if model.backend == "llama-server" else "worker",
             "runtime_sha256": _sha256(model.runtime_library) if model.runtime_library and model.runtime_library.is_file() else "",
             "temperature": model.temperature, "seed": model.seed, "max_tokens": model.max_tokens,
-        } for role, model in (("small", cfg.small_brain or cfg.llm), ("large", cfg.large_brain)) if model is not None},
+            "timeout_secs": model.timeout_secs,
+        } for role, model in (("small", cfg.small_brain or cfg.llm), ("large", cfg.large_brain),
+                              ("router", cfg.router.needle if cfg.router.backend == "needle-cactus" else None)) if model is not None},
     }
 
 

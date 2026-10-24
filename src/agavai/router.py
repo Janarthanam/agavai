@@ -1,4 +1,4 @@
-"""Select tool heads. Jev via OpenRouter by default; keyword fallback; local stub."""
+"""Select tool heads using Jev, Needle or keywords, without executing calls."""
 
 from __future__ import annotations
 
@@ -12,9 +12,18 @@ import urllib.request
 from typing import Protocol
 
 from agavai.config import Config
-from agavai.heads import HEADS, JEV_HEAD_CRITERIA
+from agavai.brain import create_brain
+from agavai.heads import HEADS, JEV_HEAD_CRITERIA, head_for_tool
+from agavai.llm import parse_tool_calls
+from agavai.tools import OPENAPI_TOOLS
 
 log = logging.getLogger(__name__)
+
+NEEDLE_ROUTER_SYSTEM = (
+    "Select tools relevant to the user's request. Do not invent arguments. "
+    "Return no tool call if none matches. These are routing candidates only; "
+    "another model will decide the final calls."
+)
 
 
 class ToolRouter(Protocol):
@@ -48,6 +57,26 @@ class LocalRouter:
 
     def select(self, utterance: str) -> list[str]:
         return KeywordRouter().select(utterance)
+
+
+class NeedleRouter:
+    def __init__(self, cfg: Config) -> None:
+        self.cfg = cfg
+
+    def select(self, utterance: str) -> list[str]:
+        if self.cfg.router.needle is None:
+            raise ValueError("Needle router needs [router.needle] model/runtime configuration")
+        brain = create_brain(self.cfg.router.needle, chat=None, health=None)
+        message = brain.respond([
+            {"role": "system", "content": NEEDLE_ROUTER_SYSTEM},
+            {"role": "user", "content": utterance},
+        ], list(OPENAPI_TOOLS))
+        heads = []
+        for call in parse_tool_calls(message):
+            head = head_for_tool(call["function"].get("name"))
+            if head and head not in heads:
+                heads.append(head)
+        return heads
 
 
 class JevRouter:
@@ -112,6 +141,8 @@ def make_router(cfg: Config) -> ToolRouter:
         return KeywordRouter()
     if backend == "local":
         return LocalRouter()
+    if backend == "needle-cactus":
+        return NeedleRouter(cfg)
     return JevRouter(cfg)
 
 

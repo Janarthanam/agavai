@@ -26,6 +26,8 @@ Feature: Select speech and brain engines independently
       | unknown tool selection | tool_selection must be all/routed |
       | unknown router | Unknown router backend |
       | zero tool budget | Invalid router |
+      | missing router model | [router.needle] needs model_path |
+      | zero router tokens | Invalid limits in [router.needle] |
       | cloud deferred | Cloud models are not supported yet |
       | vad disabled | enabled |
       | vad backend | backend=energy |
@@ -88,6 +90,21 @@ Feature: Select speech and brain engines independently
     Given a chat UI in a temp runtime dir
     When full-tool Needle proposes an agent listing for confirmation
     Then no tool runs until Yes and the confirmed agent listing runs once
+
+  Scenario Outline: Needle routing is independent of recognition and skipped by all-tool agents
+    Given a chat UI in a temp runtime dir
+    When I select Needle routing with "<speech>" and a "<policy>" "<agent>" agent
+    Then the router only selects schemas and the agent owns the executed arguments
+    Examples:
+      | speech | policy | agent |
+      | parakeet-onnx | routed | llama-server |
+      | whistle-cactus | routed | llama-server |
+      | parakeet-onnx | all | llama-server |
+      | whistle-cactus | all | llama-server |
+      | parakeet-onnx | routed | needle-cactus |
+      | whistle-cactus | routed | needle-cactus |
+      | parakeet-onnx | all | needle-cactus |
+      | whistle-cactus | all | needle-cactus |
 
   Scenario: A routed agent can fall back to a full-tool agent
     Given a chat UI in a temp runtime dir
