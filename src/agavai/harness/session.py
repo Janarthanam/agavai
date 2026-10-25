@@ -188,6 +188,7 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False, harness: Harness | 
     stop_requested = False
     cancel_requested = False
     requests = _RecordRequests(cfg)
+    harness.should_cancel = lambda: (stop_requested and cancel_requested) or requests.signalled
 
     def on_sigterm(signum, frame):
         nonlocal stop_requested, cancel_requested
@@ -206,8 +207,8 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False, harness: Harness | 
     try:
         log.info("session start")
         if record:
-            ui.begin_session()
-            ended = _record_session(cfg, ui, requests, lambda: stop_requested)
+            ui.begin_session(harness.context.session_id)
+            ended = _record_session(cfg, ui, requests, lambda: stop_requested, harness=harness)
             return 1 if ended == "error" else 0
         try:
             stream = open_stream(cfg)
@@ -234,7 +235,7 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False, harness: Harness | 
             if heard == "record":
                 # Only a toggle starts a recording; stop, pause, and mark need one running.
                 if "toggle" in requests.take():
-                    if _record_session(cfg, ui, requests, lambda: stop_requested) == "cancel":
+                    if _record_session(cfg, ui, requests, lambda: stop_requested, harness=harness) == "cancel":
                         return 0
                     stop_requested = False
                     followups += 1
@@ -374,7 +375,7 @@ def _await_utterance(
     return "ended", ""
 
 
-def _record_session(cfg, ui: ChatUi, requests: _RecordRequests, stopping) -> str:
+def _record_session(cfg, ui: ChatUi, requests: _RecordRequests, stopping, *, harness: Harness) -> str:
     """One recording. Every way of stopping saves it: SIGTERM, "Agavai stop", and `agavai record`.
 
     Returns "saved", "cancel" when the overlay was dismissed (the recording is
@@ -453,6 +454,8 @@ def _record_session(cfg, ui: ChatUi, requests: _RecordRequests, stopping) -> str
         write_state(cfg, "error")
         return "error"
     folder = recorder.finish()
+    harness.context.recording = folder
+    harness.context.source_active = True
     cue_record(cfg, starting=False)
     ui.end_recording()
     if ui.cancelled():

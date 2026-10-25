@@ -106,7 +106,7 @@ class ChatUi:
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
-                    for key in ("level_db", "vad_state", "vad_backend", "display", "ts", "transcript", "answer_html", "error", "recording"):
+                    for key in ("level_db", "vad_state", "vad_backend", "display", "ts", "transcript", "answer_html", "error", "recording", "source", "task"):
                         loaded.pop(key, None)
                     self.data.update(loaded)
                     self.data["turns"] = []
@@ -119,13 +119,13 @@ class ChatUi:
         self.data["model_id"] = (cfg.small_brain or cfg.llm).model_id
         self.data["input_mode"] = "typed"
 
-    def begin_session(self) -> None:
+    def begin_session(self, session_id: str) -> None:
         """Reset the overlay to a blank session: prior turns and canvas drop."""
         self.clear_conversation()
         self.data["level_db"] = None
         self.data["vad_state"] = "off"
         self.data["vad_backend"] = "off"
-        self.data["session_id"] = uuid.uuid4().hex
+        self.data["session_id"] = session_id
         self.data["input_mode"] = "typed"
 
     def clear_conversation(self) -> None:
@@ -136,7 +136,13 @@ class ChatUi:
         self.data.pop("error", None)
         self.data.pop("display", None)
         self.data.pop("completion", None)
+        self.data.pop("source", None)
+        self.data.pop("task", None)
         self.data["execution"] = []
+
+    def task_state(self, task_id: str, request_id: str, status: str) -> None:
+        self.data["task"] = {"id": task_id, "request_id": request_id, "status": status}
+        self._write()
 
     def pipeline_event(self, stage: str, detail: str) -> None:
         self.data["execution"].append({"stage": stage, "detail": detail})
@@ -151,7 +157,7 @@ class ChatUi:
             self.pipeline_event("Reply", "notification only · speech unavailable" if engine == "notify" else engine)
 
     def listening(self) -> None:
-        self.begin_session()
+        self.clear_conversation()
         self.data["input_mode"] = "voice"
         self._set_phase("listening", "Listening")
         self._write(summon=True)
@@ -206,8 +212,6 @@ class ChatUi:
         self.data.pop("answer_html", None)
         self.data.pop("completion", None)
         self.data["transcript"] = {"text": text.strip(), "final": True}
-        if not self.data.get("session_id"):
-            self.data["session_id"] = uuid.uuid4().hex
         self._set_phase("thinking", "Thinking")
         turns = list(self.data.get("turns") or [])
         turns.append({"user": text.strip(), "tools": [], "assistant": ""})
@@ -245,7 +249,7 @@ class ChatUi:
                 detail = name.replace("_", " ")
             self.data["completion"] = {
                 "ok": not failed,
-                "title": "Done" if not failed else "Not completed",
+                "title": "Outcome unknown" if status == "unknown" else "Done" if not failed else "Not completed",
                 "detail": detail,
                 "tool": name,
             }

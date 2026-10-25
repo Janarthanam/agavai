@@ -441,6 +441,11 @@ def needle_fallback(context, text):
 @then('Needle offers the full allowlist and Qwen offers only "{schemas}" before answering')
 def needle_fallback_answer(context, schemas):
     from agavai.tools import OPENAPI_TOOLS
+    if context.fallback_request == 'What is the capital of France?':
+        context.small_engine.respond.assert_not_called()
+        assert context.reply == 'Larger answer.' and context.executed_tools == 0
+        assert [item['function']['name'] for item in context.engine_tools[0]] == ['show_answer']
+        return
     context.small_engine.respond.assert_called_once()
     messages, offered = context.small_engine.respond.call_args.args
     assert [item['function']['name'] for item in offered] == [item['function']['name'] for item in OPENAPI_TOOLS] + ['request_confirmation']

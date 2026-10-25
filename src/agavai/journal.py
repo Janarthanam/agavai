@@ -8,12 +8,15 @@ replies, and tool arguments and results are logged only at debug level.
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 import logging.handlers
 
 JOURNAL_SOCKET = "/dev/log"
 TEXT_CHARS = 500
 
 _request = "-"
+_bound_request = ContextVar("agavai_request", default=None)
 _session = ""
 _count = 0
 
@@ -37,7 +40,7 @@ def tagged(handler: logging.Handler) -> logging.Handler:
 
 
 def _stamp_request(record: logging.LogRecord) -> bool:
-    record.request = _request
+    record.request = _bound_request.get() or _request
     return True
 
 
@@ -54,3 +57,12 @@ def clip(text: object) -> str:
     """One line of user text for a debug record."""
     line = " ".join(str(text).split())
     return line if len(line) <= TEXT_CHARS else line[: TEXT_CHARS - 1] + "…"
+
+
+@contextmanager
+def request_scope(request):
+    token = _bound_request.set(request)
+    try:
+        yield
+    finally:
+        _bound_request.reset(token)

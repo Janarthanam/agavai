@@ -6,15 +6,7 @@ from behave import given, then, when
 
 from agavai.config import Config
 from agavai.tools import call_tool
-from agavai.tools import (
-    bluetooth,
-    open_app,
-    screenshot,
-    send_notification,
-    set_brightness,
-    set_volume,
-    workspace_step,
-)
+
 
 
 @given("omarchy commands succeed")
@@ -30,17 +22,17 @@ def step_ok(context):
 
 @when('I set volume action "{action}"')
 def step_vol(context, action):
-    context.tool_result = set_volume({"action": action}, Config())
+    context.tool_result = call_tool("set_volume", {"action": action}, Config())
 
 
 @when('I set brightness action "{action}"')
 def step_bright(context, action):
-    context.tool_result = set_brightness({"action": action}, Config())
+    context.tool_result = call_tool("set_brightness", {"action": action}, Config())
 
 
 @when('I set bluetooth action "{action}"')
 def step_bt(context, action):
-    context.tool_result = bluetooth({"action": action}, Config())
+    context.tool_result = call_tool("bluetooth", {"action": action}, Config())
 
 
 @when('I take a screenshot with mode "{mode}"')

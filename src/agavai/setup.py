@@ -354,7 +354,7 @@ def describe_plan(plan: Plan) -> list[str]:
 
 QUESTIONS = {
     "speech": "Speech input: what turns your voice into text",
-    "small": "Small brain: the first model to handle each request",
+    "small": "Small brain: the primary model for supported action requests",
     "router": "Router: which tools the small brain gets to see",
     "large": "Larger brain: takes over when the small brain cannot handle a request",
 }
@@ -538,10 +538,13 @@ def walkthrough(cfg: Config) -> list[str]:
         lines += _step("1. Listen", "Parakeet-EOU-120M runs in a speech worker started with each listening session. "
                                     "Words appear while you speak, and the model sends the request when it hears the "
                                     "sentence end. Enter sends sooner; Escape cancels.")
-    lines += _step("2. Decide", _decide(cfg, small))
+    lines += _step("2. Decide", "The in-process harness handles controls, recording sources and task context first. "
+                   "Language questions and self-corrections use a configured language-capable brain directly. "
+                   "For action requests: " + _decide(cfg, small))
     lines += _step("3. Act", f"The session checks each call against the {len(DISPATCH)}-tool allowlist, asks you first "
                              f"when a tool needs confirmation, and runs it. Models never run commands themselves.")
-    lines += _step("4. Fallback", _fallback(cfg, small, large))
+    lines += _step("4. Fallback", _fallback(cfg, small, large) + " Structured tool results also need a language-capable "
+                   "brain for interpretation; completed actions are not replayed. Record and cancel controls stay responsive while inference waits.")
     lines += _step("5. Reply", REPLY.get(cfg.tts.prefer, REPLY["kokoro"]))
     lines.append("")
     running = [f"{unit} for {role_label(cfg, role)} ({cfg.llama_for_role(role).model_id})"

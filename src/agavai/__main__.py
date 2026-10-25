@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import signal
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 from agavai import journal
@@ -63,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     services.add_argument("action", nargs="?", default="status", choices=["status", "sync"])
     setup = sub.add_parser("setup", help="Choose, download and configure the speech and brain models")
     setup.add_argument("--speech", choices=SPEECH)
-    setup.add_argument("--small", metavar="needle|GGUF-ID", help="the first model to handle each request")
+    setup.add_argument("--small", metavar="needle|GGUF-ID", help="the primary model for supported action requests")
     setup.add_argument("--large", metavar="none|GGUF-ID", help="the model that takes over when the small one cannot")
     setup.add_argument("--router", choices=ROUTERS)
     setup.add_argument("--yes", action="store_true", help="apply without asking")
@@ -132,11 +128,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "ask":
         text = " ".join(args.text)
         ui = ChatUi(cfg)
-        ui.begin_session()
+        harness = Harness(cfg, ui)
         journal.start_request(str(ui.data["session_id"]))
         cue_think(cfg)
         write_state(cfg, "thinking")
-        reply = Harness(cfg, ui).run_turn(text)
+        reply = harness.run_turn(text)
         if ui.cancelled():
             write_state(cfg, "idle")
             return 0

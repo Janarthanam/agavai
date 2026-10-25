@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='agv-') as directory:
                 cfg = load_config(root / 'share/config.example.toml')
                 cfg.runtime_dir = runtime / 'agavai'
                 ui = ChatUi(cfg)
-                ui.begin_session()
+                ui.begin_session("native-ui-check")
                 ui.data['phase'] = 'listening'
                 env['AGAVAI_UI_HELP_JSON'] = json.dumps(ui.data)
         result = subprocess.run(['quickshell', '-p', str(runtime / 'shell.qml'), '--no-color'],

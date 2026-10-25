@@ -166,13 +166,15 @@ def help_execution(context):
 
 @when('the pipeline help listener handles a committed request without speech assets')
 def help_listener(context):
+    from agavai.harness import Harness
     from agavai.harness.session import _run_stop_body
     cfg = load_config(context.help_config_path)
     cfg.runtime_dir = context.help_dir / 'agavai'
     ui = ChatUi(cfg)
     with patch.dict(os.environ, context.help_env), patch('agavai.ui.summon_overlay'):
+        harness = Harness(cfg, ui)
         ui.listening()
-        _run_stop_body(cfg, ui, False, text='what time is it')
+        _run_stop_body(cfg, ui, False, text='what time is it', harness=harness)
     context.help_snapshot = json.loads(ui.path.read_text())
 
 

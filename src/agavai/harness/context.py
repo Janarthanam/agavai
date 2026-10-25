@@ -5,11 +5,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import uuid
 
 from agavai.llm import LlmError
 from agavai.harness.execution import ExecutionManager
+from agavai.harness.inference import InferenceSlot
 
 
 @dataclass(frozen=True)
@@ -22,16 +23,22 @@ class PendingAction:
 @dataclass
 class ContextStore:
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    request_id: str = ""
+    turn_status: str = "idle"
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     messages: list[dict[str, Any]] = field(default_factory=list)
     heads: list[str] = field(default_factory=list)
     pending_action: PendingAction | None = None
+    committed_requests: list[str] = field(default_factory=list)
     archived_tasks: list[dict[str, Any]] = field(default_factory=list)
     recording: Path | None = None
+    source_active: bool = False
     source_revision: str = ""
     derived_revision: str = ""
     compacted_exchanges: int = 0
     execution: ExecutionManager = field(default_factory=ExecutionManager)
+    inference: InferenceSlot = field(default_factory=InferenceSlot)
+    should_cancel: Callable[[], bool] = field(default=lambda: False, repr=False)
     held: bool = False
     draft: str = ""
 
@@ -43,6 +50,9 @@ class ContextStore:
         self.heads = []
         self.pending_action = None
         self.compacted_exchanges = 0
+        self.held = False
+        self.draft = ""
+        self.source_active = False
 
     def remember(self, messages: list[dict], heads: list[str]) -> None:
         self.messages = deepcopy([m for m in messages if m.get("role") != "system"])

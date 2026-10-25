@@ -242,7 +242,6 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
         stack.enter_context(patch.object(orchestrator, "call_tool", recorder.call_tool))
         stack.enter_context(patch.object(orchestrator, "select_head_ids", recorder.select_head_ids))
         ui = ChatUi(cfg)
-        ui.begin_session()
         harness = Harness(cfg, ui)
         in_session = 0
         for index, turn in enumerate(case.turns):
@@ -250,7 +249,6 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
                 clock.advance(float(turn.get("advance_hours", 12)))
                 world.now = clock.now
                 ui = ChatUi(cfg)
-                ui.begin_session()
                 harness = Harness(cfg, ui)
                 in_session = 0
             say = turn["say"]

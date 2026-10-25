@@ -262,7 +262,7 @@ def reminder(args: dict[str, Any], _cfg: Config) -> str:
     minutes = int(args.get("minutes") or 0)
     message = str(args.get("message") or "Reminder").strip() or "Reminder"
     if minutes < 1 or minutes > 24 * 60:
-        return "minutes must be 1-1440"
+        raise ToolFailure("minutes must be 1-1440")
     proc = _run(["omarchy", "reminder", str(minutes), message])
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "reminder failed")[:500])
@@ -394,7 +394,7 @@ def set_volume(args: dict[str, Any], _cfg: Config) -> str:
     if action == "mute":
         action = "mute-toggle"
     if action not in allowed:
-        return "action must be raise, lower, or mute"
+        raise ToolFailure("action must be raise, lower, or mute")
     proc = _run(["omarchy", "audio", "output", "volume", action])
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "volume failed")[:500])
@@ -413,10 +413,10 @@ def set_brightness(args: dict[str, Any], _cfg: Config) -> str:
     elif action == "set":
         pct = int(args.get("percent") or -1)
         if pct < 1 or pct > 100:
-            return "percent must be 1-100"
+            raise ToolFailure("percent must be 1-100")
         spec = f"{pct}%"
     else:
-        return "action must be show, up, down, or set"
+        raise ToolFailure("action must be show, up, down, or set")
     proc = _run(["omarchy", "brightness", "display", spec])
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "brightness failed")[:500])
@@ -449,7 +449,7 @@ def bluetooth(args: dict[str, Any], _cfg: Config) -> str:
     if action == "status":
         action = "is-on"
     if action not in {"on", "off", "toggle", "is-on"}:
-        return "action must be on, off, toggle, or status"
+        raise ToolFailure("action must be on, off, toggle, or status")
     proc = _run(["omarchy", "bluetooth", "power", action])
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "bluetooth failed")[:500])
@@ -475,7 +475,7 @@ def stay_awake(args: dict[str, Any], _cfg: Config) -> str:
     elif action in {"status", "toggle"}:
         flag = action
     else:
-        return "action must be on, off, toggle, or status"
+        raise ToolFailure("action must be on, off, toggle, or status")
     proc = _run(["omarchy", "toggle", "idle", flag])
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "idle toggle failed")[:500])
@@ -488,7 +488,7 @@ def dnd(args: dict[str, Any], _cfg: Config) -> str:
     if action in {"on", "off", "toggle"}:
         argv.append(action)
     elif action != "toggle":
-        return "action must be on, off, or toggle"
+        raise ToolFailure("action must be on, off, or toggle")
     proc = _run(argv)
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "dnd failed")[:500])
@@ -501,7 +501,7 @@ def screenshot(args: dict[str, Any], _cfg: Config) -> str:
     if mode not in {"fullscreen", "windows"}:
         raise ToolFailure("mode must be fullscreen or windows (region needs the pointer)")
     if dest not in {"copy", "save"}:
-        return "dest must be copy or save"
+        raise ToolFailure("dest must be copy or save")
     proc = _run(["omarchy", "capture", "screenshot", mode, dest], timeout=20)
     if proc.returncode != 0:
         raise ToolFailure((proc.stderr or proc.stdout or "screenshot failed")[:500])

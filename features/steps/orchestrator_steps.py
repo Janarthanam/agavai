@@ -157,7 +157,7 @@ def step_reply_only(context, reply):
         if messages[0]["content"] == CONTEXT_SYSTEM:
             assert not tools
             assert cfg.temperature == 0 and cfg.max_tokens == 16
-            context.context_requests.append(json.loads(messages[-1]["content"]))
+            context.context_requests.append({**json.loads(messages[-1]["content"]), "conversation": messages[1:-1]})
             if getattr(context, "dismiss_during_context", False):
                 cancel_ui(context.cfg)
             if getattr(context, "context_error", None):

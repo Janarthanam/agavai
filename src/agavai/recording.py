@@ -9,6 +9,7 @@ transcript.md generated from it.
 from __future__ import annotations
 
 import json
+import fcntl
 import shutil
 import subprocess
 import sys
@@ -260,25 +261,30 @@ def recordings(cfg: Config) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: row["started"], reverse=True)
 
 
-def correct(folder: Path, segment_id: int, text: str) -> None:
-    """Keep the recognizer's words and lay the user's correction over them."""
-    meta = _read_meta(folder)
-    if not meta:
+def correct(folder: Path, segment_id: int, text: str, *, expected_text: str | None = None) -> None:
+    """Serialize correction overlays and reject stale source-derived edits."""
+    if not folder.is_dir():
         raise ValueError(f"No recording in {folder}")
-    for segment in meta["segments"]:
-        if segment["id"] == segment_id:
-            text = " ".join(text.split())
-            heard = segment.get("final") or segment.get("live") or ""
-            if text and text != heard:
-                segment["corrected"] = text
-            else:
-                segment.pop("corrected", None)
-            break
-    else:
-        raise ValueError(f"No line {segment_id} in {folder.name}")
-    _write_meta(folder, meta)
-    _write_transcript(folder, meta)
-
+    with (folder / ".edit.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        meta = _read_meta(folder)
+        if not meta:
+            raise ValueError(f"No recording in {folder}")
+        for segment in meta["segments"]:
+            if segment["id"] == segment_id:
+                if expected_text is not None and line_text(segment) != expected_text:
+                    raise ValueError("The transcript changed before that correction. Please request the edit again.")
+                text = " ".join(text.split())
+                heard = segment.get("final") or segment.get("live") or ""
+                if text and text != heard:
+                    segment["corrected"] = text
+                else:
+                    segment.pop("corrected", None)
+                break
+        else:
+            raise ValueError(f"No line {segment_id} in {folder.name}")
+        _write_meta(folder, meta)
+        _write_transcript(folder, meta)
 
 def _new_folder(root: Path, started: datetime) -> Path:
     base = f"{started:%Y-%m-%d %H.%M} Recording"

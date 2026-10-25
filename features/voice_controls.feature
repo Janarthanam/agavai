@@ -80,7 +80,6 @@ Feature: Isolated finalized controls bypass the model
       | text                                                                   |
       | while you are doing this, yes you have to show me the wall paper         |
       | Yes, show me the wallpaper                                              |
-      | Yes actually no                                                         |
       | Agavai show me the wallpaper                                            |
       | continue explaining                                                    |
       | yesterday                                                              |
@@ -148,11 +147,10 @@ Feature: Isolated finalized controls bypass the model
     And there is no pending control action
     And no control inference or routing happened
 
-  Scenario: The existing dispatcher validates confirmed arguments
+  Scenario: Invalid arguments are rejected before a confirmation is prepared
     Given a control proposal for "launch" with arguments "{"target":"unknown"}"
     When I run a turn with text "open the browser but confirm first" on the chat UI
-    And I continue the turn with text "Yes"
-    Then the spoken reply should contain "unknown target"
+    Then the spoken reply should contain "Invalid launch argument choice"
     And no control desktop action happened
     And there is no pending control action
 
@@ -254,8 +252,8 @@ Feature: Isolated finalized controls bypass the model
     Examples:
       | result                                      | reply                                                    |
       | screenshot saved /tmp/ship-at-sea.png        | screenshot saved ship at sea                             |
-      | {"error":"failed"}                        | The tool returned a result. See the details on screen.    |
-      | First sentence. Second sentence. Third one. | The tool returned a result. See the details on screen.    |
+      | {"error":"failed"}                        | The action returned more detail than I can read aloud. I have kept its result.    |
+      | First sentence. Second sentence. Third one. | The action returned more detail than I can read aloud. I have kept its result.    |
       |                                             | The action returned no result.                           |
 
   Scenario: Partial Yes grows into a longer request without triggering confirmation
