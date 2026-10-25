@@ -150,7 +150,7 @@ Feature: Select speech and brain engines independently
     Examples:
       | text | schemas |
       | open the browser | launch,open_app,play_url,request_confirmation |
-      | What is the capital of France? | none |
+      | What is the capital of France? | show_answer |
 
   Scenario Outline: Small-model inability escalates once
     Given a chat UI in a temp runtime dir

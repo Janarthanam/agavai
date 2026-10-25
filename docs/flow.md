@@ -134,7 +134,8 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | No mic frames, or streaming ASR cannot start | Snapshot phase `error`. The session process exits. The turn is not run. |
 | End of utterance with no words | The mic stays open. Nothing is spoken and the model is not called. Enter on an empty line speaks “I did not hear anything.” |
 | Kokoro cannot play | eSpeak-ng, then an Omarchy notification. A notification does not end the session. |
-| Tool name is unknown, arguments are bad, or the process times out | An error string goes back to the model. The loop continues. |
+| Tool name is unknown or was not offered this turn, or its arguments do not match the offered schema | Snapshot shows an error. Nothing executes. |
+| A tool fails or times out | An error string goes back to the model. The loop continues. |
 | Model calls an allowlisted tool whose head was not injected | That head is added and LlamaServer is called once more. The tool is not run on the first pass. One retry per turn. |
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
