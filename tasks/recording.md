@@ -1,8 +1,8 @@
 # Recordings: listen, keep the audio, transcript, notes, translation
 
-Waiting for input. P0 is implemented and committed on branch `feature/recordings`, kept off `main` until it is tested. Not deployed. Design: [docs/recording.md](../docs/recording.md).
+In progress. Deployment authorized; integrating current `main` on `feature/recordings` in `.worktrees/recordings-deploy` before validation and deployment. Design: [docs/recording.md](../docs/recording.md).
 
-Decisions needed:
+Previous deployment blockers (resolved by the deployment authorization and integration below):
 
 1. **How to deploy.** Since 2026-10-23 21:10, another session's deployment from the `t3/test-whistle-needle-engines` worktree has been live:
    - `~/.local/bin/agavai` and `agavai-llm` point to that worktree.
@@ -76,3 +76,5 @@ Decisions needed:
     - `features/asr_worker.feature` reads the live user config.
     - "record my screen" would route to the recordings head; the tool description says it is not for the screen.
 - 2026-10-24T08:59:37+05:30 — Claude Code session overlay-layout — moved to a feature branch at the user's request: "main would probably merge more changes before this can be tested." Commits `02e93f4`..this one are on `feature/recordings`. Local `main` was reset to `origin/main` (`68f2fc7`); none of this was on `origin`, so nothing was force-pushed. To test or deploy, rebase or merge `feature/recordings` onto the current `main` first.
+
+- 2026-10-25T17:00:12+05:30 — Codex session recordings-deploy — in progress. User authorized deployment. Current `main` is `9434473`; shared checkout has other-session edits in `src/agavai/__main__.py` and request-log features, which remain untouched. Integrate committed main into `feature/recordings` in isolated checkout `.worktrees/recordings-deploy`, preserve configured Whistle/Needle/Qwen roles, run BDD/native UI checks, then back up and deploy. Live launcher currently points to the main checkout, not the historical test worktree. Files initially changed: `tasks/recording.md`; integration and deployment file list/results to follow.
