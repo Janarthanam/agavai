@@ -1,0 +1,21 @@
+# Requests that must not turn an unrelated question or a negation into an action.
+
+[[case]]
+id = "brain.fact.france"
+section = "lookups"
+say = "what is the capital of france"
+kind = "answer"
+reply_any = ['\bparis\b']
+
+[[case]]
+id = "brain.negation.browser"
+section = "judgment"
+say = "do not open the browser"
+kind = "ignore"
+
+[[case]]
+id = "brain.negation.dnd"
+section = "judgment"
+set = { "system.dnd" = true }
+say = "do not turn off do not disturb"
+kind = "ignore"

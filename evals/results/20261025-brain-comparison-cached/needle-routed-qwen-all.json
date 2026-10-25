@@ -1,0 +1,72 @@
+{
+  "profile": "needle-routed-qwen-all",
+  "started": "2026-10-25T18:09:20+05:30",
+  "fingerprint": {
+    "git_commit": "994bb47b7e2e33cc095fcc4315c691023d2cb572",
+    "git_dirty": true,
+    "model_path": "/home/janar/.t3/worktrees/agavai/t3-0363bfd0/.venv/cactus/needle3.cact",
+    "model_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+    "llama_server_build": "",
+    "router": "keyword (fallback keyword)",
+    "bindings": {},
+    "max_tool_rounds": 6,
+    "max_tools": 8,
+    "max_tokens": 512,
+    "sampling": {
+      "temperature": 0.2,
+      "seed": null,
+      "cache_prompt": null
+    },
+    "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+    "python": "3.14.8",
+    "speech_engine": {
+      "backend": "parakeet-onnx",
+      "endpoint": "native",
+      "mode": "streaming",
+      "chunk_ms": 1000,
+      "device": "cpu",
+      "vad": null,
+      "model_sha256": {
+        "encoder.onnx": "d472887cc38a784a5bfc21c2dbe247639edc3b3f9992388d8ceceaec07256b5b",
+        "decoder_joint.onnx": "9d2553ac043c2fc5f69e970769b0fb8ab9103fbfdeb7d26a1ea9729d4bd2dddd",
+        "vocab.txt": "77c3f876cddac2d9ad82efceea38fd6acd16575e0ab54ab3396aa4621fa8ff02"
+      },
+      "runtime_sha256": ""
+    },
+    "brain_engines": {
+      "small": {
+        "backend": "needle-cactus",
+        "model_path": "/home/janar/.t3/worktrees/agavai/t3-0363bfd0/.venv/cactus/needle3.cact",
+        "tool_selection": "routed",
+        "model_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+        "endpoint": "worker",
+        "runtime_sha256": "87476ff70e80334d7c766dbf236b72f42876072df22014c6ec8a9b087b82b260",
+        "temperature": 0.2,
+        "seed": null,
+        "max_tokens": 512,
+        "timeout_secs": 20
+      },
+      "large": {
+        "backend": "llama-server",
+        "model_path": "/home/janar/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+        "tool_selection": "all",
+        "model_sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+        "endpoint": "http://127.0.0.1:18766",
+        "runtime_sha256": "",
+        "temperature": 0,
+        "seed": 42,
+        "max_tokens": 512,
+        "timeout_secs": 120
+      }
+    }
+  },
+  "outcomes": {
+    "done": 11,
+    "harmful": 2,
+    "honest": 1
+  },
+  "cases": 14,
+  "turns": 15,
+  "median_turn_seconds": 1.045,
+  "qwen_turns": 7
+}

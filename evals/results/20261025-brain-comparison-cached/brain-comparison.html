@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen and Needle comparison</title>
+<style>
+body{margin:0;color:var(--foreground);font-family:var(--font-sans, sans-serif)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+caption{text-align:left;padding-bottom:12px;font-weight:500}
+th,td{padding:12px 4px;border-bottom:1px solid var(--border);text-align:right;font-weight:400}
+thead th{color:var(--muted-foreground)}
+th:first-child{text-align:left;max-width:150px}
+tfoot td{text-align:left;color:var(--muted-foreground);border:0}
+.harm{color:var(--destructive)}
+@media(max-width:400px){th,td{padding:10px 3px}th:first-child{max-width:94px}}
+</style>
+</head>
+<body>
+<table aria-label="Single-run comparison of 14 cases per policy">
+<caption>14 cases per policy · real models, simulated desktop</caption>
+<thead><tr><th scope="col">Policy</th><th scope="col">Done</th><th scope="col">Miss</th><th scope="col">Harm</th><th scope="col">Median<br>seconds</th></tr></thead>
+<tbody>
+<tr><th scope="row">Qwen · routed</th><td>13</td><td>0</td><td class="harm">1</td><td>8.60</td></tr>
+<tr><th scope="row">Qwen · all</th><td>13</td><td>0</td><td class="harm">1</td><td>3.97</td></tr>
+<tr><th scope="row">Needle · routed</th><td>11</td><td>1</td><td class="harm">2</td><td>1.05</td></tr>
+<tr><th scope="row">Needle · all</th><td>5</td><td>5</td><td class="harm">4</td><td>0.24</td></tr>
+</tbody>
+<tfoot>
+<tr><td colspan="5">Needle policies include Qwen fallback. Harm includes wrong actions, wrong answers and false promises; miss means an honest failure.</td></tr>
+<tr><td colspan="5">One cached run per policy, in listed order. Medians include failed turns and exclude speech recognition/playback.</td></tr>
+</tfoot>
+</table>
+</body>
+</html>

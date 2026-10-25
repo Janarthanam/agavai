@@ -141,6 +141,8 @@ alias = "agavai"
 tool_selection = "routed"
 ```
 
+The [2026-10-25 native comparison](../evals/results/20261025-brain-comparison-cached/README.md) supports trying Qwen primary with `tool_selection = "all"` and ordinary prompt caching enabled. Both Qwen policies completed 13/14 cases; routed Needle with Qwen/all fallback completed 11/14, and full-tool Needle completed 5/14. Qwen also failed a spoken self-correction, so this is a candidate for further evaluation rather than a guarantee. The guide's routed example above remains available; the experiment did not change host settings. See the report for wrong-action traces and the limits of the single cached run.
+
 ## Needle as a separate router
 
 With Qwen configured as the primary agent above, replace the router tables:
