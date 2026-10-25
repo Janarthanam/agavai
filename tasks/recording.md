@@ -2,6 +2,8 @@
 
 P0 complete and deployed on 2026-10-25 from `feature/recordings` at implementation commit `896659e`. The installed launchers use `.worktrees/recordings-deploy`; keep that checkout while deployed. P1 and P2 remain pending. Design: [docs/recording.md](../docs/recording.md).
 
+Merge with latest main: in progress (Codex session recordings-merge-head).
+
 Previous deployment blockers (resolved by the deployment authorization and integration below):
 
 1. **How to deploy.** Since 2026-10-23 21:10, another session's deployment from the `t3/test-whistle-needle-engines` worktree has been live:
@@ -88,3 +90,5 @@ Previous deployment blockers (resolved by the deployment authorization and integ
   - Live Given/When/Then smoke: with the installed launcher and shell, use a copied config pointing recordings into `/tmp/agavai-recordings-live-qzwid229/Recordings`, start real microphone capture, pause (elapsed time held), mark, resume, stop. Saved **1600 ms** as verified `audio.opus`, one pause and one mark, no residual WAV, listener exited, microphone mute restored. The prior UI document was restored and the test overlay dismissed; app is idle. No test files were saved in the user's configured recordings folder. This validates capture/control/save plumbing; recognizable speech and timestamps were verified with fixtures in the BDD suite, not speech from the microphone smoke.
   - All ten installed plugin files byte-match the committed sources. Live config.toml, shell.json and installed model units byte-match the backups. Whistle/energy-VAD assistant input, Needle small brain and active Qwen large fallback remain configured. Main checkout's three other-session modified files and untracked `:memory:.ses` remain untouched.
   - Rollback: `/home/janar/.local/share/agavai/deployments/20261025T170706+0530/ROLLBACK.md`; `deployment.json` records launchers and service state, `smoke.json` records live results, and BDD/native UI logs plus the feature diff are archived alongside it. Repo bookkeeping files changed after deployment: `tasks/recording.md`, `docs/recording.md`. P0 requirements and acceptance checks are satisfied; P1/P2 are not part of this deployment.
+
+- 2026-10-25T17:51:16+05:30 — Codex session recordings-merge-head — in progress. User requested merging with head. Fetched origin; local and remote main are `63ddbae`, feature/recordings is `2ea072c`. Latest main adds `69a1cd8` (entry-point logger fix and BDD scenario) and `63ddbae` (deployment notes). Merge main into the feature checkout, validate the combined tree, then fast-forward local main if it has not diverged. No remote push requested. Files: `tasks/recording.md` for tracking; incoming main changes are `src/agavai/__main__.py`, request-log feature/steps, and model-engine/request-logging task notes. The shared main checkout has only the pre-existing untracked `:memory:.ses`.
