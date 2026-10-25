@@ -40,12 +40,15 @@ model_path = "~/.local/share/agavai/cactus/whistle.cact"
 runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
 venv = "~/.local/share/agavai/cactus/venv"
 device = "cpu"
+language = "en"
 endpoint = "vad"
 mode = "streaming"
 chunk_ms = 1000
 finish_timeout_secs = 30
 max_utterance_secs = 120
 ```
+
+`language` is one of `en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, or `auto` to let Whistle detect it. It defaults to `en`: with detection, short or noisy English comes back as Spanish or German words ("lock the screen" was heard as "Machen wir schon.").
 
 Whistle shows words while you speak. With `endpoint = "vad"`, the existing energy classifier observes the same 20 ms PCM frames as recognition. After at least 250 ms of speech, 900 ms of quiet requests final decoding and submits once. Configure it explicitly:
 

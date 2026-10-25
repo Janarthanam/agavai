@@ -20,6 +20,7 @@ Feature: Select speech and brain engines independently
       | unknown speech | Unknown ASR |
       | whistle native | manual |
       | whistle gpu | cpu |
+      | whistle language | language must be auto or one of en, de, fr, es, it, nl, pl |
       | zero deadline | deadline |
       | unknown brain | Unknown brain |
       | missing brain model | model_path |
@@ -43,6 +44,16 @@ Feature: Select speech and brain engines independently
       | mode |
       | streaming |
       | batch |
+
+  Scenario Outline: Whistle transcribes the configured language instead of guessing
+    When a "<mode>" Whistle adapter set to "<language>" transcribes speech
+    Then Whistle was asked to transcribe "<asked>"
+    Examples:
+      | mode | language | asked |
+      | streaming | en | en |
+      | batch | en | en |
+      | streaming | auto | detected |
+      | batch | fr | fr |
 
   Scenario: Cancelling Whistle discards the previous turn
     When I cancel Whistle after a partial and start another utterance

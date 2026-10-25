@@ -54,6 +54,7 @@ def invalid_config(context, setting):
         'unknown speech': '[asr]\nbackend="unknown"',
         'whistle native': '[asr]\nbackend="whistle-cactus"',
         'whistle gpu': '[asr]\nbackend="whistle-cactus"\nendpoint="manual"\ndevice="gpu"',
+        'whistle language': '[asr]\nbackend="whistle-cactus"\nendpoint="manual"\nlanguage="english"',
         'zero deadline': '[asr]\nfinish_timeout_secs=0',
         'vad disabled': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nenabled=false',
         'vad backend': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nbackend="silero"',
@@ -84,7 +85,7 @@ def load_engine(context):
 @then('the selected engines and independent environments are preserved')
 def config_selected(context):
     c = context.engines
-    assert c.asr.backend == 'whistle-cactus' and c.asr.endpoint == 'manual'
+    assert c.asr.backend == 'whistle-cactus' and c.asr.endpoint == 'manual' and c.asr.language == 'en'
     assert str(c.asr.venv) == '/speech'
     assert c.small_brain.backend == 'needle-cactus' and str(c.small_brain.venv) == '/brain'
     assert c.large_brain.port == 19000
@@ -127,8 +128,10 @@ def role_catalog_result(context):
 class FakeWhistle:
     def __init__(self, **_):
         self.cancelled = 0
+        self.languages = []
 
-    def stream(self, chunks):
+    def stream(self, chunks, language):
+        self.languages.append(language)
         try:
             for chunk in chunks:
                 assert isinstance(chunk, array.array) and chunk.typecode == 'f'
@@ -138,14 +141,15 @@ class FakeWhistle:
             raise
         yield {'text': 'tail', 'pending': ''}
 
-    def transcribe(self, samples):
+    def transcribe(self, samples, language):
         assert len(samples) == 33600
+        self.languages.append(language)
         return {'text': 'word word word tail'}
 
 
-def whistle(context, mode):
+def whistle(context, mode, language='en'):
     context.partials = []
-    cfg = SimpleNamespace(mode=mode, chunk_ms=1000, model_path='fixture', runtime_library='fixture')
+    cfg = SimpleNamespace(mode=mode, chunk_ms=1000, model_path='fixture', runtime_library='fixture', language=language)
     with patch.dict(sys.modules, needle=SimpleNamespace(Whistle=FakeWhistle)), patch("agavai.cactus_runtime.prepare"):
         return WhistleBackend(cfg, lambda kind, text: context.partials.append((kind, text)))
 
@@ -156,6 +160,20 @@ def feed_whistle(context, mode):
     for packet in (bytes(11000), bytes(29000), bytes(27200)):
         backend.feed(packet)
     context.final_text = backend.finish()
+
+
+@when('a "{mode}" Whistle adapter set to "{language}" transcribes speech')
+def whistle_language(context, mode, language):
+    context.whistle = whistle(context, mode, language)
+    for packet in (bytes(11000), bytes(29000), bytes(27200)):
+        context.whistle.feed(packet)
+    context.whistle.finish()
+
+
+@then('Whistle was asked to transcribe "{language}"')
+def whistle_asked(context, language):
+    expected = None if language == 'detected' else language
+    assert context.whistle.model.languages == [expected], context.whistle.model.languages
 
 
 @then('the final speech text contains the tail exactly once')

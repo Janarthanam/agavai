@@ -72,6 +72,9 @@ class ParakeetBackend:
         self.text = ""
 
 
+WHISTLE_LANGUAGES = ("en", "de", "fr", "es", "it", "nl", "pl")
+
+
 class WhistleBackend:
     native_endpoint = False
 
@@ -79,6 +82,8 @@ class WhistleBackend:
     def validate_selection(cfg):
         if cfg.device != "cpu" or cfg.endpoint not in {"manual", "vad"} or cfg.mode not in {"streaming", "batch"}:
             raise ValueError("Whistle requires CPU, manual or vad endpointing and streaming or batch mode")
+        if cfg.language != "auto" and cfg.language not in WHISTLE_LANGUAGES:
+            raise ValueError(f"Whistle language must be auto or one of {', '.join(WHISTLE_LANGUAGES)}")
 
     @staticmethod
     def settings(cfg):
@@ -95,6 +100,7 @@ class WhistleBackend:
         self.model = Whistle(weights=str(cfg.model_path))
         self.on_event = on_event
         self.partials = cfg.mode == "streaming"
+        self.language = None if cfg.language == "auto" else cfg.language
         self.chunk_bytes = cfg.chunk_ms * 32
         self.start()
 
@@ -133,19 +139,19 @@ class WhistleBackend:
             del self.pending[:self.chunk_bytes]
             self.chunks.append(self._samples(chunk))
             if self.iterator is None:
-                self.iterator = self.model.stream(self._stream_chunks())
+                self.iterator = self.model.stream(self._stream_chunks(), language=self.language)
             self._result(next(self.iterator))
 
     def finish(self):
         if not self.partials:
             if not self.pending:
                 return ""
-            result = self.model.transcribe(self._samples(self.pending))
+            result = self.model.transcribe(self._samples(self.pending), language=self.language)
             return (result.get("text") or "").strip()
         if self.pending:
             self.chunks.append(self._samples(self.pending))
             if self.iterator is None:
-                self.iterator = self.model.stream(self._stream_chunks())
+                self.iterator = self.model.stream(self._stream_chunks(), language=self.language)
             self._result(next(self.iterator))
         if self.iterator is not None:
             for result in self.iterator:

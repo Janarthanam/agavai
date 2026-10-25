@@ -165,6 +165,8 @@ class AsrConfig:
     mode: str = "streaming"
     model_path: Path = field(default_factory=lambda: xdg_data() / "agavai/models/whistle.cact")
     runtime_library: Path | None = None
+    # Whistle only. "auto" lets Whistle guess, and it guesses wrong on short or noisy English.
+    language: str = "en"
     chunk_ms: int = 1000
     startup_timeout_secs: float = 120
     finish_timeout_secs: float = 30
@@ -454,7 +456,7 @@ def load_config(path: Path | None = None) -> Config:
         cfg.asr.model_dir = _expand(str(asr["model_dir"]))
     if "venv" in asr:
         cfg.asr.venv = _expand(str(asr["venv"]))
-    for key in ("backend", "endpoint", "mode"):
+    for key in ("backend", "endpoint", "mode", "language"):
         if key in asr:
             setattr(cfg.asr, key, str(asr[key]))
     for key in ("model_path", "runtime_library"):
