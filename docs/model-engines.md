@@ -170,7 +170,7 @@ Whistle is expected to reduce inference cost; it is not yet a measured latency p
 
 The speech lifecycle, Parakeet/Whistle adapters, brain registry and conditional escalation are implemented. The native fixture checks cover both Cactus models and the Parakeet worker. Use [engines.md](engines.md) for setup and exact settings. Whistle energy endpointing has recorded-audio regression coverage; live-microphone tuning and comparative quality/latency benchmarking remain follow-up work.
 
-- Current contracts: [flow](flow.md), [audio](audio.md), [model direction](v2.md#model-escalation-direction--2026-10-23), [installation](install-bundle.md).
+- Current contracts: [flow](flow.md), [audio](audio.md), [model direction](flow.md#configurable-engines), [installation](install-bundle.md).
 - Existing code: [ASR](../src/agavai/asr.py), [LLM](../src/agavai/llm.py), [orchestrator](../src/agavai/orchestrator.py), [config](../src/agavai/config.py), [voice eval](../evals/voice_helper.py).
 - [Whistle model card](https://huggingface.co/Cactus-Compute/whistle), [Needle source](https://github.com/cactus-compute/needle), [cactus-needle 3.2.8](https://pypi.org/project/cactus-needle/3.2.8/): inspected `needle/agent/whistle.py` streaming and finish behavior on 2026-10-23.
 - [Historical report](../evals/results/20261010-1250/report.json). Design patterns: task-specific adapters, explicit lifecycle state, conditional escalation, process isolation.
