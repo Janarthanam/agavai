@@ -35,6 +35,9 @@ Item {
     readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
+    // Listening for a follow-up gives the main line to the next utterance; the
+    // finished request stays visible beside its answer.
+    readonly property string previousRequest: turn.user && turn.user !== transcript ? String(turn.user) : ""
     readonly property var completion: snapshot.completion || null
     readonly property real strength: listening && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
     readonly property color ink: Commons.Color.foreground
@@ -430,6 +433,20 @@ Item {
                                 font.family: Style.font.family
                                 font.pixelSize: Style.font.caption
                                 wrapMode: Text.Wrap
+                            }
+                            Text {
+                                objectName: "agavaiPreviousRequest"
+                                visible: root.previousRequest !== ""
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                text: "You said “" + root.previousRequest + "”"
+                                textFormat: Text.PlainText
+                                color: root.inkMuted
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.body
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                             }
                             Text {
                                 visible: !!root.completion
