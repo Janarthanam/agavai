@@ -500,8 +500,8 @@ def load_config(path: Path | None = None) -> Config:
         raise ValueError("ASR endpoint must be native/manual/vad and mode must be streaming/batch")
     SPEECH_BACKENDS[cfg.asr.backend].validate_selection(cfg.asr)
     if cfg.asr.endpoint == "vad":
-        from agavai.meter import energy_endpointer
-        energy_endpointer(cfg.vad)
+        from agavai.meter import check_streaming_vad
+        check_streaming_vad(cfg.vad)
     if cfg.large_brain and (cfg.small_brain or cfg.llm).backend == cfg.large_brain.backend == "llama-server" and (cfg.small_brain or cfg.llm).base_url == cfg.large_brain.base_url:
         raise ValueError("Small and large llama-server models need distinct host/port endpoints")
     if not 20 <= cfg.asr.chunk_ms <= 5000 or min(cfg.asr.startup_timeout_secs, cfg.asr.finish_timeout_secs, cfg.asr.max_utterance_secs) <= 0:

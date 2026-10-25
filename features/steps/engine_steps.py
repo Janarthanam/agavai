@@ -17,6 +17,7 @@ from behave import given, when, then
 
 from agavai.config import Config, LlmConfig, load_config
 from agavai.llm import LlmError
+from agavai.meter import AcousticResult, Endpointer
 from agavai.orchestrator import run_turn
 from agavai.speech_backends import WhistleBackend
 
@@ -57,7 +58,7 @@ def invalid_config(context, setting):
         'whistle language': '[asr]\nbackend="whistle-cactus"\nendpoint="manual"\nlanguage="english"',
         'zero deadline': '[asr]\nfinish_timeout_secs=0',
         'vad disabled': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nenabled=false',
-        'vad backend': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nbackend="silero"',
+        'vad backend': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nbackend="webrtc"',
         'vad frame': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nframe_ms=40',
         'vad zero silence': '[asr]\nbackend="whistle-cactus"\nendpoint="vad"\n[vad]\nsilence_ms=0',
         'unknown brain': '[brain.small]\nbackend="unknown"\nmodel_path="/m"',
@@ -322,6 +323,24 @@ def short_noise(context):
 def long_speech(context):
     context.cfg.vad.max_record_ms = 500
     worker_session(context, 'auto', endpoint='vad', pcm=struct.pack('<h', 8192) * 16000)
+
+
+class UnresponsiveClassifier:
+    def feed(self, frame):
+        return AcousticResult("non_speech", backend_failed="infer")
+
+    def reset(self):
+        pass
+
+    def close(self):
+        pass
+
+
+@when('the VAD classifier stops responding while Whistle listens')
+def unresponsive_vad(context):
+    endpointer = Endpointer(context.cfg.vad, backend=UnresponsiveClassifier())
+    with patch('agavai.asr.streaming_endpointer', return_value=endpointer):
+        worker_session(context, 'auto', endpoint='vad', pcm=struct.pack('<h', 8192) * 16000)
 
 
 @when('Enter finishes Whistle while VAD is enabled')

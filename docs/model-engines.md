@@ -15,7 +15,7 @@ Separate three decisions: **what model**, **which runtime executes it**, and **w
 | Choice | Model | Runtime | How a turn ends |
 |---|---|---|---|
 | Existing speech backend | Parakeet Realtime EOU | ONNX Runtime | Native EOU or Enter |
-| Candidate speech backend | Whistle | Cactus | Explicit energy VAD policy or Enter |
+| Candidate speech backend | Whistle | Cactus | Explicit energy or Silero VAD policy, or Enter |
 | Existing brain backend | Qwen GGUF | llama-server | Application accepts answer or tool result |
 | Candidate small brain | Needle | Cactus | Application accepts supported tool result or escalates |
 
@@ -67,7 +67,7 @@ The brain arrows are loopback HTTP for llama-server and framed requests/JSONL re
 
 One capture feeds recognition, the level meter and, if configured, a VAD classifier. Reuse the classifier in `vad_silero.py` where suitable; do not reuse a second microphone capture or silently fall back to energy detection. The controller owns `listening → finishing → committed` or `cancelled` state for one utterance at a time.
 
-Endpoint policy is `native`, `manual`, or `vad` (explicit energy classifier for Whistle). Validate native EOU support before starting. Enter always requests finish; Escape cancels. Under VAD, speech-start detection and silence duration are explicit settings, evaluated for premature cuts and pauses. The selected energy policy reuses the existing 250 ms minimum speech and 900 ms trailing-quiet defaults, configurable in `[vad]`; long pauses can split a sentence and noise can delay the endpoint. A maximum duration is an error/explicit user decision, not an automatic command submission.
+Endpoint policy is `native`, `manual`, or `vad` (explicit energy or Silero classifier for Whistle). Validate native EOU support before starting. Enter always requests finish; Escape cancels. Under VAD, speech-start detection and silence duration are explicit settings, evaluated for premature cuts and pauses. The selected energy policy reuses the existing 250 ms minimum speech and 900 ms trailing-quiet defaults, configurable in `[vad]`; long pauses can split a sentence and noise can delay the endpoint. A maximum duration is an error/explicit user decision, not an automatic command submission.
 
 Throughput is one live microphone stream at 32 KB/s (16 kHz, mono, signed 16-bit). Configure maximum utterance duration and queue capacity; overflow fails the utterance visibly rather than dropping speech. Record speech-start/end markers, endpoint reason, queue delay and commit time. The existing eval goal of 0.5 s from speech end to commit is a target, not an achieved SLA.
 

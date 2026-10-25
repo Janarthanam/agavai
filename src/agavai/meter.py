@@ -210,7 +210,7 @@ class Endpointer:
 
         result = self.backend.feed(frame)
         if result.backend_failed:
-            return None
+            return "backend_failed"
 
         if result.classification == "pending":
             return self._deadlines(elapsed_ms)
@@ -249,14 +249,24 @@ class Endpointer:
         self.backend.reset()
 
 
-def energy_endpointer(cfg: VadConfig) -> Endpointer:
+def check_streaming_vad(cfg: VadConfig) -> None:
     """Explicit streaming policy; do not inherit the legacy backend fallback."""
-    if not cfg.enabled or cfg.backend != "energy":
-        raise ValueError("VAD endpointing requires [vad] enabled=true and backend=energy")
+    if not cfg.enabled or cfg.backend not in {"energy", "silero"}:
+        raise ValueError("VAD endpointing requires [vad] enabled=true and backend=energy or silero")
     if cfg.rate != 16000 or cfg.frame_ms != 20:
         raise ValueError("VAD endpointing requires 16000 Hz and 20 ms frames")
     if min(cfg.silence_ms, cfg.min_speech_ms, cfg.start_timeout_ms, cfg.max_record_ms) <= 0:
         raise ValueError("VAD silence, speech and duration limits must be positive")
     if cfg.close_threshold_dbfs > cfg.open_threshold_dbfs:
         raise ValueError("VAD close threshold must not exceed its open threshold")
-    return Endpointer(cfg, backend=EnergyBackend(cfg))
+
+
+def streaming_endpointer(cfg: VadConfig) -> Endpointer:
+    check_streaming_vad(cfg)
+    if cfg.backend == "energy":
+        return Endpointer(cfg, backend=EnergyBackend(cfg))
+    from agavai.vad_silero import SileroBackend
+    try:
+        return Endpointer(cfg, backend=SileroBackend(cfg))
+    except RuntimeError as exc:
+        raise ValueError(f"Silero VAD is unavailable: {exc}. Run scripts/download-vad.sh.") from exc

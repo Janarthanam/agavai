@@ -89,12 +89,12 @@ def synth(req: dict) -> dict:
 def recognize(req: dict) -> dict:
     from types import SimpleNamespace
     from agavai.config import VadConfig
-    from agavai.meter import energy_endpointer
+    from agavai.meter import streaming_endpointer
     from agavai.speech_backends import create_backend
 
     events: list[dict] = []
     cfg = SimpleNamespace(**req["asr"])
-    endpointer = energy_endpointer(VadConfig(**req["vad"])) if cfg.endpoint == "vad" else None
+    endpointer = streaming_endpointer(VadConfig(**req["vad"])) if cfg.endpoint == "vad" else None
     started = time.perf_counter()
     stream = create_backend(cfg, lambda kind, text: events.append({"kind": kind, "text": text}))
     load_s = time.perf_counter() - started
@@ -133,6 +133,8 @@ def recognize(req: dict) -> dict:
                     pending = event["text"]
             if reason == "max_duration":
                 raise ValueError("Maximum utterance duration exceeded; request was not submitted")
+            if reason == "backend_failed":
+                raise ValueError("Voice activity detection stopped responding")
             if reason == "start_timeout":
                 endpointer.reset()
             if finish or reason == "min_speech":

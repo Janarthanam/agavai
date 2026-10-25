@@ -13,7 +13,7 @@ import threading
 import time
 
 from agavai.config import Config
-from agavai.meter import ParecSource, energy_endpointer, rms_dbfs
+from agavai.meter import ParecSource, rms_dbfs, streaming_endpointer
 from agavai.worker import WorkerError, WorkerProcess
 
 MIC_ERROR = "Microphone input is unavailable. Check your input device and try again."
@@ -40,13 +40,13 @@ class StreamingRecognizer:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         settings = worker_settings(cfg.asr)
-        try:
-            self._endpointer = energy_endpointer(cfg.vad) if cfg.asr.endpoint == "vad" else None
-        except ValueError as exc:
-            raise AsrError(str(exc)) from exc
         python = Path(cfg.asr.venv) / "bin/python"
         if not python.is_file():
             raise AsrError(f"ASR runtime is missing: {python}")
+        try:
+            self._endpointer = streaming_endpointer(cfg.vad) if cfg.asr.endpoint == "vad" else None
+        except ValueError as exc:
+            raise AsrError(str(exc)) from exc
         self._parec = None
         self._pump = None
         self._stop_pump = threading.Event()
@@ -197,6 +197,8 @@ class StreamingRecognizer:
                             self._endpointer.reset()
                         elif reason == "max_duration":
                             raise AsrError("Maximum utterance duration exceeded; request was not submitted.")
+                        elif reason == "backend_failed":
+                            raise AsrError("Voice activity detection stopped responding; request was not submitted.")
                         elif reason:
                             self._endpoint_reason = reason
                             return
@@ -227,6 +229,8 @@ class StreamingRecognizer:
 
     def close(self):
         self._stop_capture()
+        if self._endpointer is not None:
+            self._endpointer.backend.close()
         self._worker.close()
 
 

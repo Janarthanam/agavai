@@ -98,9 +98,9 @@ max_utterance_secs = 120
 
 [vad]
 # Used by [asr] endpoint="vad". Native Parakeet and manual mode ignore it.
-# Streaming VAD requires energy, 16000 Hz and 20 ms frames; no backend fallback.
+# Streaming VAD requires energy or silero, 16000 Hz and 20 ms frames; no backend fallback.
 # Tune silence_ms for pauses and thresholds for microphone/background levels.
-# The separate legacy Silero experiment is not supported by this ASR policy.
+# silero ignores background noise; install it with scripts/download-vad.sh and use silence_ms = 1100.
 enabled = true
 backend = "energy"
 open_threshold_dbfs = -35.0

@@ -4,7 +4,7 @@ Speech recognition and the local brain are configured independently in `~/.confi
 
 | Role | Configuration | Supported choices |
 |---|---|---|
-| Voice input | `[asr]` | `parakeet-onnx` (native endpoint), `whistle-cactus` (energy VAD or manual finish; streaming or batch) |
+| Voice input | `[asr]` | `parakeet-onnx` (native endpoint), `whistle-cactus` (energy or Silero VAD, or manual finish; streaming or batch) |
 | Router / decision | `[router]` | `needle-cactus` with `[router.needle]`, `keyword`, `jev` with `[router.jev]`, `none` to bypass routing; `local` is an alias for keyword |
 | Local agent / tool calling | `[brain.small]`, or `[llm]` when absent | Needle3 with `needle-cactus`; Qwen3 or a configured tool-capable GGUF with `llama-server` |
 | Local fallback | optional `[brain.large]` | Same brain backends; current setup uses local Qwen3-4B |
@@ -61,7 +61,20 @@ min_speech_ms = 250
 max_record_ms = 120000
 ```
 
-Shorter pauses keep the request open. Silence alone never submits; brief noise is discarded. Energy detection cannot understand whether a sentence is complete: a pause longer than the window can cut a sentence, and background sound can delay submission. Tune `silence_ms` and the open/close thresholds for the microphone. The streaming VAD policy currently accepts only the energy classifier; it rejects unsupported backends rather than silently substituting one. Parakeet retains native endpointing.
+Shorter pauses keep the request open. Silence alone never submits; brief noise is discarded. Energy detection cannot understand whether a sentence is complete: a pause longer than the window can cut a sentence, and background sound can delay submission. Tune `silence_ms` and the open/close thresholds for the microphone. Parakeet retains native endpointing.
+
+**Background noise.** Energy detection opens a turn on any sound loud enough, and Whistle then writes words for it: given a noise-only recording it returns "Thank you.". `backend = "silero"` classifies speech instead of loudness. Install the pinned model with `scripts/download-vad.sh`, then set:
+
+```toml
+[vad]
+enabled = true
+backend = "silero"
+silence_ms = 1100
+min_speech_ms = 250
+max_record_ms = 120000
+```
+
+Silero marks the end of a word as quiet sooner than energy does, so give it 1100 ms. On the recorded evaluation clips that keeps a 700 ms pause in one request, ends requests 0.9 s after speech on average and at most 1.1 s (energy takes up to 2.3 s in 10 dB noise), and never ends a turn on noise alone. It runs in a child process of `[vad] venv`, the Kokoro environment by default. The streaming policy accepts only these two classifiers: a missing Silero model fails before capture, and a classifier that stops responding fails the request instead of falling back to energy detection.
 
 **Enter also finishes recognition and submits the final text; Escape discards it.** Select `endpoint = "manual"` to require Enter; the overlay then says so. `mode = "batch"` buffers the utterance, shows microphone feedback without partial words, and transcribes when Enter or the selected VAD policy ends input. Streaming committed words never trigger a request. `endpoint = "native"` is rejected for Whistle because its API has no turn-end event. VAD is an application policy, not a Whistle capability.
 

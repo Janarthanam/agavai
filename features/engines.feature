@@ -32,7 +32,7 @@ Feature: Select speech and brain engines independently
       | zero router tokens | Invalid limits in [router.needle] |
       | cloud deferred | Cloud models are not supported yet |
       | vad disabled | enabled |
-      | vad backend | backend=energy |
+      | vad backend | backend=energy or silero |
       | vad frame | 20 ms |
       | vad zero silence | positive |
 
@@ -253,6 +253,13 @@ Feature: Select speech and brain engines independently
   Scenario: Maximum speech duration is an error rather than submission
     Given a chat UI in a temp runtime dir
     When Whistle with VAD exceeds its configured speech duration
+    Then the voice request is not submitted
+    And batch recognition was not finalized
+    And the snapshot phase should be "error"
+
+  Scenario: A VAD classifier that stops responding is an error rather than submission
+    Given a chat UI in a temp runtime dir
+    When the VAD classifier stops responding while Whistle listens
     Then the voice request is not submitted
     And batch recognition was not finalized
     And the snapshot phase should be "error"
