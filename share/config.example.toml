@@ -65,6 +65,12 @@ api_key_env = "OPENROUTER_API_KEY"
 # from it, and the orb stays in place: bottom-right | bottom-left | top-right | top-left
 placement = "bottom-right"
 
+[log]
+# Request log in the user journal: journalctl --user -t agavai
+# info records timings, decisions and errors. debug also records what you said,
+# replies, and tool arguments and results.
+level = "info"
+
 [asr]
 # Assistant listen path. cpu is the default. gpu is used only when this is gpu
 # and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import shutil
@@ -8,7 +9,6 @@ import signal
 import socket
 import struct
 import subprocess
-import sys
 import tempfile
 import time
 import wave
@@ -21,6 +21,7 @@ from agavai.config import Config
 _RATE = 24000
 
 _PLAYBACK_WAVS: list[Path] = []
+log = logging.getLogger(__name__)
 
 
 def speak(text: str, cfg: Config) -> str:
@@ -36,13 +37,13 @@ def speak(text: str, cfg: Config) -> str:
             continue
         seen.add(engine)
         if engine == "kokoro" and _kokoro(text, cfg):
-            print("agavai: speaking (kokoro)", file=sys.stderr)
+            log.info("tts engine=kokoro")
             return "kokoro"
         if engine == "espeak" and _espeak(text):
-            print("agavai: speaking (espeak)", file=sys.stderr)
+            log.info("tts engine=espeak")
             return "espeak"
     notify(text)
-    print("agavai: TTS failed; notification only", file=sys.stderr)
+    log.warning("tts failed; notification only")
     return "notify"
 
 
@@ -101,9 +102,9 @@ def ensure_tts_server(cfg: Config) -> None:
             return
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = ""
-    log = cfg.runtime_dir / "kokoro-serve.log"
+    log_path = cfg.runtime_dir / "kokoro-serve.log"
     ack = cfg.runtime_dir / "ack-on-it.wav"
-    with log.open("a", encoding="utf-8") as errf:
+    with log_path.open("a", encoding="utf-8") as errf:
         subprocess.Popen(
             [
                 str(py),
@@ -202,9 +203,9 @@ def _kokoro_oneshot(text: str, cfg: Config, wav: str) -> bool:
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = ""
     cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
-    log = cfg.runtime_dir / "kokoro.log"
+    log_path = cfg.runtime_dir / "kokoro.log"
     try:
-        with log.open("w", encoding="utf-8") as errf:
+        with log_path.open("w", encoding="utf-8") as errf:
             proc = subprocess.run(
                 [
                     str(py),
@@ -226,11 +227,11 @@ def _kokoro_oneshot(text: str, cfg: Config, wav: str) -> bool:
                 timeout=120,
             )
         if proc.returncode != 0:
-            print(f"agavai: kokoro synth failed (see {log})", file=sys.stderr)
+            log.warning("tts kokoro synth failed (see %s)", log_path)
             return False
         return True
     except (subprocess.TimeoutExpired, OSError) as exc:
-        print(f"agavai: kokoro error: {exc}", file=sys.stderr)
+        log.warning("tts kokoro error: %s", exc)
         return False
 
 
@@ -299,10 +300,7 @@ def _play_wav(path: Path, *, wait: bool) -> bool:
     if wait:
         played = subprocess.run(argv, check=False, capture_output=True, text=True)
         if played.returncode != 0:
-            print(
-                f"agavai: pw-play failed: {(played.stderr or played.stdout or '')[:400]}",
-                file=sys.stderr,
-            )
+            log.warning("tts pw-play failed: %s", (played.stderr or played.stdout or "")[:400])
             return False
         return True
     subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -349,16 +347,21 @@ def _interruptible_speak(
             continue
         seen.add(engine)
         if engine == "kokoro":
+            started = time.monotonic()
             wav = _kokoro(text, cfg, keep_wav=True)
             if wav is None:
                 continue
-            return _play_interruptible(Path(wav), cancelled, poll_s=poll_s)
+            synth_secs = time.monotonic() - started
+            result = _play_interruptible(Path(wav), cancelled, poll_s=poll_s)
+            log.info("tts engine=kokoro synth_secs=%.2f playback=%s", synth_secs, result)
+            return result
         if engine == "espeak":
             if _espeak(text):
+                log.info("tts engine=espeak")
                 return "silent"
             continue
     notify(text)
-    print("agavai: TTS failed; notification only", file=sys.stderr)
+    log.warning("tts failed; notification only")
     return "silent"
 
 

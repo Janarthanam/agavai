@@ -207,6 +207,16 @@ def step_overlay_placement(context, placement):
     assert context.cfg.overlay.placement == placement, context.cfg.overlay.placement
 
 
+@given('a config with log level "{level}"')
+def step_log_level(context, level):
+    _write(context, f'[log]\nlevel = "{level}"\n')
+
+
+@then('the log level should be "{level}"')
+def step_log_level_is(context, level):
+    assert context.cfg.log.level == level, context.cfg.log.level
+
+
 @then('loading the config fails naming "{allowed}"')
 def step_load_fails(context, allowed):
     try:

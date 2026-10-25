@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
+from agavai import journal
 from agavai.config import Config
 from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
@@ -14,6 +17,8 @@ from agavai.router import select_head_ids
 from agavai.canvas import answer_block, model_view, read_aloud
 from agavai.tools import DISPATCH, call_tool
 from agavai.ui import ChatUi, PendingAction
+
+log = logging.getLogger(__name__)
 
 SYSTEM = """You are Agavai, a local Omarchy Linux voice assistant.
 Your final message is spoken aloud automatically. Always answer in one or two short spoken sentences. No markdown, no code fences, no lists.
@@ -169,6 +174,7 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
         pending = None
     if command not in {"yes", "no"} and not (command == "continue" and pending):
         return None
+    log.info("turn control=%s pending=%s", command, pending.name if pending else "none")
     messages = list(ui.model_messages) if continue_conversation else []
     heads = list(ui.model_heads) if messages else []
     ui.pending_action = None
@@ -211,6 +217,7 @@ def _continues_conversation(text: str, prior_messages: list[dict[str, Any]], cfg
     choice = _strip_think(response.get("content") or "").strip()
     if response.get("tool_calls") or choice not in {"follow_up", "new_conversation"}:
         raise LlmError("I could not determine whether that continues our conversation. Please try again.")
+    log.info("context choice=%s", choice)
     return choice == "follow_up"
 
 
@@ -330,6 +337,16 @@ def run_turn(
     *,
     continue_conversation: bool = False,
 ) -> str:
+    started = time.monotonic()
+    log.info("turn start continue=%s", continue_conversation)
+    log.debug('turn text "%s"', journal.clip(text))
+    reply = _run_turn(text, cfg, ui, continue_conversation=continue_conversation)
+    log.info("turn done secs=%.2f", time.monotonic() - started)
+    log.debug('turn reply "%s"', journal.clip(reply))
+    return reply
+
+
+def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversation: bool) -> str:
     text = text.strip()
     if not text:
         return "I did not hear anything."
@@ -350,6 +367,7 @@ def run_turn(
             "The local model is not running. Start it with: "
             "systemctl --user start agavai-llm"
         )
+        log.warning("llm is not running at %s", cfg.llm.base_url)
         if ui:
             ui.error(msg)
         return msg
@@ -442,10 +460,12 @@ def run_turn(
                 if _execute_tool_call(call, cfg, ui, messages) is None:
                     return ""
         msg = "I ran out of tool steps before finishing."
+        log.warning("turn ran out of tool steps after %d rounds", cfg.llm.max_tool_rounds)
         if ui:
             ui.error(msg)
         return msg
     except LlmError as exc:
+        log.warning("turn error: %s", exc)
         if ui:
             ui.error(str(exc))
         return str(exc)

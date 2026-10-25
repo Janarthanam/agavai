@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 from agavai.config import LlmConfig
+
+log = logging.getLogger(__name__)
 
 
 class LlmError(RuntimeError):
@@ -51,6 +55,7 @@ def chat(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    started = time.monotonic()
     try:
         with urllib.request.urlopen(req, timeout=cfg.timeout_secs) as resp:
             body = json.loads(resp.read().decode())
@@ -63,6 +68,13 @@ def chat(
     if not choices:
         raise LlmError(f"empty llama-server response: {body!r}"[:500])
     message = choices[0].get("message") or {}
+    usage = body.get("usage") or {}
+    calls = [str((call.get("function") or {}).get("name")) for call in parse_tool_calls(message)]
+    log.info(
+        "llm tools=%d prompt_tokens=%s completion_tokens=%s calls=%s secs=%.2f",
+        len(tools), usage.get("prompt_tokens"), usage.get("completion_tokens"),
+        ",".join(calls) or "none", time.monotonic() - started,
+    )
     return message
 
 

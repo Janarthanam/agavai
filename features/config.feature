@@ -72,3 +72,17 @@ Feature: Configurable on-device model
   Scenario: An unknown overlay corner is rejected with the allowed corners
     Given a config with overlay placement "middle"
     Then loading the config fails naming "bottom-right, bottom-left, top-right, top-left"
+
+  Scenario: The request log keeps user text out by default
+    Given an empty agavai config
+    When I load the config
+    Then the log level should be "info"
+
+  Scenario: Debug logging is configurable
+    Given a config with log level "debug"
+    When I load the config
+    Then the log level should be "debug"
+
+  Scenario: An unknown log level is rejected with the allowed levels
+    Given a config with log level "verbose"
+    Then loading the config fails naming "info, debug"

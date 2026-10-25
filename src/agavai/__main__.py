@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import subprocess
 import sys
-import traceback
+import time
 from pathlib import Path
 
+from agavai import journal
 from agavai.a2a import write_card
 from agavai.asr import AsrError, open_stream
 from agavai.config import dump_llm_env, load_config, set_model_id
@@ -18,6 +20,8 @@ from agavai.orchestrator import control_command, run_turn
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
+
+log = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,7 +47,15 @@ def main(argv: list[str] | None = None) -> int:
     model.add_argument("action", nargs="?", default="show", choices=["show", "list", "set"])
     model.add_argument("name", nargs="?", help="Model id for 'set'")
     args = parser.parse_args(argv)
-    cfg = load_config()
+    # The hotkey and the detached listener have no terminal, so a bad config
+    # must reach the journal before the configured level is known.
+    journal.setup("info")
+    try:
+        cfg = load_config()
+    except Exception:
+        log.exception("config could not be loaded")
+        raise
+    journal.setup(cfg.log.level)
     cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
     write_card(cfg)
 
@@ -83,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         text = " ".join(args.text)
         ui = ChatUi(cfg)
         ui.begin_session()
+        journal.start_request(str(ui.data["session_id"]))
         cue_think(cfg)
         write_state(cfg, "thinking")
         reply = run_turn(text, cfg, ui)
@@ -260,13 +273,16 @@ def listen_session(cfg, ui: ChatUi) -> int:
     reply: str | None = None
     followups = 0
     stream = None
+    ended = "crashed"
     try:
+        log.info("session start")
         try:
             stream = open_stream(cfg)
         except AsrError as exc:
             ui.error(str(exc))
             write_state(cfg, "error")
-            print(exc, file=sys.stderr)
+            log.error("asr did not start: %s", exc)
+            ended = "recognizer did not start"
             return 1
         cue_start(cfg)
         while True:
@@ -279,8 +295,10 @@ def listen_session(cfg, ui: ChatUi) -> int:
                 cancel_requested=lambda: cancel_requested,
             )
             if heard == "error":
+                ended = "error"
                 return 1
             if heard == "cancel" or ui.cancelled():
+                ended = "cancel" if heard == "cancel" else "dismissed"
                 return 0
             if heard == "ignore":
                 stop_requested = False
@@ -289,10 +307,12 @@ def listen_session(cfg, ui: ChatUi) -> int:
             if heard != "speech":
                 if ui.data.get("phase") != "listening" and not ui.cancelled():
                     ui.continue_listening()
+                ended = "stream ended"
                 return 0
             if not text.strip():
                 speak("I did not hear anything.", cfg)
                 if ui.cancelled():
+                    ended = "dismissed"
                     return 0
                 stop_requested = False
                 cancel_requested = False
@@ -309,14 +329,20 @@ def listen_session(cfg, ui: ChatUi) -> int:
                 finish(cfg)
                 ui.idle()
                 write_state(cfg, "idle")
+                ended = "cancel during the turn"
                 return 0
             if ui.cancelled():
+                ended = "dismissed"
                 return 0
             followups += 1
             stop_requested = False
             cancel_requested = False
             ui.continue_listening()
+    except Exception:
+        log.exception("session crashed")
+        raise
     finally:
+        log.info("session end reason=%s", ended)
         if stream is not None:
             stream.close()
         from agavai.tts import sweep_playback_wavs
@@ -344,9 +370,15 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
         finish(cfg)
         ui.error(str(exc))
         write_state(cfg, "error")
-        print(exc, file=sys.stderr)
+        log.exception("listen failed: %s", exc)
         return "error", ""
+    journal.start_request(str(ui.data["session_id"]))
     write_state(cfg, "listening")
+    started = time.monotonic()
+
+    def captured(reason: str, line: str = "") -> None:
+        log.info("asr end reason=%s words=%d secs=%.2f", reason, len(line.split()), time.monotonic() - started)
+
     hypothesis = ""
     try:
         for kind, text in stream.events(
@@ -362,7 +394,9 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
             elif kind == "eou":
                 line = (text or hypothesis).strip()
                 if not line:
+                    captured("empty")
                     return "ignore", ""
+                captured("eou", line)
                 ui.partial(line)
                 return "speech", line
             if stop_requested():
@@ -371,16 +405,19 @@ def _await_utterance(cfg, ui: ChatUi, stream, *, fresh: bool, stop_requested, ca
         finish(cfg)
         ui.error(str(exc))
         write_state(cfg, "error")
-        print(exc, file=sys.stderr)
+        log.error("asr failed: %s", exc)
         return "error", ""
     if stop_requested() and cancel_requested():
+        captured("cancel")
         ui.partial("")
         finish(cfg)
         ui.idle()
         write_state(cfg, "idle")
         return "cancel", ""
     if stop_requested():
+        captured("enter", hypothesis)
         return "speech", hypothesis.strip()
+    captured("stream_ended")
     return "ended", ""
 
 
@@ -413,7 +450,7 @@ def _run_stop_body(
     try:
         reply = run_turn(text, cfg, ui, continue_conversation=continue_conversation)
     except Exception:
-        traceback.print_exc()
+        log.exception("turn failed")
         reply = "The local agent hit an error."
         ui.error(reply)
     if aborted():

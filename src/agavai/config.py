@@ -152,6 +152,7 @@ class FilesConfig:
 
 
 PLACEMENTS = ("bottom-right", "bottom-left", "top-right", "top-left")
+LOG_LEVELS = ("info", "debug")
 
 
 @dataclass
@@ -162,6 +163,13 @@ class OverlayConfig:
 
 
 @dataclass
+class LogConfig:
+    """debug adds what the user said, replies, and tool arguments and results."""
+
+    level: str = "info"
+
+
+@dataclass
 class Config:
     llm: LlmConfig = field(default_factory=LlmConfig)
     files: FilesConfig = field(default_factory=FilesConfig)
@@ -169,6 +177,7 @@ class Config:
     router: RouterConfig = field(default_factory=RouterConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
+    log: LogConfig = field(default_factory=LogConfig)
 
     @property
     def tts_prefer(self) -> str:
@@ -329,6 +338,12 @@ def load_config(path: Path | None = None) -> Config:
         if placement not in PLACEMENTS:
             raise ValueError(f"unknown [overlay] placement {placement!r}. known: {', '.join(PLACEMENTS)}")
         cfg.overlay.placement = placement
+    log = data.get("log") or {}
+    if "level" in log:
+        level = str(log["level"])
+        if level not in LOG_LEVELS:
+            raise ValueError(f"unknown [log] level {level!r}. known: {', '.join(LOG_LEVELS)}")
+        cfg.log.level = level
     return cfg
 
 

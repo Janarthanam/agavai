@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Protocol
 
 from agavai.config import Config
 from agavai.heads import HEADS, JEV_HEAD_CRITERIA
+
+log = logging.getLogger(__name__)
 
 
 class ToolRouter(Protocol):
@@ -112,13 +116,15 @@ def make_router(cfg: Config) -> ToolRouter:
 
 
 def select_head_ids(utterance: str, cfg: Config) -> list[str]:
+    started = time.monotonic()
     router = make_router(cfg)
+    source = cfg.router.backend
     try:
         heads = router.select(utterance)
-    except Exception:
-        if cfg.router.fallback == "none":
-            return []
-        heads = KeywordRouter().select(utterance)
+    except Exception as exc:
+        log.warning("router backend=%s failed (%s: %s); fallback=%s", cfg.router.backend, type(exc).__name__, exc, cfg.router.fallback)
+        source = cfg.router.fallback
+        heads = [] if cfg.router.fallback == "none" else KeywordRouter().select(utterance)
     out = []
     for hid in heads:
         if hid in {"chat", ""}:
@@ -131,4 +137,6 @@ def select_head_ids(utterance: str, cfg: Config) -> list[str]:
         for hid in KeywordRouter().select(utterance):
             if hid not in out:
                 out.append(hid)
+                source = "keyword"
+    log.info("router backend=%s source=%s heads=%s secs=%.2f", cfg.router.backend, source, ",".join(out[:2]) or "none", time.monotonic() - started)
     return out[:2]

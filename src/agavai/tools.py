@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from agavai import journal
 from agavai.config import Config
+from agavai.ui import _action_failed
+
+log = logging.getLogger(__name__)
 
 ToolFn = Callable[[dict[str, Any], Config], str]
 
@@ -1046,6 +1052,15 @@ DISPATCH: dict[str, ToolFn] = {
 
 
 def call_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) -> str:
+    started = time.monotonic()
+    result = _run_tool(name, arguments, cfg)
+    status = "error" if _action_failed(result) else "ok"
+    log.info("tool name=%s status=%s secs=%.2f", name, status, time.monotonic() - started)
+    log.debug('tool name=%s arguments %s result "%s"', name, journal.clip(arguments), journal.clip(result))
+    return result
+
+
+def _run_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) -> str:
     fn = DISPATCH.get(name)
     if not fn:
         return f"unknown tool {name}"
@@ -1063,4 +1078,5 @@ def call_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) ->
     except subprocess.TimeoutExpired:
         return f"{name} timed out"
     except Exception as exc:  # noqa: BLE001 — surface to the model, don't crash the loop
+        log.exception("tool name=%s raised", name)
         return f"{name} error: {exc}"

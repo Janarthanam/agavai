@@ -9,6 +9,7 @@ this module only delivers interim, end-of-boundary, and end-of-utterance events.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import queue
@@ -16,7 +17,6 @@ import select
 import shutil
 import struct
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -36,6 +36,7 @@ PAREC_ARGV = [
 ]
 CLAMP_DBFS = -100.0
 _REF = 32768.0
+log = logging.getLogger(__name__)
 
 
 class AsrError(RuntimeError):
@@ -85,6 +86,7 @@ class StreamingRecognizer:
             raise AsrError(f"Streaming ASR runtime is missing: {python}")
         worker = Path(__file__).with_name("parakeet_worker.py")
         device = resolve_device(cfg.asr.device)
+        started = time.monotonic()
         self.proc = subprocess.Popen(
             [str(python), str(worker), str(root), device],
             stdin=subprocess.PIPE,
@@ -121,6 +123,7 @@ class StreamingRecognizer:
         if msg.get("kind") != "ready":
             self.close()
             raise AsrError("Streaming ASR did not start.")
+        log.info("asr ready device=%s load_secs=%.2f", device, time.monotonic() - started)
 
     def events(self, on_level, should_stop=None):
         if self.proc.poll() is not None:
@@ -316,14 +319,10 @@ class StreamingRecognizer:
             return
 
     def _failure(self, fallback: str) -> str:
-        """A short message for the overlay. Runtime warnings are not the failure."""
-        text = bytes(self._stderr_buf).decode("utf-8", "replace")
-        for line in reversed(text.splitlines()):
-            if line.startswith("Traceback") or "Error" in line or "Exception" in line:
-                print(text, file=sys.stderr)
-                return fallback
-        if text.strip():
-            print(text, file=sys.stderr)
+        """A short message for the overlay; the worker's own output goes to the log."""
+        text = bytes(self._stderr_buf).decode("utf-8", "replace").strip()
+        if text:
+            log.error("asr worker output:\n%s", text)
         return fallback
 
     def _stop_capture(self) -> None:
