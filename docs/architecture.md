@@ -156,9 +156,12 @@ prefer = "kokoro"   # kokoro | espeak | notify
 
 [asr]
 device = "cpu"      # gpu is used only when an NVIDIA GPU is present
+
+[log]
+level = "info"      # debug also records what you said, replies, and tool arguments and results
 ```
 
-`agavai status` prints the resolved `model_id` and `model_path`.
+`agavai status` prints the resolved `model_id` and `model_path`. `journalctl --user -t agavai` shows the request log, described in [flow.md](flow.md).
 
 ---
 

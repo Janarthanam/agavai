@@ -142,7 +142,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 - **Latency.** No paint budget is written down. Assumption: a Snapshot change shows up on the next file watch, which is enough for tool rows to appear as they finish. A measured frame time would replace that assumption.
 - **Throughput.** One overlay, one bar widget. It does not run a second session.
 - **Configuration.** Plugin id `janar.agavai`. The runtime directory is `$XDG_RUNTIME_DIR`, or `/run/user/$UID` when that is unset. Layout tokens come from the shell style, specified in [ui-design.md](ui-design.md).
-- **Observability.** The widget shows `phase` from Snapshot. There is no separate log.
+- **Observability.** The widget shows `phase` from Snapshot. The shell's own log has QML errors only. `agavai invoke` writes `invoke summoned the overlay; started_session=…` to the request log, or an error when the overlay cannot be summoned.
 
 ### ListenSession
 
@@ -153,7 +153,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 - **Latency.** Words are written to Snapshot as the hypothesis updates. The model card’s design latency is 80–160 ms. End of utterance, not a silence timer, submits the line. Enter force-submits the current hypothesis.
 - **Throughput.** One listen process. Turns are serial. Follow-up utterances in that process keep the last 24 non-system model messages and the heads used so far, still at most two heads.
 - **Configuration.** Streaming ASR device, default CPU. Runtime files live under `$XDG_RUNTIME_DIR/agavai/`: `state`, `listen.pid`, `listen.lock`, `listen.cancel`, `unmuted-by-us`.
-- **Observability.** `agavai status` prints `state` and whether LlamaServer is up. Recognizer failures print to stderr. There is no trace of why a session exited.
+- **Observability.** `agavai status` prints `state` and whether LlamaServer is up. The request log has `session start` and `session end reason=…`. The reasons are `stream ended`, `cancel`, `dismissed`, `cancel during the turn`, `error`, `recognizer did not start` and `crashed`. A crash, a failed turn and a config that cannot load leave a traceback there. The detached process's stdout and stderr still go to `/dev/null`.
 
 ### Streaming ASR
 
@@ -164,7 +164,7 @@ Transport in and the recognizer. The stage is specified in [audio.md](audio.md).
 - **Latency.** The worker processes 160 ms of new features per step and waits for complete overlapping FFT windows. Model-card design latency is 80–160 ms. End-of-utterance median on the card’s test is 160 ms. No end-to-end latency has been measured here.
 - **Throughput.** One stream. One hypothesis at a time.
 - **Configuration.** Device defaults to CPU. GPU is used when the config selects GPU and an NVIDIA GPU is present.
-- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The chosen device is not yet written anywhere else.
+- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The request log records `asr ready device=… load_secs=…`. When the worker stops, its stderr is logged as `asr worker output`.
 
 ### Turn taking
 
@@ -175,7 +175,7 @@ The commit rule. It reads streaming ASR and keyboard input. It does not read a s
 - **Latency.** The commit happens on the end-of-utterance marker, or on Enter. No 900 ms settle time.
 - **Throughput.** One open utterance.
 - **Configuration.** None beyond the recognizer.
-- **Observability.** A committed line is the snapshot transcript with `final` true, then phase `thinking`.
+- **Observability.** A committed line is the snapshot transcript with `final` true, then phase `thinking`. Each capture logs `asr end reason=… words=… secs=…`. The reasons are `eou`, `empty`, `enter`, `cancel` and `stream_ended`. Partials are not logged.
 
 ### Voxtype
 
@@ -190,7 +190,12 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 - **Latency.** Bound by `max_tool_rounds` times `[llm] timeout_secs`, plus tool time and one context call when there is history. That call uses the same timeout and a 16-token output cap. This is a ceiling, not a target. No typical-turn measurement is in the repo.
 - **Throughput.** One turn at a time inside the process. `agavai ask` does not share memory with ListenSession.
 - **Configuration.** `[llm] max_tool_rounds`, `max_tokens`, `temperature`, `timeout_secs`. The desktop and chat system prompts are fixed in code, including the local time line.
-- **Observability.** Tool start and tool done land on Snapshot. Router’s choice is not logged. A Python traceback is printed when the turn raises; the user hears “The local agent hit an error.”
+- **Observability.** Tool start and tool done land on Snapshot. The request log has:
+  - `turn start` and `turn done secs=…`;
+  - `context choice=…` and `turn control=…`;
+  - warnings for a stopped model, an error, or exhausted tool steps.
+
+  A turn that raises leaves `turn failed` with its traceback, and the user hears “The local agent hit an error.” At debug level the request text and the reply are logged too.
 
 ### Router
 
@@ -201,7 +206,7 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 - **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. The enforced cap is `[router] timeout_secs` (2 s). Keyword is local string matching; no budget is set. The 2 s cap is what keeps a dead OpenRouter from holding the turn longer than that before fallback.
 - **Throughput.** One decision per turn. No batching.
 - **Configuration.** `[router] backend` (`jev`, `keyword`, `local`), `fallback`, `timeout_secs`, `max_tools`. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
-- **Observability.** None. A failure is indistinguishable from a keyword route unless stderr happens to show a Python error. The chosen head ids are not written to Snapshot.
+- **Observability.** The request log has `router backend=… source=… heads=… secs=…`. `source` names the router whose answer supplied the heads, so a keyword route after a Jev `chat` answer is visible. A Jev failure is a warning naming the exception and the fallback. The chosen head ids are not written to Snapshot.
 
 Heads:
 
@@ -226,7 +231,7 @@ Heads:
 - **Latency.** Client timeout is `[llm] timeout_secs` (120 s) per call. No tokens-per-second figure is recorded. `max_tokens` 512 limits one completion. Default `n_gpu_layers = 0` runs this model on CPU. A slower GGUF changes the wait, not the timeout, until the config changes.
 - **Throughput.** `--parallel 1`. One completion at a time for the whole machine, shared by nothing else in this design.
 - **Configuration.** `[llm]` host, port, alias, temperature, max tokens, timeout, and the model catalog. `AGAVAI_MODEL`, `AGAVAI_LLAMA_SERVER`, and `AGAVAI_CONFIG` override path, binary, and file for one process.
-- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. The unit journal is the server log. There are no metrics.
+- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. Each call is logged in the request log as `llm tools=… prompt_tokens=… completion_tokens=… calls=… secs=…`. The unit journal is the server log. There are no metrics.
 
 ### Tools
 
@@ -237,7 +242,7 @@ Heads:
 - **Latency.** The default subprocess timeout is 15 s. `launch` and `play_url` use 20 s. That bound is the tool’s contribution to a turn. No per-tool target is set.
 - **Throughput.** Tools in one model step run one after another. They are not parallel.
 - **Configuration.** `[files] roots` and `max_results` (default 20). Everything else is the command on `PATH`.
-- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`.
+- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`. The request log has `tool name=… status=ok|error secs=…`, using the same rule. A tool that raises leaves its traceback. Debug level adds the arguments and the clipped result.
 
 ### Speech
 
@@ -248,7 +253,7 @@ Heads:
 - **Latency.** No time-to-first-audio measurement. Assumption: warming at the start of listening hides model load, so the reply plays when the sentence is ready. A cold socket on a short turn would break that. Only the start of a session is audible. Reopening the microphone between turns, including after an empty end of utterance, is silent.
 - **Throughput.** One playback at a time. A new session starts another server only if the socket does not answer.
 - **Configuration.** `[tts] prefer`, `voice` (`af_bella`), `model_path`, `voices_path`, `venv`.
-- **Observability.** Stderr prints the engine name, or that playback fell through to a notification. The server appends to `kokoro-serve.log` in the runtime directory.
+- **Observability.** The request log has `tts engine=…`. Kokoro playback in ListenSession adds `synth_secs` and `playback=completed|cancelled|silent`. Kokoro and pw-play failures are warnings, and so is a fall-through to a notification. The server appends to `kokoro-serve.log` in the runtime directory.
 
 ### Snapshot
 
@@ -260,6 +265,28 @@ Heads:
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.
 - **Configuration.** `[overlay] placement` is copied into every snapshot; an unknown corner fails config loading. Otherwise only the runtime directory. Turn history kept on the overlay is five. Result text is clipped (280 characters on the tool row, 160 on arguments).
 - **Observability.** The file is the log: `phase`, `phase_label`, `ts` when the phase changes, `transcript`, `turns`, `display`, `answer_html`, `completion`, `error`, `level_db`, `session_id`, `model_id`, `placement`. `state` can disagree with `phase`. The overlay shows `phase`.
+
+### Request log
+
+[src/agavai/journal.py](../src/agavai/journal.py).
+
+- **Deploy.** Every `agavai` command sends its `agavai.*` loggers to the user journal through `/dev/log`, with the identifier `agavai`. Standard library only.
+- **Lifecycle.**
+  - Each capture in ListenSession, and each `agavai ask`, starts a request. Its id is the first eight characters of the Snapshot `session_id` and a counter, such as `request=a2bd4d6f-3`. Every line until the next capture carries it, and lines outside a request carry `request=-`.
+  - A capture that hears nothing still takes a number.
+  - Until the first turn of a session completes, each new capture begins a new Snapshot session, so noise before the first request moves later requests to a new id.
+- **Latency.** One datagram per line, written synchronously.
+- **Throughput.** A turn with one tool call writes about eight lines at `info`.
+- **Configuration.** `[log] level`:
+  - `info`, the default, records timings, decisions and errors, and no user text.
+  - `debug` adds the request text, the reply, and tool arguments and results, each clipped to 500 characters.
+  - Any other value fails config loading.
+
+  The journal's own retention decides how long lines are kept.
+- **Observability.**
+  - `journalctl --user -t agavai` shows every request, and `-f` follows them live.
+  - Piping it through `grep request=a2bd4d6f-3` isolates one request, and `-p warning` shows only problems.
+  - LlamaServer's own timing is under `journalctl --user -u agavai-llm`, at the same timestamps.
 
 ## Low-level design
 
@@ -313,7 +340,7 @@ sequenceDiagram
 What crosses each boundary:
 
 1. Bar receives a left click and leaves with the command `agavai invoke`. No transcript yet.
-2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and does not start capture.
+2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and a request-log error, and does not start capture.
 3. Snapshot receives `begin_session`: empty turns, a new `session_id`, phase `listening`. Overlay receives that file and shows the orb.
 4. Speech receives the start chime once, then the listen cue, which warms the Kokoro socket silently if one was not already up.
 5. Streaming ASR receives microphone audio. It leaves interim hypotheses while the person is still talking. Turn taking writes each one to user context with `final` false. The router is not called.
