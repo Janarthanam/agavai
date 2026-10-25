@@ -31,7 +31,7 @@ The latest captured request was: “Thank you. Show me all the tools considered 
 
 The earlier “what time is it” failure has a different upstream cause: the router did offer `clock_now`, but Needle returned no calls and claimed that only reminder tools existed. That is a model selection error, not a missing clock implementation. “Open the browser” returned the correct `launch(browser)` call in the same probe.
 
-Unsupported or empty responses without a usable larger tier now produce: “I could not handle that request. Try asking me to open an app or find a file.” The original reason, backend and offered tool names remain in debug logs. With a larger tier configured, the existing escalation path still runs before producing failure feedback. No action is invented or reported as successful.
+Unsupported or empty responses without a usable larger tier now produce: “I could not handle that request. Try asking me to open an app or find a file.” The original reason, model and offered tool names are in the request log as `brain unsupported model=… reason=… tools=…`. With a larger tier configured, the existing escalation path still runs before producing failure feedback. No action is invented or reported as successful.
 
 ## Limits
 

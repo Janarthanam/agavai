@@ -77,8 +77,8 @@ def chat(
     usage = body.get("usage") or {}
     calls = [str((call.get("function") or {}).get("name")) for call in parse_tool_calls(message)]
     log.info(
-        "llm tools=%d prompt_tokens=%s completion_tokens=%s calls=%s secs=%.2f",
-        len(tools), usage.get("prompt_tokens"), usage.get("completion_tokens"),
+        "llm model=%s tools=%d prompt_tokens=%s completion_tokens=%s calls=%s secs=%.2f",
+        cfg.model_id, len(tools), usage.get("prompt_tokens"), usage.get("completion_tokens"),
         ",".join(calls) or "none", time.monotonic() - started,
     )
     return message

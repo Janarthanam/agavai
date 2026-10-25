@@ -179,7 +179,7 @@ Transport in and the recognizer. The stage is specified in [audio.md](audio.md).
 - **Latency.** The worker processes 160 ms of new features per step and waits for complete overlapping FFT windows. Model-card design latency is 80–160 ms. End-of-utterance median on the card’s test is 160 ms. No end-to-end latency has been measured here.
 - **Throughput.** One stream. One hypothesis at a time.
 - **Configuration.** Device defaults to CPU. GPU is used when the config selects GPU and an NVIDIA GPU is present.
-- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The request log records `asr ready device=… load_secs=…`. When the worker stops, its stderr is logged as `asr worker output`.
+- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The request log records `asr ready backend=… mode=… endpoint=… vad=… device=… load_secs=…`. When VAD or Enter ends a capture it logs `asr endpoint policy=… reason=…`, and each finished recognition logs `asr final backend=… finish_secs=…`. A worker that fails includes the tail of its stderr in the logged error.
 
 ### Turn taking
 
@@ -247,7 +247,7 @@ Heads:
 - **Latency.** Client timeout is `[llm] timeout_secs` (120 s) per call. No tokens-per-second figure is recorded. `max_tokens` 512 limits one completion. Default `n_gpu_layers = 0` runs this model on CPU. A slower GGUF changes the wait, not the timeout, until the config changes.
 - **Throughput.** `--parallel 1`. One completion at a time for the whole machine, shared by nothing else in this design.
 - **Configuration.** `[llm]` host, port, alias, temperature, max tokens, timeout, and the model catalog. `AGAVAI_MODEL`, `AGAVAI_LLAMA_SERVER`, and `AGAVAI_CONFIG` override path, binary, and file for one process.
-- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. Each call is logged in the request log as `llm tools=… prompt_tokens=… completion_tokens=… calls=… secs=…`. The unit journal is the server log. There are no metrics.
+- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. Each call is logged in the request log as `llm model=… tools=… prompt_tokens=… completion_tokens=… calls=… secs=…`. The unit journal is the server log. There are no metrics.
 
 ### Tools
 
@@ -303,6 +303,10 @@ Heads:
   - `journalctl --user -t agavai` shows every request, and `-f` follows them live.
   - Piping it through `grep request=a2bd4d6f-3` isolates one request, and `-p warning` shows only problems.
   - LlamaServer's own timing is under `journalctl --user -u agavai-llm`, at the same timestamps.
+  - Brain tiers add three kinds of line:
+    - `needle model=… tools=… calls=… secs=…` for each Needle inference;
+    - `brain unsupported model=… reason=… tools=…` when a tier cannot handle a request;
+    - `turn escalated from=… to=…: …` when the larger tier takes over.
 
 ## Low-level design
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from typing import Protocol
 
-from agavai.llm import LlmError
+from agavai.llm import LlmError, parse_tool_calls
 from agavai.worker import WorkerError, WorkerProcess
 
 log = logging.getLogger(__name__)
@@ -31,11 +31,7 @@ class LlamaBackend:
         return self.health(self.cfg)
 
     def respond(self, messages, tools):
-        started = time.monotonic()
-        try:
-            return self.chat(self.cfg, messages, tools=tools)
-        finally:
-            log.info("brain backend=llama-server model=%s duration_s=%.3f", self.cfg.model_id, time.monotonic() - started)
+        return self.chat(self.cfg, messages, tools=tools)
 
 
 class NeedleBackend:
@@ -65,12 +61,14 @@ class NeedleBackend:
             reply = self.worker.receive(max(0, self.cfg.timeout_secs - (time.monotonic() - started)))
             if not reply or reply.get("kind") != "result":
                 raise LlmError("Needle response timed out or violated the worker protocol.")
-            return reply["message"]
+            message = reply["message"]
+            calls = [str((call.get("function") or {}).get("name")) for call in parse_tool_calls(message)]
+            log.info("needle model=%s tools=%d calls=%s secs=%.2f", self.cfg.model_id, len(tools),
+                     ",".join(calls) or "none", time.monotonic() - started)
+            return message
         except (WorkerError, LlmError) as exc:
             self.close()
             raise LlmError(f"Needle inference failed: {exc}") from exc
-        finally:
-            log.info("brain backend=needle-cactus duration_s=%.3f", time.monotonic() - started)
 
     def close(self):
         if self.worker is not None:

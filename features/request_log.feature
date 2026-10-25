@@ -15,14 +15,14 @@ Feature: Request log in the user journal
     And file search finds "/home/me/Documents/budget-notes.md"
     When I ask "find the budget notes"
     Then the request log for request 1 reads
-      | line                                                                  |
-      | turn start continue=False                                             |
-      | router backend=keyword source=keyword heads=files                     |
-      | llm tools=2 prompt_tokens=120 completion_tokens=12 calls=search_files |
-      | tool name=search_files status=ok                                      |
-      | llm tools=2 prompt_tokens=180 completion_tokens=9 calls=none          |
-      | turn done                                                             |
-      | tts engine=kokoro                                                     |
+      | line                                                                                           |
+      | turn start continue=False                                                                      |
+      | router backend=keyword source=keyword heads=files                                              |
+      | llm model=qwen3-4b-instruct tools=2 prompt_tokens=120 completion_tokens=12 calls=search_files |
+      | tool name=search_files status=ok                                                               |
+      | llm model=qwen3-4b-instruct tools=2 prompt_tokens=180 completion_tokens=9 calls=none          |
+      | turn done                                                                                      |
+      | tts engine=kokoro                                                                              |
     And the request log does not contain "budget"
 
   Scenario: Debug logging adds what was said, the reply, and tool arguments and results
@@ -51,7 +51,27 @@ Feature: Request log in the user journal
   Scenario: The recognizer reports its device and load time
     Given a chat UI in a temp runtime dir
     When streaming capture receives silence and speech without recognition output
-    Then the request log contains "asr ready device=cpu load_secs="
+    Then the request log contains "asr ready backend=parakeet-onnx mode=streaming endpoint=native vad=none device=cpu load_secs="
+
+  Scenario: Whistle's VAD says which detector ended the turn and why
+    Given a chat UI in a temp runtime dir
+    When Whistle "streaming" hears speech with a short pause then trailing silence
+    Then the request log contains "asr ready backend=whistle-cactus mode=streaming endpoint=vad vad=energy device=cpu load_secs="
+    And the request log contains "asr endpoint policy=vad reason=silence"
+    And the request log contains "asr final backend=whistle-cactus finish_secs="
+    And the request log contains "asr end reason=eou words=3"
+
+  Scenario: An escalation names both models and the reason
+    Given a chat UI in a temp runtime dir
+    When the small engine returns "unsupported" for an unsupported request
+    Then the request log contains "brain unsupported model=small reason=No tool tools="
+    And the request log contains "turn escalated from=small to=large: No tool"
+
+  @cactus_model
+  Scenario: Each Needle inference leaves its tools, calls and time
+    When I ask the installed Needle engine to open a browser and explain physics
+    Then the request log contains "tools=3 calls=launch secs="
+    And the request log contains "tools=3 calls=none secs="
 
   Scenario: A recognizer that cannot start leaves its reason
     Given a chat UI in a temp runtime dir

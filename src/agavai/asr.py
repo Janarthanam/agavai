@@ -61,7 +61,9 @@ class StreamingRecognizer:
                 raise AsrError("ASR worker did not provide a compatible readiness handshake.")
             if cfg.asr.endpoint == "native" and not ready.get("native_endpoint"):
                 raise AsrError("Selected recognizer does not provide native endpointing.")
-            log.info("ASR ready backend=%s load_s=%.3f", cfg.asr.backend, time.monotonic() - started)
+            log.info("asr ready backend=%s mode=%s endpoint=%s vad=%s device=%s load_secs=%.2f",
+                     cfg.asr.backend, cfg.asr.mode, cfg.asr.endpoint,
+                     cfg.vad.backend if cfg.asr.endpoint == "vad" else "none", cfg.asr.device, time.monotonic() - started)
         except Exception:
             self.close()
             raise
@@ -97,7 +99,7 @@ class StreamingRecognizer:
                 reason = "enter" if should_stop and should_stop() else self._endpoint_reason
                 if reason:
                     self._stop_capture()
-                    log.info("ASR endpoint utterance=%s policy=%s reason=%s", uid, self.cfg.asr.endpoint, reason)
+                    log.info("asr endpoint policy=%s reason=%s", self.cfg.asr.endpoint, reason)
                     if reason == "min_speech":
                         self._send(b"C", uid)
                         self._wait_terminal(uid, "cancelled")
@@ -150,7 +152,7 @@ class StreamingRecognizer:
         started = time.monotonic()
         self._send(b"F", uid, timeout=min(2, self.cfg.asr.finish_timeout_secs))
         result = self._wait_terminal(uid, "final", deadline=started + self.cfg.asr.finish_timeout_secs)
-        log.info("ASR final utterance=%s backend=%s finish_s=%.3f", uid, self.cfg.asr.backend, time.monotonic() - started)
+        log.info("asr final backend=%s finish_secs=%.2f", self.cfg.asr.backend, time.monotonic() - started)
         return result
 
     def _wait_terminal(self, uid, kind, *, deadline=None):

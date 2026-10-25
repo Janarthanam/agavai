@@ -422,7 +422,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             nonlocal backend, active_cfg, escalated, rounds, selection_changed, routing_spent
             if escalated or cfg.large_brain is None:
                 raise LlmError(reason)
-            log.warning("Escalating from %s: %s", active_cfg.backend, reason)
+            log.warning("turn escalated from=%s to=%s: %s", active_cfg.model_id, cfg.large_brain.model_id, reason)
             routing_spent = routes_itself(active_cfg, cfg)
             active_cfg = cfg.large_brain
             backend = create_brain(active_cfg, chat=chat, health=health)
@@ -524,8 +524,8 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 if escalation_calls:
                     _validate_call(escalation_calls[0], [ESCALATE])
                     reason = json.loads(escalation_calls[0]["function"]["arguments"])["reason"]
-                log.info("Brain unsupported backend=%s reason=%s tools=%s", active_cfg.backend, reason,
-                            [tool["function"]["name"] for tool in offered])
+                log.info("brain unsupported model=%s reason=%s tools=%s", active_cfg.model_id, reason,
+                         ",".join(tool["function"]["name"] for tool in offered) or "none")
                 if not can_escalate:
                     suggestion = "Try asking me to open an app or find a file." if backend.tool_only else "Please try rephrasing it."
                     raise LlmError(f"I could not handle that request. {suggestion}")
@@ -596,7 +596,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                     ui.assistant(reply)
                 return reply
         msg = "I ran out of tool steps before finishing."
-        log.warning("turn ran out of tool steps after %d rounds", cfg.llm.max_tool_rounds)
+        log.warning("turn ran out of tool steps after %d rounds", active_cfg.max_tool_rounds)
         if ui:
             ui.error(msg)
         return msg

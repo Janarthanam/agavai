@@ -140,7 +140,7 @@ class _Captures:
     def __init__(self, captures):
         self.captures = [list(capture) for capture in captures]
 
-    def events(self, on_level, should_stop=None):
+    def events(self, on_level, should_stop=None, should_cancel=None):
         yield from (self.captures.pop(0) if self.captures else [])
 
     def close(self):
