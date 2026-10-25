@@ -22,7 +22,9 @@ from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui
 
-log = logging.getLogger(__name__)
+# `python -m agavai` runs this file as "__main__", which is outside the agavai
+# logger that journal.setup configures.
+log = logging.getLogger("agavai.__main__")
 
 
 def main(argv: list[str] | None = None) -> int:

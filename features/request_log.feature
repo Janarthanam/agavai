@@ -107,3 +107,9 @@ Feature: Request log in the user journal
     When agavai status runs with that config
     Then the request log contains "config could not be loaded"
     And the request log contains "unknown [log] level 'verbose'"
+
+  Scenario: The installed command logs its own session lines
+    Given a journal socket
+    And a config with log level "verbose"
+    When "python -m agavai status" runs with that config against the journal socket
+    Then the journal socket receives a line containing "config could not be loaded"
