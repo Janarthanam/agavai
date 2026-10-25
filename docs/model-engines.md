@@ -2,11 +2,11 @@
 
 ## Requirements
 
-**Ask the small local model first. Ask the larger model only when the small one cannot handle the request.** Qwen is a local brain; it is not inherently the larger tier. Needle can handle supported tool requests directly, rather than routing every request into Qwen.
+**Use the smallest configured model that supports the selected capability.** The harness selects a language tier directly for sources, questions and self-correction. This deliberately supersedes blind small-first scheduling. Qwen is a local brain; it is not inherently the larger tier. Needle can handle supported tool requests directly, rather than routing every request into Qwen.
 
 Scope is the existing Omarchy desktop. Keep microphone capture, overlay, tool permissions and speech playback. Support Parakeet/ONNX Runtime and Whistle/Cactus without teaching the session their model-specific APIs. Support brain backends independently of speech selection. The core adapters, configuration, worker lifecycle and conditional escalation are implemented; [engines.md](engines.md) documents exact current keys. Explicit energy VAD endpointing for Whistle is implemented; see [the debugging report](debug-whistle-needle.md) for the deployment correction and evidence.
 
-Current [flow.md](flow.md) and [audio.md](audio.md) require partial words and native EOU or Enter to submit. This proposal preserves that for Parakeet. Batch recognition and optional VAD endpointing are explicit extensions documented in those specs. Other operating systems and remote deployment are outside this iteration.
+Current [flow.md](flow.md) and [audio.md](audio.md) display partial words and require native EOU or Enter to submit for Parakeet. Batch recognition and explicit VAD endpointing are implemented extensions documented in those specs. Other operating systems and remote deployment are outside this iteration.
 
 ## High-level design
 
@@ -15,9 +15,9 @@ Separate three decisions: **what model**, **which runtime executes it**, and **w
 | Choice | Model | Runtime | How a turn ends |
 |---|---|---|---|
 | Existing speech backend | Parakeet Realtime EOU | ONNX Runtime | Native EOU or Enter |
-| Candidate speech backend | Whistle | Cactus | Explicit energy or Silero VAD policy, or Enter |
+| Alternate speech backend | Whistle | Cactus | Explicit energy or Silero VAD policy, or Enter |
 | Existing brain backend | Qwen GGUF | llama-server | Application accepts answer or tool result |
-| Candidate small brain | Needle | Cactus | Application accepts supported tool result or escalates |
+| Alternate action brain | Needle | Cactus | Application accepts supported tool result or escalates |
 
 Whistle **supports streaming and whole-clip transcription**. Its Python API yields committed words plus a pending tail and flushes the tail when input ends. Committed words are not an end-of-turn signal. A future batch-only recognizer can implement the same input lifecycle and emit no partials.
 
@@ -47,7 +47,7 @@ flowchart TD
     E -->|display text| U
     B -->|history and tool schemas| S
     S -->|answer / tool calls / unsupported| B
-    B -->|only on escalation: history and completed tool results| L
+    B -->|language tasks directly; escalation with completed results| L
     L -->|answer or tool calls| B
     B -->|validated call| T
     T -->|actual result| B
@@ -91,17 +91,20 @@ Configure worker executable/environment, model artifact, supported device, chunk
 
 Reuse the existing tool loop and llama HTTP parsing behind a `respond(history, tools)` adapter. Normalize results to `answer`, `tool_calls`, `clarify`, `unsupported` or `error`. These are application outcomes; do not assume every model natively emits them or supplies calibrated confidence.
 
-The coordinator first tries the configured small model. For Needle, no matching calls means unsupported, not success or “Done.” Valid calls pass existing schema, allowlist and confirmation checks. A successful simple tool action can use an existing/deterministic result acknowledgement without asking Qwen to rephrase it. Unsupported requests or explicit inability escalate once. Invalid model output may escalate with a recorded reason; infrastructure failures remain visible even if configured escalation recovers. Clarification asks the user when required arguments are missing. A fluent answer alone does not prove correctness: acceptance of general answers needs task-specific evaluations before enabling that path.
+On supported action paths the coordinator first tries the configured small model. For Needle, no matching calls means unsupported, not success or “Done.” Valid calls pass existing schema, allowlist and confirmation checks. A successful simple tool action can use an existing/deterministic result acknowledgement without asking Qwen to rephrase it. Unsupported requests or explicit inability escalate once. Invalid model output may escalate with a recorded reason; infrastructure failures remain visible even if configured escalation recovers. Clarification asks the user when required arguments are missing. A fluent answer alone does not prove correctness: acceptance of general answers needs task-specific evaluations before enabling that path.
 
 Each brain role independently selects `tool_selection = "all"` or `"routed"` (default). All mode supplies every registered tool schema plus interactive confirmation and bypasses head routing entirely. Routed mode uses the selected Jev/Needle/keyword router and its schema budget. Needle can be configured separately as `router.backend = "needle-cactus"` with `[router.needle]` runtime settings: it selects candidate tool names, maps them to heads and discards candidate arguments. The agent still generates and validates final calls. When the agent is that same Needle model (no `[router.needle]` table, or identical paths), it routes itself in one inference over the full allowlist, and escalation uses the router fallback rather than a second Needle call. A global router backend of `none` supplies all tools to either role. The coordinator recomputes schemas when escalating, so full-tool Needle can fall back to routed Qwen. Native probes found semantically wrong Needle selections with the full set; full-tool mode remains opt-in and does not promise general-question rejection. Model roles and complete mix-and-match examples are in [engines.md](engines.md). Local Qwen is the fallback in this iteration; cloud/OpenAI support is deferred.
 
-Keep shared history and completed tool results in the session. Escalation includes them and the reason for escalation. Never replay an executed action merely because the model changed; an ambiguous tool failure stops for resolution. Remove unconditional Qwen health/context-classification calls before the small attempt. Preserve finalized local controls before any model call. Conversation continuation must be handled inside the selected small path or escalated with history, not through a hidden mandatory larger-model call.
+Keep shared history and completed tool results in the session. Escalation includes them and the reason for escalation. Never replay an executed action merely because the model changed; an ambiguous tool failure stops for resolution. Preserve finalized local controls before any inference. Task relation uses an
+explicitly reported language tier even with Needle actions. Invalid decisions stop;
+without language capability, the local Agavai control starts a fresh task. Source
+and reasoning routes cannot widen into desktop actions.
 
 The selected runtime owns model loading, readiness and shutdown. One request/tool loop runs at a time. Configuration separates small/large roles from model files and engine options; reuse existing max-tool-round and response-timeout limits. Log model/engine/version, attempt duration, escalation reason, tool calls and final outcome. Keep both tiers warm where memory permits; otherwise report larger-tier load time in the escalated latency. Larger-tier failure yields an explicit failure, not another unbounded fallback.
 
 ### Profiles and evaluation — configuration and existing eval runner
 
-Profiles select supported combinations, not arbitrary interchangeable model files. Proposed keys, not current config:
+Profiles select supported combinations, not arbitrary interchangeable model files. Current keys (illustrative paths):
 
 ```toml
 [asr]
@@ -152,7 +155,7 @@ sequenceDiagram
 
 ### Small model cannot handle the request
 
-The same finalized transcript enters the small model. An unsupported result causes the coordinator to send the request, relevant history and any completed tool results to the larger model. Its answer/tool calls return through the same validation and reply path. Whistle batch mode changes only the speech portion: no partials, then full decode after finish. The UI shows listening/transcribing instead of fabricated words.
+On an action path the finalized transcript enters the primary. Language-only requests may select a suitable tier directly. An unsupported result causes the coordinator to send the request, relevant history and any completed tool results to the larger model. Its answer/tool calls return through the same validation and reply path. Whistle batch mode changes only the speech portion: no partials, then full decode after finish. The UI shows listening/transcribing instead of fabricated words.
 
 ### Latency expectations
 
@@ -171,6 +174,6 @@ Whistle is expected to reduce inference cost; it is not yet a measured latency p
 The speech lifecycle, Parakeet/Whistle adapters, brain registry and conditional escalation are implemented. The native fixture checks cover both Cactus models and the Parakeet worker. Use [engines.md](engines.md) for setup and exact settings. Whistle energy endpointing has recorded-audio regression coverage; live-microphone tuning and comparative quality/latency benchmarking remain follow-up work.
 
 - Current contracts: [flow](flow.md), [audio](audio.md), [model direction](flow.md#configurable-engines), [installation](install-bundle.md).
-- Existing code: [ASR](../src/agavai/asr.py), [LLM](../src/agavai/llm.py), [orchestrator](../src/agavai/orchestrator.py), [config](../src/agavai/config.py), [voice eval](../evals/voice_helper.py).
+- Existing code: [ASR](../src/agavai/asr.py), [LLM](../src/agavai/llm.py), [orchestrator](../src/agavai/harness/engine.py), [config](../src/agavai/config.py), [voice eval](../evals/voice_helper.py).
 - [Whistle model card](https://huggingface.co/Cactus-Compute/whistle), [Needle source](https://github.com/cactus-compute/needle), [cactus-needle 3.2.8](https://pypi.org/project/cactus-needle/3.2.8/): inspected `needle/agent/whistle.py` streaming and finish behavior on 2026-10-23.
 - [Historical report](../evals/results/20261010-1250/report.json). Design patterns: task-specific adapters, explicit lifecycle state, conditional escalation, process isolation.

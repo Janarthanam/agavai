@@ -45,3 +45,10 @@ outcome counts, median turn duration and Qwen usage. Temperature is zero, seed i
 exploratory comparison, not a repeatable scored eval: cache reuse can change
 outputs, and each profile runs once in the listed order. Timings exclude speech
 recognition and playback; Needle process/model warm-up remains part of its first turn.
+
+
+Harness E2E scenarios in features/harness.feature use a local scripted HTTP service,
+real recording files, context and tool dispatch, with scripted OS/ASR boundaries.
+They cover source grounding and limits, revisions, corrections, input hold, task
+changes, compaction, unknown effects, cancellation and recording during inference.
+These establish harness contracts; model quality remains separate evaluation evidence.

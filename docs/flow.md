@@ -1,18 +1,37 @@
 # Agavai voice loop
 
-Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The assistant listen path follows this spec: streaming ASR, then end of utterance, then the existing tool loop. Visual layout stays in [ui-design.md](ui-design.md). Model selection and the full config key list stay in [architecture.md](architecture.md) and [share/config.example.toml](share/config.example.toml).
+Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The assistant listen path follows this spec: streaming ASR, then end of utterance, then the harness turn engine. Visual layout stays in [ui-design.md](ui-design.md). Model selection and the full config key list stay in [architecture.md](architecture.md) and [share/config.example.toml](../share/config.example.toml).
 
-This file wins on runtime behavior where those documents disagree. [README.md](../README.md) says v1 talks to no remote model. That does not match the code: head selection may call OpenRouter.
+This file wins on runtime behavior. [voice-agent-harness.md](voice-agent-harness.md)
+defines the implemented in-process architecture and module boundaries. Optional Jev
+head selection can call OpenRouter; local brains do not imply all routing is local.
 
 ## Configurable engines
 
 Speech and brain backends are independently selectable; [engines.md](engines.md) lists the implemented settings. Parakeet/ONNX and the existing `[llm]` remain the defaults. Whistle/Cactus supports streaming or batch transcription with manual Enter-to-submit or explicit energy VAD endpointing over the same capture. Enter flushes final recognition before committing; Escape cancels without decoding/submitting a batch. Partial words and microphone levels never submit. With `[asr] endpoint = "vad"`, `[vad]` selects energy or Silero classification, minimum speech and trailing silence (250/900 ms defaults). Initial silence never submits; brief noise is discarded; maximum duration fails rather than submitting. Native Parakeet is unchanged.
 
-The small local brain runs first. Optional `[brain.large]` handles explicit escalation, unsupported/empty output, inference failure or exhausted steps. Successful small answers and Needle tool results finish directly. Local controls still bypass inference. Qwen can occupy either role. Llama conversation classification uses the small tier; Needle preserves shared history without that classification. Without a configured larger tier, unsupported requests receive a plain explanation and a rephrasing suggestion; raw backend no-match diagnostics stay in logs. The session validates tools, owns confirmations and carries completed results across escalation. No automatic inference-time downloads or silent device substitution are allowed.
+Agavai is the in-process harness. The primary brain handles supported action
+requests first. A language-capable primary or larger tier is selected directly for
+recording interpretation, language questions and utterance self-corrections. Needle
+proposes tool calls; it is not a general context router. Structured/long results
+require language interpretation or an explicit inability response. Tool completion
+alone does not fulfill a summary request.
+
+Task relation uses a reported language tier even with Needle actions. Invalid decisions
+stop and retain earlier context. Without a language tier, “Agavai” starts a fresh task
+rather than guessing continuity. An unrelated request archives the previous task and
+clears prompt/head inheritance. Exact controls bypass models.
+
+Escalation handles unsupported/empty output, inference failure and exhausted steps.
+Completed calls are not replayed. One provider operation runs in the inference slot;
+record/cancel controls poll independently while it waits. Cancelled output cannot
+dispatch, publish or speak. An HTTP operation may continue until its deadline; the
+slot rejects new work until it returns. No inference-time downloads or silent device
+substitution are allowed.
 
 Only chat backends receive the escalation-control tool; Needle reports no matching call directly to the coordinator. Chat backends can answer general knowledge and conversational questions without tools. Desktop actions still require available tools and actual results.
 
-Model roles are independent: `[asr]` selects recognition, `[router]` selects optional head routing, `[brain.small]` selects the agent, and optional `[brain.large]` selects the local fallback. Each brain chooses `tool_selection = "all"` or `"routed"` (default). All mode skips the router and its schema budget, giving the agent the full registered allowlist plus interactive confirmation. Routed mode uses the configured router, including for Needle; `backend = "none"` disables routing and supplies the full allowlist to both tiers. Recompute tool selection at each fallback boundary, preserving history, confirmation rules and completed actions. The same committed transcript enters this coordinator regardless of speech backend. Cloud/OpenAI support is deferred; cloud configuration is rejected rather than silently ignored.
+Model roles are independent: `[asr]` selects recognition, `[router]` selects optional head routing, `[brain.small]` selects the agent, and optional `[brain.large]` selects the local fallback. Each brain chooses `tool_selection = "all"` or `"routed"` (default). On action paths, all mode skips head routing and its schema budget, giving the agent the full registered allowlist plus interactive confirmation. Routed mode uses the configured router, including for Needle; `backend = "none"` disables routing and supplies the full allowlist to both tiers. Recompute tool selection at each fallback boundary, preserving history, confirmation rules and completed actions. The same committed transcript enters this coordinator regardless of speech backend. Cloud/OpenAI support is deferred; cloud configuration is rejected rather than silently ignored.
 
 These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
 
@@ -33,7 +52,7 @@ Agavai is a local Omarchy assistant for one person at the machine.
 - F9 dictation stays on Voxtype. The assistant does not start, stop, or cancel a Voxtype recording. The two still must not use the microphone at the same time. Agavai does not enforce that lock.
 - The brain is an on-device GGUF. Tool execution stays on the machine. The exception is the default router, which may send the utterance to OpenRouter Jev.
 
-These are current tuning knobs, not separate service targets. Defaults are in [share/config.example.toml](share/config.example.toml).
+These are current tuning knobs, not separate service targets. Defaults are in [share/config.example.toml](../share/config.example.toml).
 
 | Knob | Default | What it changes |
 |---|---|---|
@@ -55,14 +74,14 @@ flowchart LR
   Snapshot --> Overlay
   ListenSession --> StreamingAsr[Streaming ASR]
   ListenSession --> TurnTaking[Turn taking]
-  ListenSession --> Orchestrator
+  ListenSession --> TurnEngine
   ListenSession --> Speech
-  Orchestrator --> Router
-  Orchestrator --> LlamaServer
-  Orchestrator --> Tools
+  TurnEngine --> Router
+  TurnEngine --> LlamaServer
+  TurnEngine --> Tools
 ```
 
-ListenSession is one process. It owns the microphone, writes Snapshot, and calls the others. Overlay and Bar only watch Snapshot and run CLI commands. Orchestrator is a function inside ListenSession, not its own process.
+ListenSession is one process. It owns the microphone, writes Snapshot, and calls the others. Overlay and Bar only watch Snapshot and run CLI commands. TurnEngine, ContextStore and ExecutionManager are components of the in-process Harness, not separate processes.
 
 ```mermaid
 flowchart TB
@@ -72,7 +91,7 @@ flowchart TB
     ListenSession
     StreamingAsr[Streaming ASR]
     TurnTaking[Turn taking]
-    Orchestrator
+    TurnEngine
     LlamaServer["LlamaServer 127.0.0.1:18766"]
     Tools
     Speech["Speech Kokoro socket"]
@@ -82,7 +101,7 @@ flowchart TB
   subgraph openRouter [OpenRouter]
     Jev["Decisions API"]
   end
-  Orchestrator --> Router
+  TurnEngine --> Router
   Router --> Jev
 ```
 
@@ -94,7 +113,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **One process per session, not a resident agent.** ListenSession exits when the user dismisses it, capture fails, or the mic stream ends. A daemon could keep the model transcript across dismissals. It would also hold the microphone and race F9. The transcript lives in that process only. Assumption: a follow-up happens before dismiss. After exit, the next invoke is a blank session.
 
-**Assistant GGUF, not the dictation sanitizer.** `agavai-llm` loads the configured GGUF on port 18766, in its own user-service cgroup. Port 18765 is Voxtype’s smaller cleanup model. Reusing it would couple assistant restarts to `systemctl restart voxtype`, which [architecture.md](architecture.md) calls out as a hang. Assumption: the selected GGUF emits OpenAI tool calls or Qwen `<tool_call>` JSON. Default `n_gpu_layers = 0` runs that model on CPU. That setting is independent of the streaming ASR device.
+**Assistant GGUF, not the dictation sanitizer.** `agavai-llm` loads the configured GGUF on port 18766, in its own user-service cgroup. Port 18765 is Voxtype’s smaller cleanup model. Reusing it would couple assistant restarts to `systemctl restart voxtype`, which can hang with the sanitizer active. Assumption: the selected GGUF emits OpenAI tool calls or Qwen `<tool_call>` JSON. Default `n_gpu_layers = 0` runs that model on CPU. That setting is independent of the streaming ASR device.
 
 **Routed agents receive tool groups.** Jev answers one typed choice (“which head?”). Needle selects candidate tool names from the full registered schemas; the router maps those names to heads without executing the calls. Keyword overlap is the offline path; `local` remains an alias for keywords. Routed agents receive at most two heads and the configured schema budget. A failure or an empty result uses keyword matching unless fallback is `none`. Agents configured with `tool_selection = "all"`, and a Needle agent that is also the router, bypass this selection and receive the full allowlist.
 
@@ -102,23 +121,23 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **Streaming ASR, not a file transcript.** Transport in is one 16 kHz mono capture. [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1) emits text while audio is still arriving. Interim hypotheses update user context and the overlay. They are not turns. End of utterance commits the line. End of boundary does not. The device defaults to CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. Detail is in [audio.md](audio.md). Voxtype’s file API stays on F9 dictation only. `ChatUi.partial` is the snapshot write for an interim line.
 
-**Turn taking from the recognizer, not a silence timer.** The 900 ms quiet window, the 250 ms minimum, the 5 s reset, the 300 ms lead-in, the energy gate, and Silero are not on the assistant path. A second `parec` tap must not decide the turn. Enter commits the current hypothesis. Escape drops it. The LLM, including the router, does not run on a partial.
+**Native Parakeet turn taking comes from the recognizer.** The legacy silence gate and Silero do not decide its endpoint. Whistle uses the explicit VAD or manual policy described above. Both use the existing capture; a second `parec` tap must not decide the turn. Enter commits the finalized hypothesis. Escape drops it. The LLM, including the router, does not run on a partial.
 
 **Stay listening after every completed turn.** The session returns to the microphone with the canvas kept. `wants_followup` is not consulted. A policy that reopened the mic only for questions would drop the “still listening” behavior [ui-design.md](ui-design.md) describes. Assumption: the user dismisses with Escape when they are done. An end of utterance with no words is not a turn, so it does not continue the stored messages.
 
-**Classify conversation context before the next answer.** When a completed utterance has stored history, the on-device model returns `follow_up` or `new_conversation` in a separate call with no tools, temperature zero, and at most 16 output tokens. It sees the new request and stored messages, including earlier tool results. A follow-up retains those messages, tool heads, and canvas; a new conversation clears them before routing and answering. This decision runs with every router backend. Neither the utterance count nor a matching tool head determines relevance. The first turn, partial speech, and empty utterances skip classification.
+**Classify conversation context before the next answer.** For a model turn outside the explicit recording-source path, when a completed utterance has stored history, the language tier returns `follow_up` or `new_conversation` in a separate call with no tools, temperature zero, and at most 16 output tokens. It sees the new request and a bounded projection of complete stored exchanges, including earlier tool results. A follow-up retains those messages, tool heads, and canvas; a new conversation clears them before routing and answering. This decision runs with every router backend. Neither the utterance count nor a matching tool head determines relevance. The first turn, partial speech, and empty utterances skip classification.
 
 **Handle isolated controls before inference.** Match the whole committed utterance after trimming surrounding whitespace, ignoring case and removing terminal `.`, `!`, `?` or `…`. Never match substrings or act on interim/EOB text. `Yes!` is a control; `Yes, show me the wallpaper`, `Agavai show me the wallpaper` and `yes actually no` are ordinary model turns. ASR does not emit punctuation, so the same rule also serves typed input. EOU/Enter remain the only commit sources; no keyword timer or acoustic wake-word detector is added.
 
 - `Agavai` clears turns, canvas, answer, completion, errors, remembered messages/heads and any pending action. It preserves the session id, returns to listening, and skips the thinking cue and spoken reply.
-- `Yes` or `Continue` executes one pending action using its stored tool name and argument object through `call_tool`. The proposal is consumed before execution, including failures. Full results go to the existing snapshot/canvas, and matching action/result messages remain in model history. Speech uses the actual short tool result with readable path labels; structured, long or multi-sentence output gets a neutral pointer to on-screen details.
+- `Yes` or `Continue` executes one pending action using its stored tool name and argument object through the typed execution boundary. The proposal is consumed before execution, including failures. Full results go to the existing snapshot/canvas, and matching action/result messages remain in model history. Speech uses the actual short tool result with readable path labels; structured, long or multi-sentence output acknowledges that the full result is retained, without claiming an interpretation.
 - `No` discards that action and says it was cancelled. It does not dismiss the listener. Unbound `Yes` asks what to confirm; unbound `No` reports that nothing is pending. These replies need no model. Unbound `Continue` uses Qwen because continuing an explanation requires generation.
 
-**Prepare confirmation explicitly.** When confirmation is needed, Qwen calls the orchestration-only `request_confirmation(name, arguments, question)` alone. The name must be in the current advertised desktop tools and `DISPATCH`; arguments must be an object and the question nonempty. No desktop action runs at preparation. The question is published/spoken, and one `PendingAction` lives only in the current ChatUi process, bound to its session id. A prose question alone cannot create it. The normal tool dispatcher still validates the action's arguments when it executes. Direct commands continue to execute normally; this is not a new policy requiring confirmation for every action.
+**Prepare confirmation explicitly.** When confirmation is needed, Qwen calls the orchestration-only `request_confirmation(name, arguments, question)` alone. The name must be in the current advertised desktop tools and `DISPATCH`; arguments must be an object and the question nonempty. No desktop action runs at preparation. The question is published/spoken, and one `PendingAction` lives only in the harness context store, bound to its session identity. Its inner arguments are checked against the advertised action schema before it is stored. A prose question alone cannot create it. The normal tool dispatcher still validates the action's arguments when it executes. Direct commands continue to execute normally; this is not a new policy requiring confirmation for every action.
 
-The confirmation schema reserves one slot within `[router] max_tools`, including on missing-head retry. With fewer than two slots, or no desktop tools selected, it is unavailable. Any other nonempty committed utterance invalidates the pending proposal before health/classification; Qwen can prepare a replacement with corrected arguments. Empty input and partials leave it intact. Fresh conversation/session, isolated `Agavai`, process exit or dismissal clear it. Cancellation is checked before and after preparation/execution; it cannot undo a tool that already ran. An incorrect ASR EOU can still split a longer sentence: whole-utterance matching cannot repair endpointing.
+The confirmation schema reserves one slot within `[router] max_tools`, including on missing-head retry. With fewer than two slots, or no desktop tools selected, it is unavailable. Outside the explicit wait/pause/resume hold controls, another nonempty committed utterance invalidates the pending proposal before health/classification; Qwen can prepare a replacement with corrected arguments. Empty input and partials leave it intact. Fresh conversation/session, isolated `Agavai`, process exit or dismissal clear it. Cancellation is checked before and after preparation/execution; it cannot undo a tool that already ran. An incorrect ASR EOU can still split a longer sentence: whole-utterance matching cannot repair endpointing.
 
-**Show structured answers on the canvas.** On a turn with a ChatUi and no desktop tools, Qwen is offered only the orchestration-only `show_answer(title, markdown, summary)`. A call must be alone, and all three fields must be nonblank. The Markdown becomes an `answer` canvas block, which expands the overlay, and the summary is the spoken reply. The turn ends in the same round, so no second model call runs after the canvas is published. The call and the Markdown stay in model history for follow-ups. These turns use a shorter chat system prompt without the desktop-tool lines. With those lines, Qwen3-4B put only 1 or 2 of 5 list answers on screen, and fewer still when the rule followed the short-answer rule. A missing-head retry that adds desktop tools switches back to the desktop prompt. A turn run without a ChatUi is never offered `show_answer`. Turns with desktop tools keep their whole `[router] max_tools` budget for those tools.
+**Show structured answers on the canvas.** On a turn with a ChatUi and no desktop tools, Qwen is offered only the orchestration-only `show_answer(title, markdown, summary)`. A call must be alone, and all three fields must be nonblank. The Markdown becomes an `answer` canvas block, which expands the overlay, and the summary is the spoken reply. The turn ends in the same round, so no second model call runs after the canvas is published. The call and the Markdown stay in model history for follow-ups. These turns use a shorter chat system prompt without the desktop-tool lines. With those lines, Qwen3-4B put only 1 or 2 of 5 list answers on screen, and fewer still when the rule followed the short-answer rule. On an action route, a missing-head retry that adds desktop tools switches back to the desktop prompt; reasoning and synthesis remain restricted. A turn run without a ChatUi is never offered `show_answer`. Turns with desktop tools keep their whole `[router] max_tools` budget for those tools.
 
 ### How it fails
 
@@ -135,14 +154,17 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | End of utterance with no words | The mic stays open. Nothing is spoken and the model is not called. Enter on an empty line speaks “I did not hear anything.” |
 | Kokoro cannot play | eSpeak-ng, then an Omarchy notification. A notification does not end the session. |
 | Tool name is unknown or was not offered this turn, or its arguments do not match the offered schema | Snapshot shows an error. Nothing executes. |
-| A tool fails or times out | An error string goes back to the model. The loop continues. |
-| Model calls an allowlisted tool whose head was not injected | That head is added and LlamaServer is called once more. The tool is not run on the first pass. One retry per turn. |
+| A tool fails or times out | The full typed error/unknown outcome is retained; its bounded projection goes back to the model. Unknown effects are not automatically repeated. |
+| Action model calls an allowlisted tool whose head was not injected | That head is added and the model is called once more. The tool is not run on the first pass. One retry per turn; reasoning and synthesis cannot widen into desktop actions. |
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
 
 `agavai stop` and `agavai cancel` signal the published pid. Stop during listening commits the current hypothesis. Cancel drops it. During a recording both stop and save it; cancel also dismisses the overlay. With no live listener, stop exits 1 and cancel resets the snapshot and state to idle. Neither calls Voxtype.
 
-There is no retry of a llama HTTP error beyond the one head-attach pass. There is no queue. There is no lock that refuses to start while F9 dictation holds the microphone.
+An inference error can escalate once to the configured larger tier. It does not
+repeat completed actions; the missing-head retry is a separate action-route policy.
+There is no inference queue. There is no lock that refuses to start while F9
+dictation holds the microphone.
 
 ## Modules
 
@@ -161,20 +183,20 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 
 ### ListenSession
 
-[src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/app.py](../src/agavai/app.py), [src/agavai/state.py](../src/agavai/state.py), [src/agavai/feedback.py](../src/agavai/feedback.py).
+[session controller](../src/agavai/harness/session.py), [src/agavai/app.py](../src/agavai/app.py), [src/agavai/state.py](../src/agavai/state.py), [src/agavai/feedback.py](../src/agavai/feedback.py).
 
 - **Deploy.** `agavai invoke` and `agavai app` summon Overlay, then detach `python -m agavai listen` under a new session. The pid and the `/proc` start token are written to `listen.pid`. A second starter loses on `listen.lock` (`O_EXCL`) or on a live pid.
 - **Lifecycle.** The process publishes its pid, opens transport in, and runs streaming ASR until cancel, a mic error, or the stream ending. Interim text updates user context. End of utterance, or Enter, commits the line and runs the turn, then listening resumes with the canvas kept. On the way in it unmutes the default source if muted, and mutes it again on the way out only if this session unmuted it. `state` holds one word: `idle`, `listening`, `thinking`, `speaking`, `recording`, or `error`. There is no transcribing wait. Invoke treats `listening`, `thinking`, and `speaking` as busy and does not start another process.
-- **Latency.** Words are written to Snapshot as the hypothesis updates. The model card’s design latency is 80–160 ms. End of utterance, not a silence timer, submits the line. Enter force-submits the current hypothesis.
-- **Throughput.** One listen process. Turns are serial. Follow-up utterances in that process keep the last 24 non-system model messages and the heads used so far, still at most two heads.
+- **Latency.** Words are written to Snapshot as the hypothesis updates. The model card’s design latency is 80–160 ms. Native Parakeet EOU or explicit Whistle VAD/manual policy submits the finalized line. Enter requests finalization and commitment.
+- **Throughput.** One listen process. Turns are serial. Follow-up utterances in that process retain complete task history and at most two inherited heads. The prompt projection omits older complete exchanges as needed; the original is retained.
 - **Configuration.** Streaming ASR device, default CPU. Runtime files live under `$XDG_RUNTIME_DIR/agavai/`: `state`, `listen.pid`, `listen.lock`, `listen.cancel`, `record.request`, `unmuted-by-us`.
 - **Observability.** `agavai status` prints `state` and whether LlamaServer is up. The request log has `session start` and `session end reason=…`. The reasons are `stream ended`, `cancel`, `dismissed`, `cancel during the turn`, `error`, `recognizer did not start` and `crashed`. A crash, a failed turn and a config that cannot load leave a traceback there. The detached process's stdout and stderr still go to `/dev/null`.
 
 ### Recordings
 
-[src/agavai/recording.py](../src/agavai/recording.py) and the recording loop in [src/agavai/__main__.py](../src/agavai/__main__.py). The product design is [recording.md](recording.md).
+[src/agavai/recording.py](../src/agavai/recording.py) and the recording loop in [session.py](../src/agavai/harness/session.py). The product design is [recording.md](recording.md).
 
-- **Deploy.** Inside ListenSession, which owns the microphone. `agavai record` toggles. With no live listener it summons Overlay and detaches `agavai listen --record`. With one, it appends the action to `record.request` and sends SIGUSR1; a listener still starting is not signalled, since it has no handler yet. `start_recording` sends this session the same toggle, so a voice start records right after the spoken reply.
+- **Deploy.** Inside ListenSession, which owns the microphone. `agavai record` toggles. With no live listener it summons Overlay and detaches `agavai listen --record`. With one, it appends the action to `record.request` and sends SIGUSR1; a listener still starting is not signalled, since it has no handler yet. `start_recording` sends this session the same toggle, so a voice start enters recording promptly and invalidates pending inference.
 - **Lifecycle.**
   - **Start.** A recording runs its own continuous recognizer process (`asr_worker.py` with continuous Parakeet decoding), started in about 1.3 s, while the assistant's stays loaded. The start chime plays to the end before capture begins.
   - **Capture.** One `parec` runs for the whole recording. Every packet goes to a growing `audio.wav`, whose header is rewritten on each write, and to the recognizer. Each committed line, mark, and pause is appended to `segments.jsonl`.
@@ -200,34 +222,53 @@ Transport in and the recognizer. The stage is specified in [audio.md](audio.md).
 
 ### Turn taking
 
-The commit rule. It reads streaming ASR and keyboard input. It does not read a silence timer.
+The session commits finalized ASR events or Enter. Native Parakeet, explicit
+Whistle VAD or manual endpoint policy controls final decoding. A partial, pause,
+meter update or boundary marker alone is not an action.
 
 - **Deploy.** Inside ListenSession.
 - **Lifecycle.** Interim hypothesis goes to user context and is shown. End of utterance or Enter commits that text as the user message and starts the LLM. Escape drops the hypothesis. End of boundary does not commit.
-- **Latency.** The commit happens on the end-of-utterance marker, or on Enter. No 900 ms settle time.
+- **Latency.** Commit follows native EOU, explicit VAD trailing silence, or Enter, including final-tail decoding. VAD silence settings apply only to that selected policy.
 - **Throughput.** One open utterance.
-- **Configuration.** None beyond the recognizer.
+- **Configuration.** ASR endpoint policy and explicit VAD settings.
 - **Observability.** A committed line is the snapshot transcript with `final` true, then phase `thinking`. Each capture logs `asr end reason=… words=… secs=…`. The reasons are `eou`, `empty`, `enter`, `cancel` and `stream_ended`. Partials are not logged.
 
 ### Voxtype
 
 Not on the assistant path. The user service `voxtype` remains for F9 dictation. The assistant must not call `record start`, `stop`, or `cancel`.
 
-### Orchestrator
+### Turn engine, context and execution
 
-[src/agavai/orchestrator.py](../src/agavai/orchestrator.py) and [src/agavai/canvas.py](../src/agavai/canvas.py).
+[Harness](../src/agavai/harness/__init__.py), [engine](../src/agavai/harness/engine.py),
+[context](../src/agavai/harness/context.py), [routing](../src/agavai/harness/routing.py)
+and [execution](../src/agavai/harness/execution.py) run in process.
 
-- **Deploy.** In-process. `run_turn` on ListenSession, and also on the one-shot `agavai ask` process.
-- **Lifecycle.** Input is the utterance string plus stored messages and heads when the caller permits continuation. Output is the spoken sentence. It health-checks LlamaServer and, if there is history, classifies the new query's context locally. A `new_conversation` response clears the prior canvas, turns, model messages, and heads while preserving `session_id`; `follow_up` retains them. It then asks Router for heads, merges any retained heads (at most two), and loops at most `max_tool_rounds`. A wallpaper or screensaver “show me” request runs `wallpaper_list` before the model speaks when that tool is in the selected schemas. Tool results pass through Snapshot in full. The model sees kind and spoken name, clipped to 500 characters, with paths removed. `<think>` blocks are stripped. Paths that leak into the final sentence are replaced the same way.
-- **Latency.** Bound by `max_tool_rounds` times `[llm] timeout_secs`, plus tool time and one context call when there is history. That call uses the same timeout and a 16-token output cap. This is a ceiling, not a target. No typical-turn measurement is in the repo.
-- **Throughput.** One turn at a time inside the process. `agavai ask` does not share memory with ListenSession.
-- **Configuration.** `[llm] max_tool_rounds`, `max_tokens`, `temperature`, `timeout_secs`. The desktop and chat system prompts are fixed in code, including the local time line.
-- **Observability.** Tool start and tool done land on Snapshot. The request log has:
-  - `turn start` and `turn done secs=…`;
-  - `context choice=…` and `turn control=…`;
-  - warnings for a stopped model, an error, or exhausted tool steps.
+- **Lifecycle.** Exact controls, source/capability decisions, task relation, scoped
+  schemas, bounded inference and validated ordered dispatch produce one accepted
+  reply. The context store owns history, heads, proposals and source revisions.
+- **Context budget.** Original messages and full outcomes remain for the session.
+  Before inference, oldest complete exchanges are omitted to fit a UTF-8 byte limit
+  of 2 * (ctx_size - max_tokens), including schemas. This is an application policy,
+  not an exact tokenizer guarantee. Oversized current input fails explicitly.
+- **Sources.** Recording requests read corrected segments, never desktop OCR.
+  Chunked interpretation is bounded by model rounds; changed revisions reject
+  stale answers. Exact word edits preserve heard words. See [recording.md](recording.md).
+- **Controls.** Isolated wait/pause holds finalized draft words. Resume retains them
+  without executing; the next finalized input completes the draft. Recording
+  pause/resume remains separately name-addressed.
+- **Execution.** Offered schemas and allowlists constrain calls. Confirmations bind
+  validated arguments and consume once. Full outcomes retain task/request/call
+  identity and ok/error/unknown status. Duplicate calls and fallback reuse results.
+- **Performance.** One accepted turn, one outstanding provider operation. Cancellation
+  polls every 50 ms during inference; ordered side effects retain tool timeouts.
+  No measured end-to-end latency SLA is claimed.
+- **Configuration.** Existing brain, endpoint, head-router and service keys remain.
+  Capability can select a language tier directly.
+- **Observability.** Snapshot: actual decision/model/source/fallback events, source
+  revision, task progress and tool outcomes. Logs retain originating request identity.
 
-  A turn that raises leaves `turn failed` with its traceback, and the user hears “The local agent hit an error.” At debug level the request text and the reply are logged too.
+Full module contracts and source/cancellation sequences:
+[voice-agent-harness.md](voice-agent-harness.md).
 
 ### Router
 
@@ -235,7 +276,7 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 
 - **Deploy.** Selection runs in-process. Jev calls HTTPS; Needle inference runs in a persistent Cactus child worker. Keyword, local and Needle do not leave the machine.
 - **Lifecycle.** `select(utterance)` returns up to two head ids, or none for chat. Jev posts one `choice` question to the Decisions API. `chat` or an empty choice means no heads from Jev. Keyword scores head keywords and keeps those tied for the top score, at most two. `local` calls keyword. After any successful empty result, keyword still runs when fallback is not `none`.
-- **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. `[router] timeout_secs` caps inference, including Needle worker startup. Default is 2 s; the Needle profile uses 10 s. These are failure bounds. Keyword is local string matching; no budget is set. Eval traces record Needle routing duration separately from agent calls.
+- **Latency.** No current Jev latency SLA is established in this repository. `[router] timeout_secs` caps inference, including Needle worker startup. Default is 2 s; the Needle profile uses 10 s. These are failure bounds. Keyword is local string matching; no budget is set. Eval traces record Needle routing duration separately from agent calls.
 - **Throughput.** One decision per turn. No batching.
 - **Configuration.** `[router] backend` (`jev`, `needle-cactus`, `keyword`, `local`, `none`), `fallback`, `timeout_secs`, `max_tools`. `[router.needle]` model id/path, Cactus venv/library and max_tokens. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
 - **Observability.** The request log has `router backend=… source=… heads=… secs=…`. `source` names the router whose answer supplied the heads, so a keyword route after a Jev or Needle `chat` answer is visible. A router failure is a warning naming the exception and the fallback. Eval traces label Needle model exchanges `routing` and fingerprint its model/runtime alongside agent engines. Native Snapshot help records the selected source and head ids separately from configured routing; all-tools bypass and combined Needle routing are explicit. It also records model requests and escalation, tool dispatch and speech selection for the latest turn. See [ui-design.md](ui-design.md) for the version and pipeline help contract.
@@ -271,11 +312,11 @@ Heads:
 [src/agavai/tools.py](../src/agavai/tools.py).
 
 - **Deploy.** In-process functions. Each one shells out to an existing Omarchy or Hyprland command, or to `fd`. Not separately installed.
-- **Lifecycle.** `call_tool(name, arguments)` returns a string. Unknown names, invalid JSON, timeouts, and exceptions return an error string. They do not raise. `launch` is an enum. `play_url` allows only `http` and `https`. `search_files` runs `fd` under `[files] roots`. `screen_context` is the focused window plus `grim` and `tesseract` on that window. Pixel click is not a function. `list_agents` is on the allowlist and is not a member of any head, so the voice loop does not inject it. It reports local units, plugins, and the A2A card. It does not call a remote agent.
+- **Lifecycle.** execute_tool returns a typed outcome. Explicit adapter rejection is error; timeouts and unexpected exceptions are unknown. MCP call_tool serializes that outcome as text. `launch` is an enum. `play_url` allows only `http` and `https`. `search_files` runs `fd` under `[files] roots`. `screen_context` is the focused window plus `grim` and `tesseract` on that window. Pixel click is not a function. `list_agents` is on the allowlist and belongs to the agents head. It reports local units, plugins, and the A2A card. It does not call a remote agent.
 - **Latency.** The default subprocess timeout is 15 s. `launch` and `play_url` use 20 s. That bound is the tool’s contribution to a turn. No per-tool target is set.
 - **Throughput.** Tools in one model step run one after another. They are not parallel.
 - **Configuration.** `[files] roots` and `max_results` (default 20). Everything else is the command on `PATH`.
-- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Neither do `start_recording` and `list_recordings`, where the recording itself is the feedback. `agavai mcp` neither lists nor runs those two, so other agents cannot start the microphone or read recordings. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`. The request log has `tool name=… status=ok|error secs=…`, using the same rule. A tool that raises leaves its traceback. Debug level adds the arguments and the clipped result.
+- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Neither do `start_recording` and `list_recordings`, where the recording itself is the feedback. `agavai mcp` neither lists nor runs those two, so other agents cannot start the microphone or read recordings. Other tools set Done or Not completed. Status comes from the adapter, never substrings in source data. Unknown outcomes display “Outcome unknown”. The request log has `tool name=… status=ok|error|unknown secs=…`, using typed status. A tool that raises leaves its traceback. Debug level adds the arguments and the clipped result.
 
 ### Speech
 
@@ -290,10 +331,12 @@ Heads:
 
 ### Snapshot
 
+The harness owns model history, proposals and task archives; the snapshot owns presentation only.
+
 [src/agavai/ui.py](../src/agavai/ui.py).
 
 - **Deploy.** A JSON file, `$XDG_RUNTIME_DIR/agavai/ui.json`, written by ListenSession or by `agavai ask`. Overlay and Bar only read it.
-- **Lifecycle.** Writes are a temp file and `replace`. `begin_session` clears turns, transcript, display, and the in-memory model messages, and sets a new `session_id`. `clear_conversation` clears conversation content and model heads while keeping that session id, so dismissal still suppresses late writes during a topic change. `continue_listening` clears the live transcript line and the error, and leaves the canvas. After `agavai cancel` stores the session id in `dismissed-session`, further writes from that id are skipped. `ui-open` checks the session id, `openable`, an absolute path, and the extension allowlist, then runs `xdg-open` with a fixed argument list.
+- **Lifecycle.** Writes are a temp file and `replace`. `begin_session` clears turns, transcript and display, and receives the authoritative `session_id` from the harness. Entering listening mode keeps it. `clear_conversation` clears presentation content while keeping that session id, so dismissal still suppresses late writes during a topic change. `continue_listening` clears the live transcript line and the error, and leaves the canvas. After `agavai cancel` stores the session id in `dismissed-session`, further writes from that id are skipped. `ui-open` checks the session id, `openable`, an absolute path, and the extension allowlist, then runs `xdg-open` with a fixed argument list.
 - **Latency.** The file is the UI protocol. Assumption: readers see a replace as one snapshot, not a torn write. Interim hypotheses are the hottest writer. A slow reader falls behind the file watch; nothing queues intermediate frames.
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.
 - **Configuration.** `[overlay] placement` is copied into every snapshot; an unknown corner fails config loading. Otherwise only the runtime directory. Turn history kept on the overlay is five. Result text is clipped (280 characters on the tool row, 160 on arguments).
@@ -307,7 +350,7 @@ Heads:
 - **Lifecycle.**
   - Each capture in ListenSession, and each `agavai ask`, starts a request. Its id is the first eight characters of the Snapshot `session_id` and a counter, such as `request=a2bd4d6f-3`. Every line until the next capture carries it, and lines outside a request carry `request=-`.
   - A capture that hears nothing still takes a number.
-  - Until the first turn of a session completes, each new capture begins a new Snapshot session, so noise before the first request moves later requests to a new id.
+  - The harness supplies the session ID once. Noise-only captures keep it; capture counters advance without creating a new session. Inference logs retain their originating request even after cancellation and a later capture.
 - **Latency.** One datagram per line, written synchronously.
 - **Throughput.** A turn with one tool call writes about eight lines at `info`.
 - **Configuration.** `[log] level`:
@@ -340,7 +383,7 @@ sequenceDiagram
   participant Overlay
   participant StreamingAsr as Streaming ASR
   participant TurnTaking as Turn taking
-  participant Orchestrator
+  participant TurnEngine
   participant Router
   participant LlamaServer
   participant Tools
@@ -358,18 +401,18 @@ sequenceDiagram
   Snapshot->>Overlay: live line
   StreamingAsr-->>TurnTaking: end of utterance
   TurnTaking->>Snapshot: final transcript, phase thinking
-  TurnTaking->>Orchestrator: finished line, no prior messages
-  Orchestrator->>Router: utterance
-  Router-->>Orchestrator: files
-  Orchestrator->>LlamaServer: messages plus search_files schema
-  LlamaServer-->>Orchestrator: tool call search_files
-  Orchestrator->>Snapshot: tool start
-  Orchestrator->>Tools: search_files query
-  Tools-->>Orchestrator: path list
-  Orchestrator->>Snapshot: display with paths, model view without paths
-  Orchestrator->>LlamaServer: tool result
-  LlamaServer-->>Orchestrator: spoken sentence
-  Orchestrator->>Speech: sentence
+  TurnTaking->>TurnEngine: finished line, no prior messages
+  TurnEngine->>Router: utterance
+  Router-->>TurnEngine: files
+  TurnEngine->>LlamaServer: messages plus search_files schema
+  LlamaServer-->>TurnEngine: tool call search_files
+  TurnEngine->>Snapshot: tool start
+  TurnEngine->>Tools: search_files query
+  Tools-->>TurnEngine: path list
+  TurnEngine->>Snapshot: display with paths, model view without paths
+  TurnEngine->>LlamaServer: tool result
+  LlamaServer-->>TurnEngine: spoken sentence
+  TurnEngine->>Speech: sentence
   Speech-->>User: audio
   ListenSession->>Snapshot: phase listening, display kept
 ```
@@ -378,20 +421,20 @@ What crosses each boundary:
 
 1. Bar receives a left click and leaves with the command `agavai invoke`. No transcript yet.
 2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and a request-log error, and does not start capture.
-3. Snapshot receives `begin_session`: empty turns, a new `session_id`, phase `listening`. Overlay receives that file and shows the orb.
+3. The harness creates its session ID and supplies it to Snapshot through `begin_session`; listening then publishes empty turns and phase `listening`. Overlay receives that file and shows the orb.
 4. Speech receives the start chime once, then the listen cue, which warms the Kokoro socket silently if one was not already up.
 5. Streaming ASR receives microphone audio. It leaves interim hypotheses while the person is still talking. Turn taking writes each one to user context with `final` false. The router is not called.
 6. End of utterance leaves the finished line. An end-of-boundary marker leaves another partial and does not commit. Enter commits whatever the hypothesis is now.
-7. Orchestrator receives the finished text and an empty history. It leaves a health check. If LlamaServer is down, it leaves the hint sentence and does not call Router.
+7. TurnEngine receives the finished text and an empty history. It leaves a health check. If LlamaServer is down, it leaves the hint sentence and does not call Router.
 8. Router receives the utterance. It leaves the head id `files` (one schema, `search_files`), either from Jev or from the keyword fallback.
 9. LlamaServer receives the system prompt, the user text, and that schema. It leaves a `search_files` tool call.
 10. Tools receives the query. It leaves a JSON list of paths under the configured roots, or an error string such as `fd not installed`.
-11. Snapshot receives the full list and stores a `display` block whose items have paths. Orchestrator sends LlamaServer only kind and name, clipped to 500 characters.
+11. Snapshot receives the full list and stores a `display` block whose items have paths. TurnEngine sends LlamaServer only kind and name, clipped to 500 characters.
 12. LlamaServer receives that tool message and leaves a short sentence. Speech receives the sentence after path substitution and leaves audio. Snapshot receives phase `speaking`, then phase `listening` with `display` still set.
 
-The stored model messages and the head `files` stay in the process. A second utterance is sent with `continue_conversation`, which permits the local context decision. For `follow_up`, Orchestrator merges the new router choice with `files`, still at most two heads, and retains `display`. For `new_conversation`, it clears earlier turns and results, discards the stored model messages and head `files`, and answers using only the new request and its selected heads.
+The stored model messages and the head `files` stay in the process. A second utterance is sent with `continue_conversation`, which permits the local context decision. For `follow_up`, TurnEngine merges the new router choice with `files`, still at most two heads, and retains `display`. For `new_conversation`, it clears earlier turns and results, discards the stored model messages and head `files`, and answers using only the new request and its selected heads.
 
-`agavai ask "find the budget notes"` does not open transport in or streaming ASR. It starts a blank Snapshot, plays the think cue, runs Orchestrator once, speaks, and sets phase `idle`. It does not keep messages for a later voice turn. If ListenSession is also running, both write Snapshot; they are not coordinated.
+`agavai ask "find the budget notes"` does not open transport in or streaming ASR. It starts a blank Snapshot, plays the think cue, runs TurnEngine once, speaks, and sets phase `idle`. It does not keep messages for a later voice turn. If ListenSession is also running, both write Snapshot; they are not coordinated.
 
 ### Dismiss during speaking
 
@@ -441,4 +484,4 @@ Rejected options named by the sources below, and why this design did not take th
 | eSpeak or a notification as the voice | [src/agavai/tts.py](../src/agavai/tts.py) | Fallbacks when Kokoro cannot play. Kokoro is preferred. |
 | Keyword-only routing | [src/agavai/router.py](../src/agavai/router.py) | Available as `backend = "keyword"` and as the fallback. Default is Jev. |
 
-Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/orchestrator.py](../src/agavai/orchestrator.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm).
+Sources: [README.md](../README.md), [docs/ui-design.md](ui-design.md), [docs/architecture.md](architecture.md), [docs/audio.md](audio.md), [share/config.example.toml](../share/config.example.toml), [plugin/Chat.qml](../plugin/Chat.qml), [plugin/BarWidget.qml](../plugin/BarWidget.qml), [src/agavai/__main__.py](../src/agavai/__main__.py), [src/agavai/harness/engine.py](../src/agavai/harness/engine.py), [src/agavai/router.py](../src/agavai/router.py), [src/agavai/heads.py](../src/agavai/heads.py), [src/agavai/llm.py](../src/agavai/llm.py), [src/agavai/tools.py](../src/agavai/tools.py), [src/agavai/tts.py](../src/agavai/tts.py), [src/agavai/ui.py](../src/agavai/ui.py), [scripts/agavai-llm](../scripts/agavai-llm).

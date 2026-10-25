@@ -3,7 +3,7 @@
 <style>
 *{box-sizing:border-box}body{margin:0;color:var(--foreground);font-family:var(--font-sans,system-ui);background:transparent}main{padding-bottom:16px}h2{margin-top:24px}p{line-height:1.5}.flow{display:grid;gap:8px}.process{border:1px solid var(--border);padding:16px;border-radius:var(--radius,8px)}.label{display:block;color:var(--muted-foreground);margin-bottom:8px}.arrow{text-align:center;padding:4px;overflow-wrap:anywhere}.options{display:grid;grid-template-columns:1fr 1fr;gap:12px}.branch{border-left:2px solid var(--border);padding-left:16px;margin-top:12px}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--border);padding:10px 5px}summary{padding:12px 0}code{overflow-wrap:anywhere}a{color:inherit}@media(max-width:500px){.options{grid-template-columns:1fr}}
 </style></head><body><main>
-<p><strong>Omarchy: replace the engines, keep the voice loop.</strong><br>Proposed design. The small local brain handles the request first; the larger model runs only when needed.</p>
+<p><strong>Omarchy: replace the engines, keep the voice loop.</strong><br>Historical engine proposal, superseded by the <a href="../voice-agent-harness.md">implemented harness design</a>. The current harness selects models by task capability.</p>
 <div class="flow" aria-label="Processes and data flow on one Omarchy machine">
 <div class="process"><span class="label">Capture process · parec</span>Microphone → 16 kHz mono PCM</div>
 <div class="arrow">↓ audio bytes → session → selected speech worker</div>

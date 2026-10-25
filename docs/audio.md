@@ -1,6 +1,6 @@
 # Audio processing
 
-How a spoken request moves from the microphone to a reply. The stages are transport in, streaming ASR, turn taking, user context, the LLM, TTS, and transport out. The [NeMo Labs Voice Agent](https://docs.nvidia.com/nemo/labs-voice-agent/nemo-voice-agent/nemo_voice_agent/pipecat/services/nemo/builders/) is a useful read for the same pipeline.
+How a spoken request moves from the microphone to a reply. The stages are transport in, streaming ASR, harness turn commitment and context, model services, validated execution, TTS, and transport out. The [NeMo Labs Voice Agent](https://docs.nvidia.com/nemo/labs-voice-agent/nemo-voice-agent/nemo_voice_agent/pipecat/services/nemo/builders/) is a useful read for the same pipeline.
 
 This is the assistant listen path, with the rest of the session in [flow.md](flow.md). F9 dictation stays on Voxtype and is not part of this path.
 
@@ -10,8 +10,11 @@ flowchart LR
   StreamingAsr --> TurnTaking[Turn taking]
   TurnTaking -->|interim| UserContext[User context]
   UserContext --> Overlay
-  TurnTaking -->|end of utterance| Llm[LLM]
-  Llm --> Tts[TTS]
+  TurnTaking -->|one finalized request| Harness[Harness: context and decisions]
+  Harness <--> Llm[Model services]
+  Harness --> Tools[Validated tools]
+  Tools --> Harness
+  Harness --> Tts[TTS]
   Tts --> TransportOut[Transport out]
 ```
 
@@ -61,7 +64,7 @@ Nothing else in the listen session may commit a turn. If the end-of-utterance to
 
 ## User context
 
-Until the turn is committed, the line is provisional. The snapshot stores it as a partial with `final` false. The orchestrator may hold that growing text. On commit, `final` becomes true and that text is the user message.
+Until the turn is committed, the line is provisional. The snapshot stores it as a partial with `final` false. The session presents that growing text; it has no execution authority. On commit, `final` becomes true and that text is the user message.
 
 The LLM sees the finished sentence. It does not see the audio, and it does not see earlier drafts.
 
@@ -71,7 +74,7 @@ This stage starts only after turn taking commits. It is the current tool loop.
 
 Before the model path, the turn engine handles isolated `Agavai`, `Yes` and `No`, plus `Continue` when a concrete action is pending. These skip model health, classification, routing and inference. `Agavai` clears conversation within the same listening session and returns no speech. Other controls use session state and the existing allowlisted dispatcher; unbound `Continue` still needs Qwen. See [flow.md](flow.md) for the confirmation contract.
 
-For ordinary turns, the router picks at most two tool heads from the finished sentence. Qwen, on llama-server, sees only those tools plus an explicit confirmation schema when available, all within the configured schema budget. The allowlist runs locally. The spoken reply is one or two sentences, without filesystem paths. Nothing here runs on a partial.
+The harness selects task relation, source and capability first ([design](voice-agent-harness.md)). Exact wait/pause/resume controls hold finalized draft words separately from recording controls. History and pending actions belong to the harness. For action turns, the tool-head router picks at most two tool heads from the finished sentence. Qwen, on llama-server, sees only those tools plus an explicit confirmation schema when available, all within the configured schema budget. The allowlist runs locally. The spoken reply is one or two sentences, without filesystem paths. Nothing here runs on a partial.
 
 ## TTS
 

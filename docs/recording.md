@@ -2,6 +2,11 @@
 
 Status: design agreed 2026-10-23. P0 is deployed locally from `feature/recordings` on 2026-10-25; what P0 includes is under [P0 as built](#p0-as-built). Decisions are listed at the end, and progress is tracked in [tasks/recording.md](../tasks/recording.md).
 
+The Requirements, Using it, Views and design sections describe the product direction,
+including deferred features. The as-built section distinguishes deployed P0 from the
+current branch's harness follow-ups, which have not been deployed. It is the reference
+for which views, controls and source requests are implemented.
+
 Agavai can listen without answering. It keeps the audio, a timestamped transcript, and your corrections, so you can play any moment back later. The same recording can become a transcript, notes, or a translation. The assistant loop stays as specified in [flow.md](flow.md), and the overlay rules stay in [ui-design.md](ui-design.md). This file covers only what recording adds or changes.
 
 ## Requirements
@@ -183,11 +188,38 @@ flowchart LR
 
 ## P0 as built
 
-- **Start.** Super+Ctrl+M (`agavai record`), the CLI, and voice all start a recording. A voice start speaks the model's short reply first, then the start chime plays and recording begins.
+- **Start.** Super+Ctrl+M (`agavai record`), the CLI, and voice all start a recording. A voice start enters recording through the controller; the chime and visible state acknowledge it.
 - **Ending.** A recording started from the shortcut ends its session when it stops, closing the microphone and leaving the review on screen. One started inside an assistant session returns to listening.
 - **Review.** It has playback, click-to-seek lines, the highlighted current line, mark ticks, speed, corrections with "Show heard words", and "Open folder". Copy, Export, Delete, Replace across the recording, and the view tabs are not built yet; a recording is deleted by removing its folder.
 - **Live transcript.** P0 keeps the live recognizer's text: lowercase, unpunctuated, English. The title is "Recording" until P1 adds the polish pass and titles.
 - **MCP.** `start_recording` and `list_recordings` are not offered over `agavai mcp`.
+
+## Harness follow-ups on the rewrite branch
+
+Saved recordings bind to session context at capture completion. “Summarize this
+recording”, “make notes from the last recording” and explicit transcript questions
+load corrected segments directly, without screen OCR. If no active or unique source
+exists, the harness asks which recording; “last recording” selects the newest.
+A language-capable local brain is required.
+
+Interpretation publishes a canvas and short spoken lead. Revisions are checked before
+publication; concurrent edits reject stale answers. Long input uses bounded chunks
+and a combining request. Larger sources fail explicitly. This does not implement
+planned Notes/Translation tabs, timestamp links, search/export or durable derived
+views. Translation quality depends on the configured model; P2 language polish is
+still deferred.
+
+Voice edits support “replace old with new” for one unique occurrence, optionally in
+a line, or “correct line N to full corrected text”. Ambiguity changes nothing.
+Correction overlays preserve heard words and mark earlier derived output stale.
+All correction writers share a per-recording advisory edit lock; source-derived
+edits reject an effective line that changed after resolution.
+
+Record/cancel shortcuts invalidate waiting inference without waiting for its timeout.
+Voice start may therefore begin before a model reply is spoken; the chime and visible
+recording state acknowledge it. Recording controls remain isolated, name-addressed
+utterances; meeting content never becomes desktop intent. This branch implementation
+does not imply deployment.
 
 ## Decisions taken
 

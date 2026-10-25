@@ -7,11 +7,10 @@ speech synthesis are replaceable services behind explicit adapters. This is an
 architectural rewrite of the existing application, not a separate framework or
 another daemon. The native UI is a projection of harness state.
 
-This document is the implementation contract for the rewrite, in progress on
-`t3/test-whistle-needle-engines`. Until migration and validation finish,
-[flow.md](flow.md) describes the installed implementation. No host configuration
-or model deployment changes are authorized by this rewrite alone. Existing
-recording, confirmation and allowlist guarantees must survive the migration.
+This document describes the implemented rewrite on the current branch;
+[flow.md](flow.md) governs runtime behavior. This branch has not been deployed to
+the host. No host configuration or model deployment changes are part of this rewrite. Existing
+recording, confirmation and allowlist guarantees are retained by the implementation.
 
 The initial harness must own:
 
@@ -91,7 +90,12 @@ process; it never stores the authoritative model history or pending action.
 | Make a remote harness daemon or separate framework | Independent deployment | Adds state ownership and IPC to a single-user application | Agavai remains the in-process harness, per user direction |
 | Deterministic controller with a semantic decision layer | Explicit lifecycle; replaceable models; testable decisions | More explicit contracts and task-state handling | Chosen |
 
-The router chooses task relation, source binding and capability. An action model
+The decision layer chooses task relation, source binding and capability.
+The implemented routing module recognizes supported English source/correction/question
+forms; the language tier classifies task relation and resolves self-corrections.
+This is explicit policy with model decisions, not a claim that keyword rules
+understand arbitrary intent. Ambiguous edits and invalid decisions stop for
+clarification. The existing router module still only selects tool heads. An action model
 then proposes concrete calls within that route. The execution manager validates
 them. A general language model interprets results when the task needs an answer,
 summary or explanation. A simple verified action can finish with a deterministic
@@ -112,8 +116,8 @@ meet interactive routing targets.
 | Task | Committed requests, relevant results, active recording, corrections | Context store; retained within the session |
 | Execution | Current request, model attempt, advertised schemas, pending confirmation, completed calls and outcomes | Execution manager; one turn, with explicit pending-action continuation |
 
-A new task drops inherited tools and unrelated conversation from the next
-prompt. It does not delete recordings or pretend earlier actions never ran.
+A new task archives the previous task and drops inherited tools and unrelated
+conversation from the next prompt. It does not delete recordings or pretend earlier actions never ran.
 Continuing a task keeps its relevant sources. A correction changes a source or
 pending request revision; it never rewrites the historical result of an action.
 
@@ -143,16 +147,24 @@ recording, user correction, execution record or pending confirmation.
 
 Pack complete request/tool/result groups. Never leave an orphan tool result or
 split the call from its outcome. Retain the current request, pending action and
-active source revision. Older material can become a bounded, source-labelled
-digest; the original remains available in the context store. If required input
+active source revision. The oldest complete exchanges are omitted from the prompt when necessary;
+the original remains in the context store. No generated memory digest or persistent
+personal memory is implemented. If required input
 cannot fit, use bounded source chunks or report the limit. Never silently omit
-the transcript and answer as if it had been read. Model adapters own tokenizer
-capabilities; a conservative bound must be identified as a bound, not an exact
-token count. Reserve room for system text, tool schemas and the response.
+the transcript and answer as if it had been read. The current adapters do not expose tokenizers. The application uses a UTF-8
+byte limit of 2 * (ctx_size - max_tokens), including serialized messages and
+tool schemas. This is a packing policy, not an exact or guaranteed token limit;
+a provider context-limit error remains visible. System text, schemas and the
+active exchange must fit; otherwise the request fails explicitly.
 
 ### Reliability
 
-Every asynchronous result belongs to the request that created it. Cancellation
+Every asynchronous result belongs to the request that created it. InferenceSlot
+allows one provider operation at a time and polls cancellation every 50 ms.
+Only provider work runs in its daemon thread; tools and UI updates stay on the
+controller thread. An interrupted HTTP operation may continue until its configured
+deadline. The slot rejects new model work until it returns instead of queuing
+abandoned operations. Provider logs retain the originating request ID. Cancellation
 or replacement prevents later inference output from dispatching tools or
 overwriting the current view. An interrupted external action may already have
 executed; report an unknown outcome when it cannot be established. Never retry
@@ -167,6 +179,8 @@ a summary request by choosing any available tool.
 ## Modules
 
 ### Session controller
+
+Code: [session.py](../src/agavai/harness/session.py).
 
 - **Deployment:** in process, under the harness; CLI starts and controls it.
 - **Lifecycle/protocol:** existing listener identity/lock, ASR commitment,
@@ -183,6 +197,8 @@ a summary request by choosing any available tool.
 
 ### Context store
 
+Code: [context.py](../src/agavai/harness/context.py).
+
 - **Deployment:** in process, independent of the native view.
 - **Lifecycle/protocol:** create/reset task, append committed exchanges, bind
   resource, retain pending proposals, and pack model context. Recording source
@@ -190,13 +206,16 @@ a summary request by choosing any available tool.
 - **Performance:** ordinary metadata operations require no inference. Source
   reads and compaction are bounded and measured separately from model response.
 - **Throughput:** serial task mutations; immutable snapshots for inference.
-- **Configuration:** context budget and retained recent exchanges; model capacity
-  remains provider-specific. No vector database or personal-memory service.
+- **Configuration:** each tier's ctx_size and max_tokens determine the byte budget;
+  oldest complete exchanges are omitted until it fits. No vector database or
+  personal-memory service.
 - **Observability:** task identity, relation decision, source revision, retained
   exchanges, compacted exchanges and prompt budget outcome, without transcript
   bodies in ordinary logs.
 
 ### Decision router
+
+Code: [routing.py](../src/agavai/harness/routing.py).
 
 - **Deployment:** in-process policy with calls to configured model services.
 - **Lifecycle/protocol:** committed request + task snapshot + capability catalog
@@ -213,6 +232,8 @@ a summary request by choosing any available tool.
   decision provider, retries and reason for clarification/escalation.
 
 ### Turn engine and model services
+
+Code: [engine.py](../src/agavai/harness/engine.py).
 
 - **Deployment:** engine in process; existing Needle, llama-server, ASR/VAD and
   speech workers retain their isolation and native dependencies.
@@ -231,6 +252,8 @@ a summary request by choosing any available tool.
   timing, fallback and result-synthesis timing.
 
 ### Execution manager
+
+Code: [execution.py](../src/agavai/harness/execution.py).
 
 - **Deployment:** in process; existing dispatcher functions remain tool adapters.
 - **Lifecycle/protocol:** proposed call → schema/route validation → confirmation
@@ -347,31 +370,38 @@ tools and recorded speech rather than the real desktop.
 | A model escalates after an executed call | Known completed call is not repeated |
 | Session reset, correction or cancellation before Yes | Stale proposal cannot execute |
 
-### Migration order
+### Implemented migration and limits
 
-1. Move listener lifecycle out of `__main__`; make CLI a harness entry point.
-2. Move conversation and pending-action ownership out of `ChatUi`; migrate live,
-   typed, eval and BDD callers together. No parallel legacy execution engine.
-3. Introduce decision and execution contracts around the existing providers and
-   dispatcher. Preserve all current controls before extending their behavior.
-4. Bind recording sources, add correction and compaction paths, and remove the
-   tool-only generic-success shortcut.
-5. Align runtime/audio/engine/architecture/UI/recording docs with the code;
-   validate full BDD, real model replays and native UI before deployment.
+The CLI delegates to Harness and the session controller. The former orchestrator
+was moved to the turn engine; no parallel legacy engine or UI context registry
+remains. Live voice, typed requests, evals and BDD callers use these contracts.
 
-## Epics
+Recording interpretation uses corrected recording.json segments with a SHA-256
+revision, no desktop schemas, and a source canvas. A changed revision rejects the
+in-flight answer. Inputs are chunked within the byte policy; at most
+max_tool_rounds - 1 chunks plus one combining request are accepted. A larger
+recording requires a narrower source rather than silent truncation. This does not
+implement timestamp-linked Notes tabs or durable derived views. Voice edits support
+“replace old with new” for one unique occurrence, or “correct line N to full corrected
+text”. Ambiguity changes nothing. Corrections share a per-recording advisory edit lock;
+source-derived edits compare their expected effective line inside that lock, so a
+concurrent correction cannot be silently overwritten.
 
-These are implementation slices within this architectural task, not separately
-created task files. Persistent memory/preferences remain a later design.
+Exact “wait”/“pause” holds input; finalized words while held accumulate as a draft.
+“Resume” keeps the draft without executing it; the next finalized request completes
+it. This is separate from name-addressed recording pause/resume.
 
-- [ ] P0 voice Harness ownership: session controller, context store, model adapters
-  and callers. Agent implements; person reviews architectural boundary.
-- [ ] P0 voice Semantic routing, source binding, corrections and bounded context.
-  Agent implements and evaluates; person reviews ambiguous voice behavior.
-- [ ] P0 voice Execution outcomes, confirmations, interruption and result synthesis.
-  Agent implements; person reviews any changed external-action semantics.
-- [ ] P0 voice Code/docs parity and E2E BDD/native regression. Agent implements and
-  records evidence; live host deployment requires explicit deployment scope.
+Execution records include task/request/call identity, exact arguments, full result
+and ok/error/unknown status. Timeouts and unexpected tool exceptions have unknown
+outcomes and are not automatically retried. Confirmations are schema-validated
+before storage and consumed once. Task status is separate from tool status:
+answered, awaiting_confirmation, needs_input, held, failed, unknown, incomplete or
+cancelled describes harness progress, not proof of a model answer's factual accuracy.
+
+[Harness E2E BDD](../features/harness.feature) exercises real HTTP model transport,
+recording files and tool dispatch with scripted external services. Existing speech
+workers, endpoints, native UI, allowlist, confirmations and engine scenarios remain
+regression requirements. Deployment is a separate operation.
 
 ## Conclusion & References
 
@@ -389,8 +419,8 @@ and generic-acknowledgement failures into testable contracts.
 - Engines and deployment: [engines.md](engines.md),
   [model-engines.md](model-engines.md), [architecture.md](architecture.md),
   [existing component design](architecture-design/design.md).
-- Existing implementation to restructure: [CLI/session](../src/agavai/__main__.py),
-  [orchestrator](../src/agavai/orchestrator.py), [router](../src/agavai/router.py),
+- Implemented entry points: [CLI](../src/agavai/__main__.py), [session controller](../src/agavai/harness/session.py),
+  [turn engine](../src/agavai/harness/engine.py), [router](../src/agavai/router.py),
   [brain adapters](../src/agavai/brain.py), [worker transport](../src/agavai/worker.py),
   [UI snapshot](../src/agavai/ui.py), [recordings](../src/agavai/recording.py).
 - Local alternatives and limits: [native Qwen/Needle comparison](../evals/results/20261025-brain-comparison-cached/README.md),

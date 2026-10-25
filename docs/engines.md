@@ -2,10 +2,16 @@
 
 Speech recognition and the local brain are configured independently in `~/.config/agavai/config.toml`. Restart the listening session after editing; model services follow the file on their own (see [Services follow the configuration](#services-follow-the-configuration)). Defaults remain Parakeet/ONNX and the existing `[llm]` Qwen/llama-server configuration.
 
+Agavai is the in-process harness; [its design](voice-agent-harness.md) owns context,
+decisions and execution. The primary handles supported actions. A language tier handles
+source interpretation, self-correction, continuity and structured-result synthesis;
+it can be selected directly. All-tools policies apply only to action paths. Source
+reasoning receives no desktop schemas.
+
 | Role | Configuration | Supported choices |
 |---|---|---|
 | Voice input | `[asr]` | `parakeet-onnx` (native endpoint), `whistle-cactus` (energy or Silero VAD, or manual finish; streaming or batch) |
-| Router / decision | `[router]` | `needle-cactus` with `[router.needle]`, `keyword`, `jev` with `[router.jev]`, `none` to bypass routing; `local` is an alias for keyword |
+| Tool-head router | `[router]` | `needle-cactus` with `[router.needle]`, `keyword`, `jev` with `[router.jev]`, `none` to bypass routing; `local` is an alias for keyword |
 | Local agent / tool calling | `[brain.small]`, or `[llm]` when absent | Needle3 with `needle-cactus`; Qwen3 or a configured tool-capable GGUF with `llama-server` |
 | Local fallback | optional `[brain.large]` | Same brain backends; current setup uses local Qwen3-4B |
 | Cloud | Deferred | OpenAI/cloud adapters are not implemented; `[brain.cloud]` is rejected |
@@ -113,7 +119,7 @@ tool_selection = "routed"
 
 For a small Qwen and a larger GGUF, use `backend = "llama-server"` for both roles and distinct host/port pairs. Each role can select `model = "qwen3-4b-instruct"` or an id from `[llm.models]`; its catalog path, context and GPU defaults are resolved independently. An explicit `model_path` or runtime setting overrides the catalog. Needle still requires its Cactus paths. `agavai-llm.service` runs the small llama role and `agavai-llm@large.service` the larger one. Each role accepts `llama_bin`, `ctx_size`, `n_gpu_layers`, `temperature`, `max_tokens`, `max_tool_rounds` and `timeout_secs`. `agavai dump-llm --role small|large` shows its launcher settings. The old `agavai model set` command edits only the legacy `[llm]` catalog selection; explicit roles are selected in TOML or with `agavai setup`. Remove `[brain.large]` to disable fallback.
 
-Needle is a specialized tool model; it executes no tools itself. A valid supported call goes through the existing allowlist and confirmation flow. A simple result is acknowledged directly. No matching call, grounded-argument failure or runtime failure escalates if a larger role exists. Without one, the assistant explains that it could not handle the request and suggests a desktop request. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Routed Needle now honors the chosen router rather than forcing keyword selection. Needle retains shared session history but does not perform Qwen's conversation-classification call; unrelated requests retain canvas/history until reset with “Agavai.”
+Needle is a specialized tool model; it executes no tools itself. A valid supported call goes through schema, allowlist and confirmation checks. Invalid arguments stop the turn before dispatch. A simple result is acknowledged directly; structured or long data needs language interpretation. No matching call or runtime failure escalates if a larger role exists. Without one, the assistant explains the limitation. Internal no-match diagnostics are logged with the backend and offered tool names; they are not spoken. Routed Needle honors the chosen router. Task continuity uses a language tier even when Needle proposes actions; unrelated requests archive earlier context and clear inherited tools/canvas. Without a language tier the harness requests a fresh task using “Agavai” rather than guessing continuity.
 
 Chat models can call `escalate_to_larger_model` when unable to handle a request. This control tool is never offered to Needle; Needle's no-match response triggers escalation in the coordinator. Empty output and exhausted tool steps also trigger escalation. On escalation, the coordinator reselects tools according to the larger role's policy and passes the same history and completed tool results. It can answer general knowledge and conversational questions directly without tools; desktop actions still require an available tool and a successful result. Repeated identical calls after escalation reuse results from that turn instead of executing actions again. An answer or clarification from the small model completes the turn directly; the application does not infer universal correctness from a confidence score.
 
