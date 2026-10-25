@@ -80,3 +80,7 @@ Status: implemented, validated and committed on `t3/request-logging` (`bfc869e`,
   - Follow-ups:
     - When `t3/test-whistle-needle-engines` merges, its energy/Silero VAD, Whistle and Needle/brain tiers need lines in this format. That branch already has a few `log.info` calls (`ASR ready`, `ASR endpoint`, `ASR final`, `brain …`), which would start reaching the journal.
     - The detached listener's stdout and stderr still go to `/dev/null`. Its diagnostics now go to the log instead.
+- 2026-10-25T13:11:04+05:30 — Claude Code session request-logging — merged into `main` (fast-forward to `dc53f52`, not pushed). Follow-up done on `t3/test-whistle-needle-engines`, rebased onto `main` (see `tasks/model-engine-design.md`):
+  - `6d65526` puts the engine branch's layers in this format: `asr ready backend= mode= endpoint= vad= device= load_secs=`, `asr endpoint policy= reason=`, `asr final backend= finish_secs=`, `llm model=`, `needle model= tools= calls= secs=`, `brain unsupported model= reason= tools=` and `turn escalated from= to=: reason`.
+  - It removes the branch's `brain` line for llama-server, which repeated the `llm` line.
+  - Validated by the full suite there (405 passed), including a real Needle inference scenario.
