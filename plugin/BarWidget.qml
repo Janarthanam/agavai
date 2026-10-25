@@ -49,7 +49,7 @@ BarWidget {
     bar: root.bar
     text: ""
     iconComponent: mark
-    active: root.phase === "listening" || root.phase === "thinking" || root.phase === "speaking" || root.recordingActive
+    active: root.phase === "listening" || root.phase === "thinking" || root.phase === "speaking" || root.phase === "transcribing" || root.recordingActive
     tooltipText: root.recordingActive ? ("Agavai · " + (root.recording.paused ? "Paused " : "Recording ") + root.recordingClock + " · Click to stop and save")
       : root.phase === "idle" ? "Agavai · Click to speak · Super+M" : ("Agavai · " + root.phase + " · Right-click to cancel")
     onPressed: function(b) {

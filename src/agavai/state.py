@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agavai.config import Config
 
-VALID = {"idle", "listening", "thinking", "speaking", "recording", "error"}
+VALID = {"idle", "listening", "transcribing", "thinking", "speaking", "recording", "error"}
 
 
 def read_state(cfg: Config) -> str:

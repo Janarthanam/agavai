@@ -44,6 +44,9 @@ Item {
     readonly property string reviewPath: recording ? "" : openedRecording || (display && display.kind === "recording" ? String(display.path || "") : "")
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
+    // Listening for a follow-up gives the main line to the next utterance; the
+    // finished request stays visible beside its answer.
+    readonly property string previousRequest: turn.user && turn.user !== transcript ? String(turn.user) : ""
     readonly property var completion: snapshot.completion || null
     readonly property real strength: (listening || recording && !recPaused) && snapshot.level_db !== null && snapshot.level_db !== undefined && isFinite(Number(snapshot.level_db)) ? Math.max(0, Math.min(1, (Number(snapshot.level_db) + 70) / 65)) : 0
     readonly property color ink: Commons.Color.foreground
@@ -82,7 +85,7 @@ Item {
         opened = false;
         compact = true;
         // During a recording, cancel stops and saves it.
-        if (phase === "listening" || phase === "thinking" || phase === "speaking" || phase === "recording")
+        if (phase === "listening" || phase === "thinking" || phase === "speaking" || phase === "recording" || phase === "transcribing")
             Quickshell.execDetached(["agavai", "cancel"]);
         if (shell && typeof shell.hide === "function")
             shell.hide((manifest && manifest.id) || "janar.agavai");
@@ -389,7 +392,7 @@ Item {
                             }
                             NativeButton {
                                 quiet: true
-                                visible: !root.listening && root.phase !== "thinking" && root.phase !== "speaking"
+                                visible: !root.listening && root.phase !== "thinking" && root.phase !== "transcribing" && root.phase !== "speaking"
                                 text: root.transcript ? "Ask again" : "Listen"
                                 onClicked: root.start()
                             }
@@ -460,15 +463,30 @@ Item {
                                 elide: Text.ElideRight
                             }
                             Text {
+                                objectName: "agavaiListeningHint"
                                 visible: root.listening || root.recording || !(root.turn.assistant || root.snapshot.error)
                                 Layout.fillWidth: true
                                 horizontalAlignment: root.textTowardOrb
-                                text: root.recording ? (root.recPaused ? "Nothing is kept until you resume. Say “Agavai resume”." : "Say “Agavai stop” or press Super+Ctrl+M to stop.") : root.listening ? (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter.")) : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
+                                text: root.recording ? (root.recPaused ? "Nothing is kept until you resume. Say “Agavai resume”." : "Say “Agavai stop” or press Super+Ctrl+M to stop.") : root.listening ? (root.snapshot.asr_endpoint === "manual" ? "Press Enter to send. Escape cancels." : (root.completion ? "Still listening. Escape dismisses." : (root.expanded ? "Listening for your answer. It sends when you finish, or press Enter." : "Speak naturally. It sends when you finish, or press Enter."))) : root.phase === "transcribing" ? "Turning your speech into words…" : root.phase === "thinking" ? "Working on your request…" : root.transcript ? "Voice request" : "Press Super+M or click Listen."
                                 textFormat: Text.PlainText
                                 color: root.inkMuted
                                 font.family: Style.font.family
                                 font.pixelSize: Style.font.caption
                                 wrapMode: Text.Wrap
+                            }
+                            Text {
+                                objectName: "agavaiPreviousRequest"
+                                visible: root.previousRequest !== ""
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                text: "You said “" + root.previousRequest + "”"
+                                textFormat: Text.PlainText
+                                color: root.inkMuted
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.body
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
                             }
                             Text {
                                 visible: !!root.completion && !root.recording

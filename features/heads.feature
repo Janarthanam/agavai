@@ -58,3 +58,37 @@ Feature: Tool heads and routing
     When I route the utterance "take notes"
     Then the selected heads should include "recordings"
     And the selected tool names should include "start_recording"
+
+  Scenario: Needle selects the audio head without keyword overlap
+    Given a Needle router returning "volume" with "none" fallback
+    When I route the utterance "increase playback level"
+    Then the selected heads should include "audio"
+    And the selected tool names should include "set_volume"
+    And the selected tool names should not include "wallpaper_set"
+    And Needle was offered every registered tool for selection only
+
+  Scenario: Needle can select installed agents
+    Given a Needle router returning "agents" with "none" fallback
+    When I route the utterance "what assistants are available"
+    Then the selected heads should include "agents"
+    And the selected tool names should include "list_agents"
+
+  Scenario: Needle deduplicates tool groups and retains the two-head limit
+    Given a Needle router returning "multiple" with "none" fallback
+    When I route the utterance "open a browser and turn up the sound"
+    Then there should be 2 selected heads
+    And the selected heads should include "audio"
+    And the selected heads should include "launch"
+
+  Scenario Outline: Needle failures and no matches follow the configured fallback
+    Given a Needle router returning "<outcome>" with "<fallback>" fallback
+    When I route the utterance "turn the volume up"
+    Then there should be <count> selected heads
+    Examples:
+      | outcome | fallback | count |
+      | empty | keyword | 1 |
+      | empty | none | 0 |
+      | error | keyword | 1 |
+      | error | none | 0 |
+      | malformed | keyword | 1 |
+      | unknown | none | 0 |

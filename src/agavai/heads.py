@@ -1,4 +1,4 @@
-"""Tool heads. The 4B only sees schemas from the selected head(s)."""
+"""Tool groups and schemas for agents configured to use routing."""
 
 from __future__ import annotations
 
@@ -89,6 +89,12 @@ HEADS: tuple[ToolHead, ...] = (
         "Reminders, notifications, current time.",
         ("remind", "reminder", "notify", "notification", "time", "clock", "date"),
         ("reminder", "list_reminders", "clear_reminders", "send_notification", "clock_now"),
+    ),
+    ToolHead(
+        "agents",
+        "List installed assistant agents and their capabilities.",
+        ("agents", "available agents", "installed agents"),
+        ("list_agents",),
     ),
 )
 

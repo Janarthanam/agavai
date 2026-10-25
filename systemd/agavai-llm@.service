@@ -1,0 +1,15 @@
+[Unit]
+Description=Agavai llama-server for the %i brain role (from ~/.config/agavai/config.toml)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/agavai-llm %i
+Restart=on-failure
+RestartSec=3
+# Keep this process out of the voxtype cgroup, like agavai-llm.service.
+Environment=GGML_VK_VISIBLE_DEVICES=
+
+[Install]
+WantedBy=graphical-session.target

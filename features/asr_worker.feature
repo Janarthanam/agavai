@@ -30,3 +30,8 @@ Feature: Speech survives streaming boundaries
   Scenario: A recording keeps every utterance and its timing
     When I replay the ASR speech fixture as one continuous recording
     Then the ASR worker check passes
+
+  @asr_model
+  Scenario: Recording keeps complete audio with a different assistant recognizer
+    When I replay speech through recording capture with Whistle selected for the assistant
+    Then the ASR worker check passes

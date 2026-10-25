@@ -1,16 +1,29 @@
-"""Select tool heads. Jev via OpenRouter by default; keyword fallback; local stub."""
+"""Select tool heads using Jev, Needle or keywords, without executing calls."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Protocol
 
 from agavai.config import Config
-from agavai.heads import HEADS, JEV_HEAD_CRITERIA
+from agavai.brain import create_brain
+from agavai.heads import HEADS, JEV_HEAD_CRITERIA, head_for_tool
+from agavai.llm import parse_tool_calls
+from agavai.tools import OPENAPI_TOOLS
+
+log = logging.getLogger(__name__)
+
+NEEDLE_ROUTER_SYSTEM = (
+    "Select tools relevant to the user's request. Do not invent arguments. "
+    "Return no tool call if none matches. These are routing candidates only; "
+    "another model will decide the final calls."
+)
 
 
 class ToolRouter(Protocol):
@@ -44,6 +57,26 @@ class LocalRouter:
 
     def select(self, utterance: str) -> list[str]:
         return KeywordRouter().select(utterance)
+
+
+class NeedleRouter:
+    def __init__(self, cfg: Config) -> None:
+        self.cfg = cfg
+
+    def select(self, utterance: str) -> list[str]:
+        if self.cfg.router.needle is None:
+            raise ValueError("Needle router needs [router.needle] model/runtime configuration")
+        brain = create_brain(self.cfg.router.needle, chat=None, health=None)
+        message = brain.respond([
+            {"role": "system", "content": NEEDLE_ROUTER_SYSTEM},
+            {"role": "user", "content": utterance},
+        ], list(OPENAPI_TOOLS))
+        heads = []
+        for call in parse_tool_calls(message):
+            head = head_for_tool(call["function"].get("name"))
+            if head and head not in heads:
+                heads.append(head)
+        return heads
 
 
 class JevRouter:
@@ -86,6 +119,11 @@ class JevRouter:
         return [choice]
 
 
+def has_jev_key(cfg: Config) -> bool:
+    """Without a key, every Jev selection falls back."""
+    return bool(_api_key(cfg))
+
+
 def _api_key(cfg: Config) -> str:
     env = os.environ.get(cfg.router.api_key_env) or os.environ.get("OPENROUTER_API_KEY") or ""
     if env.strip():
@@ -108,17 +146,38 @@ def make_router(cfg: Config) -> ToolRouter:
         return KeywordRouter()
     if backend == "local":
         return LocalRouter()
+    if backend == "needle-cactus":
+        return NeedleRouter(cfg)
     return JevRouter(cfg)
 
 
+def routes_itself(tier, cfg: Config) -> bool:
+    """A Needle tier that is also the configured router picks its tools in its own call."""
+    needle = cfg.router.needle
+    return (
+        cfg.router.backend == "needle-cactus" and needle is not None and tier.backend == "needle-cactus"
+        and (tier.model_path, tier.runtime_library, tier.venv) == (needle.model_path, needle.runtime_library, needle.venv)
+    )
+
+
+def fallback_head_ids(utterance: str, cfg: Config) -> list[str]:
+    """Heads used when routing failed or found nothing."""
+    if cfg.router.fallback == "none":
+        return []
+    return KeywordRouter().select(utterance)[:2]
+
+
 def select_head_ids(utterance: str, cfg: Config) -> list[str]:
+    started = time.monotonic()
+    if cfg.router.backend == "none":
+        return []
     router = make_router(cfg)
+    source = cfg.router.backend
     try:
         heads = router.select(utterance)
-    except Exception:
-        if cfg.router.fallback == "none":
-            return []
-        heads = KeywordRouter().select(utterance)
+    except Exception as exc:
+        log.warning("router backend=%s failed (%s: %s); fallback=%s", cfg.router.backend, type(exc).__name__, exc, cfg.router.fallback)
+        heads = []
     out = []
     for hid in heads:
         if hid in {"chat", ""}:
@@ -127,8 +186,9 @@ def select_head_ids(utterance: str, cfg: Config) -> list[str]:
             out.append(hid)
     # Jev may call a screensaver or wallpaper request chit-chat. The words still
     # name a head, and without its tools the model can only talk.
-    if not out and cfg.router.fallback != "none":
-        for hid in KeywordRouter().select(utterance):
-            if hid not in out:
-                out.append(hid)
+    if not out:
+        out = fallback_head_ids(utterance, cfg)
+        if out:
+            source = "keyword"
+    log.info("router backend=%s source=%s heads=%s secs=%.2f", cfg.router.backend, source, ",".join(out[:2]) or "none", time.monotonic() - started)
     return out[:2]

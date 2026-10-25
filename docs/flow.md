@@ -4,12 +4,26 @@ Design spec for the voice loop. Audio stages are in [audio.md](audio.md). The as
 
 This file wins on runtime behavior where those documents disagree. [README.md](../README.md) says v1 talks to no remote model. That does not match the code: head selection may call OpenRouter.
 
+## Configurable engines
+
+Speech and brain backends are independently selectable; [engines.md](engines.md) lists the implemented settings. Parakeet/ONNX and the existing `[llm]` remain the defaults. Whistle/Cactus supports streaming or batch transcription with manual Enter-to-submit or explicit energy VAD endpointing over the same capture. Enter flushes final recognition before committing; Escape cancels without decoding/submitting a batch. Partial words and microphone levels never submit. With `[asr] endpoint = "vad"`, `[vad]` selects energy or Silero classification, minimum speech and trailing silence (250/900 ms defaults). Initial silence never submits; brief noise is discarded; maximum duration fails rather than submitting. Native Parakeet is unchanged.
+
+The small local brain runs first. Optional `[brain.large]` handles explicit escalation, unsupported/empty output, inference failure or exhausted steps. Successful small answers and Needle tool results finish directly. Local controls still bypass inference. Qwen can occupy either role. Llama conversation classification uses the small tier; Needle preserves shared history without that classification. Without a configured larger tier, unsupported requests receive a plain explanation and a rephrasing suggestion; raw backend no-match diagnostics stay in logs. The session validates tools, owns confirmations and carries completed results across escalation. No automatic inference-time downloads or silent device substitution are allowed.
+
+Only chat backends receive the escalation-control tool; Needle reports no matching call directly to the coordinator. Chat backends can answer general knowledge and conversational questions without tools. Desktop actions still require available tools and actual results.
+
+Model roles are independent: `[asr]` selects recognition, `[router]` selects optional head routing, `[brain.small]` selects the agent, and optional `[brain.large]` selects the local fallback. Each brain chooses `tool_selection = "all"` or `"routed"` (default). All mode skips the router and its schema budget, giving the agent the full registered allowlist plus interactive confirmation. Routed mode uses the configured router, including for Needle; `backend = "none"` disables routing and supplies the full allowlist to both tiers. Recompute tool selection at each fallback boundary, preserving history, confirmation rules and completed actions. The same committed transcript enters this coordinator regardless of speech backend. Cloud/OpenAI support is deferred; cloud configuration is rejected rather than silently ignored.
+
+These engine-specific rules extend the Parakeet/Qwen descriptions below. Restart a listening session to change its configured backend.
+
+`[router] backend = "needle-cactus"` selects Needle independently of the agent. Its `[router.needle]` model/runtime paths and token limit configure the existing Cactus worker; `[router] timeout_secs` bounds inference including worker startup. Needle receives all registered desktop schemas, and its candidate tool names select up to two heads. Candidate arguments are discarded and no candidate is executed. The agent receives those heads under the usual schema budget and generates its own calls. No match or runtime failure follows the configured keyword/none fallback. `list_agents` belongs to the agents head. An agent with `tool_selection = "all"` bypasses this router too; this retains Needle's combined selection-and-calling mode without two Needle calls. Without `[router.needle]`, a Needle `[brain.small]` is the router's model. A Needle tier whose model, library and venv match the router routes itself: one inference over the full allowlist, whatever its `tool_selection`. When it escalates, a routed larger tier receives the configured fallback heads rather than a second Needle call.
+
 ## Requirements
 
 Agavai is a local Omarchy assistant for one person at the machine.
 
 - One overlay. The launcher, Super+M, Super+Ctrl+M, and the bar icon open `janar.agavai`. Invoking again while a request is active raises that overlay and does not restart capture.
-- Speak, and the words appear while you are still talking. The utterance is sent when streaming ASR emits end of utterance. A second shortcut press is not required. In the expanded view, Enter sends the current line immediately and Escape dismisses.
+- Speak, and the words appear while you are still talking. The utterance is sent on native ASR end of utterance or the configured VAD quiet window. Explicit manual mode requires Enter and labels that requirement in the overlay. A second shortcut press is not required. In the expanded view, Enter sends the current line immediately and Escape dismisses.
 - The overlay starts as an orb in the configured corner (`[overlay] placement`, default bottom right) without keyboard focus. Clicking expands transcripts and results in that corner, and the orb stays exactly where it was; minimizing releases focus without changing capture. Both views keep a 28-logical-pixel inset from the corner's two edges. The expanded view uses on-demand focus and minimizes when another window takes focus, unless a canvas is on screen. A canvas stays up until the user minimizes it or a new request clears it; clearing it while another window has focus minimizes the view. Newly published canvas results expand automatically in that corner; retained results and ordinary snapshots preserve manual minimization.
 - The overlay stays up after a turn, with results retained for the expanded view, and listens for the next utterance. A new session, after the previous process has exited, starts blank.
 - Isolated finalized controls are handled locally before model health, context classification or routing. For other utterances, a context response from the local model distinguishes a follow-up from a new conversation. Follow-ups retain earlier results and messages. An unrelated query clears earlier conversation output and inherited tool heads before its answer is generated, while the same session stays active.
@@ -24,7 +38,7 @@ These are current tuning knobs, not separate service targets. Defaults are in [s
 | Knob | Default | What it changes |
 |---|---|---|
 | Streaming ASR device | CPU | GPU when the config selects GPU and an NVIDIA GPU is present |
-| `[router] timeout_secs` | 2 s | Cap on the Jev call |
+| `[router] timeout_secs` | 2 s | Cap on router inference; Needle example uses 10 s for cold startup |
 | `[router] max_tools` | 8 | Schemas injected into one completion |
 | `[llm] max_tool_rounds` | 6 | Tool loop cap |
 | `[llm] timeout_secs` | 120 s | Cap on one llama-server call |
@@ -82,7 +96,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **Assistant GGUF, not the dictation sanitizer.** `agavai-llm` loads the configured GGUF on port 18766, in its own user-service cgroup. Port 18765 is Voxtype’s smaller cleanup model. Reusing it would couple assistant restarts to `systemctl restart voxtype`, which [architecture.md](architecture.md) calls out as a hang. Assumption: the selected GGUF emits OpenAI tool calls or Qwen `<tool_call>` JSON. Default `n_gpu_layers = 0` runs that model on CPU. That setting is independent of the streaming ASR device.
 
-**Heads, not the full tool list.** [architecture.md](architecture.md) says the full set is about thirty schemas and about 1.7k tokens, which does not fit a 4B’s useful budget. Jev answers one typed choice (“which head?”). Keyword overlap is the offline path. A local decision model is the same `select()` contract and today runs the keyword router. Keyword-only stays on the machine and matches only the words listed on each head. Jev with `fallback = "none"` returns no tools when the key is missing or the call fails. The chosen path is Jev, then keyword. Assumption: two heads and eight schemas are enough for one utterance. A successful Jev answer of `chat` is not final: if keywords still match a head, those heads are attached anyway.
+**Routed agents receive tool groups.** Jev answers one typed choice (“which head?”). Needle selects candidate tool names from the full registered schemas; the router maps those names to heads without executing the calls. Keyword overlap is the offline path; `local` remains an alias for keywords. Routed agents receive at most two heads and the configured schema budget. A failure or an empty result uses keyword matching unless fallback is `none`. Agents configured with `tool_selection = "all"`, and a Needle agent that is also the router, bypass this selection and receive the full allowlist.
 
 **In-process tools, not MCP inside the turn.** The voice loop calls `DISPATCH` directly so the 4B does not speak a second protocol. `agavai mcp` exposes the same functions for other clients. Putting MCP on the voice path would add a stdio hop and a second schema encoding without changing what can run. Assumption: every desktop action the model needs is already a named function.
 
@@ -115,12 +129,13 @@ The confirmation schema reserves one slot within `[router] max_tools`, including
 | Confirmation is malformed, names an unavailable tool, or accompanies other calls | Snapshot shows an error; no pending action or desktop execution is created. |
 | On-screen answer is missing a field or accompanies other calls | Snapshot shows an error; no canvas is published. |
 | Context classification fails or returns an invalid choice | Snapshot shows an error; the earlier canvas and model history remain. No action or answer call runs for that request. |
-| Jev times out, lacks a key, or HTTP fails | Keyword router, unless `[router] fallback` is `none`, in which case the turn has no tools. |
+| Jev/Needle routing fails or produces no matching head | Keyword router, unless `[router] fallback` is `none`, in which case the turn has no tools. |
 | Jev answers `chat` and keywords still match | Keyword heads are used. The remote answer is not authoritative. |
 | No mic frames, or streaming ASR cannot start | Snapshot phase `error`. The session process exits. The turn is not run. |
 | End of utterance with no words | The mic stays open. Nothing is spoken and the model is not called. Enter on an empty line speaks “I did not hear anything.” |
 | Kokoro cannot play | eSpeak-ng, then an Omarchy notification. A notification does not end the session. |
-| Tool name is unknown, arguments are bad, or the process times out | An error string goes back to the model. The loop continues. |
+| Tool name is unknown or was not offered this turn, or its arguments do not match the offered schema | Snapshot shows an error. Nothing executes. |
+| A tool fails or times out | An error string goes back to the model. The loop continues. |
 | Model calls an allowlisted tool whose head was not injected | That head is added and LlamaServer is called once more. The tool is not run on the first pass. One retry per turn. |
 | Tool rounds are exhausted | The reply is “I ran out of tool steps before finishing.” |
 | Cancel | `listen.cancel` plus SIGTERM. Playback stops. Later Snapshot writes for that session id are dropped. |
@@ -142,7 +157,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 - **Latency.** No paint budget is written down. Assumption: a Snapshot change shows up on the next file watch, which is enough for tool rows to appear as they finish. A measured frame time would replace that assumption.
 - **Throughput.** One overlay, one bar widget. It does not run a second session.
 - **Configuration.** Plugin id `janar.agavai`. The runtime directory is `$XDG_RUNTIME_DIR`, or `/run/user/$UID` when that is unset. Layout tokens come from the shell style, specified in [ui-design.md](ui-design.md).
-- **Observability.** The widget shows `phase` from Snapshot. There is no separate log.
+- **Observability.** The widget shows `phase` from Snapshot. The shell's own log has QML errors only. `agavai invoke` writes `invoke summoned the overlay; started_session=…` to the request log, or an error when the overlay cannot be summoned.
 
 ### ListenSession
 
@@ -153,7 +168,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 - **Latency.** Words are written to Snapshot as the hypothesis updates. The model card’s design latency is 80–160 ms. End of utterance, not a silence timer, submits the line. Enter force-submits the current hypothesis.
 - **Throughput.** One listen process. Turns are serial. Follow-up utterances in that process keep the last 24 non-system model messages and the heads used so far, still at most two heads.
 - **Configuration.** Streaming ASR device, default CPU. Runtime files live under `$XDG_RUNTIME_DIR/agavai/`: `state`, `listen.pid`, `listen.lock`, `listen.cancel`, `record.request`, `unmuted-by-us`.
-- **Observability.** `agavai status` prints `state` and whether LlamaServer is up. Recognizer failures print to stderr. There is no trace of why a session exited.
+- **Observability.** `agavai status` prints `state` and whether LlamaServer is up. The request log has `session start` and `session end reason=…`. The reasons are `stream ended`, `cancel`, `dismissed`, `cancel during the turn`, `error`, `recognizer did not start` and `crashed`. A crash, a failed turn and a config that cannot load leave a traceback there. The detached process's stdout and stderr still go to `/dev/null`.
 
 ### Recordings
 
@@ -161,7 +176,7 @@ Throughput for the whole loop is one person, one ListenSession, one utterance at
 
 - **Deploy.** Inside ListenSession, which owns the microphone. `agavai record` toggles. With no live listener it summons Overlay and detaches `agavai listen --record`. With one, it appends the action to `record.request` and sends SIGUSR1; a listener still starting is not signalled, since it has no handler yet. `start_recording` sends this session the same toggle, so a voice start records right after the spoken reply.
 - **Lifecycle.**
-  - **Start.** A recording runs its own continuous recognizer process (`parakeet_worker.py --continuous`), started in about 1.3 s, while the assistant's stays loaded. The start chime plays to the end before capture begins.
+  - **Start.** A recording runs its own continuous recognizer process (`asr_worker.py` with continuous Parakeet decoding), started in about 1.3 s, while the assistant's stays loaded. The start chime plays to the end before capture begins.
   - **Capture.** One `parec` runs for the whole recording. Every packet goes to a growing `audio.wav`, whose header is rewritten on each write, and to the recognizer. Each committed line, mark, and pause is appended to `segments.jsonl`.
   - **Controls.** Only an isolated committed "Agavai stop", "stop recording", "pause", "resume", or "mark" acts; anything longer is a line. While paused the recognizer still hears, so "Agavai resume" works, but nothing is written or shown. Line times move onto the audio file's clock.
   - **Stop.** Stop, toggle, SIGTERM, dismissal, and a lost microphone all save. ffmpeg encodes `audio.opus`, and the WAV is deleted once ffprobe finds the same length. `recording.json` and `transcript.md` are written last, and the journal is removed. A recording with no audio leaves no folder.
@@ -181,7 +196,7 @@ Transport in and the recognizer. The stage is specified in [audio.md](audio.md).
 - **Latency.** The worker processes 160 ms of new features per step and waits for complete overlapping FFT windows. Model-card design latency is 80–160 ms. End-of-utterance median on the card’s test is 160 ms. No end-to-end latency has been measured here.
 - **Throughput.** One stream. One hypothesis at a time.
 - **Configuration.** Device defaults to CPU. GPU is used when the config selects GPU and an NVIDIA GPU is present.
-- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The chosen device is not yet written anywhere else.
+- **Observability.** The partial is the snapshot transcript with `final` false. A startup failure is the error phase. The request log records `asr ready backend=… mode=… endpoint=… vad=… device=… load_secs=…`. When VAD or Enter ends a capture it logs `asr endpoint policy=… reason=…`, and each finished recognition logs `asr final backend=… finish_secs=…`. A worker that fails includes the tail of its stderr in the logged error.
 
 ### Turn taking
 
@@ -192,7 +207,7 @@ The commit rule. It reads streaming ASR and keyboard input. It does not read a s
 - **Latency.** The commit happens on the end-of-utterance marker, or on Enter. No 900 ms settle time.
 - **Throughput.** One open utterance.
 - **Configuration.** None beyond the recognizer.
-- **Observability.** A committed line is the snapshot transcript with `final` true, then phase `thinking`.
+- **Observability.** A committed line is the snapshot transcript with `final` true, then phase `thinking`. Each capture logs `asr end reason=… words=… secs=…`. The reasons are `eou`, `empty`, `enter`, `cancel` and `stream_ended`. Partials are not logged.
 
 ### Voxtype
 
@@ -207,18 +222,23 @@ Not on the assistant path. The user service `voxtype` remains for F9 dictation. 
 - **Latency.** Bound by `max_tool_rounds` times `[llm] timeout_secs`, plus tool time and one context call when there is history. That call uses the same timeout and a 16-token output cap. This is a ceiling, not a target. No typical-turn measurement is in the repo.
 - **Throughput.** One turn at a time inside the process. `agavai ask` does not share memory with ListenSession.
 - **Configuration.** `[llm] max_tool_rounds`, `max_tokens`, `temperature`, `timeout_secs`. The desktop and chat system prompts are fixed in code, including the local time line.
-- **Observability.** Tool start and tool done land on Snapshot. Router’s choice is not logged. A Python traceback is printed when the turn raises; the user hears “The local agent hit an error.”
+- **Observability.** Tool start and tool done land on Snapshot. The request log has:
+  - `turn start` and `turn done secs=…`;
+  - `context choice=…` and `turn control=…`;
+  - warnings for a stopped model, an error, or exhausted tool steps.
+
+  A turn that raises leaves `turn failed` with its traceback, and the user hears “The local agent hit an error.” At debug level the request text and the reply are logged too.
 
 ### Router
 
 [src/agavai/router.py](../src/agavai/router.py) and [src/agavai/heads.py](../src/agavai/heads.py).
 
-- **Deploy.** In-process. Jev is an HTTPS call. Keyword and local do not leave the machine.
+- **Deploy.** Selection runs in-process. Jev calls HTTPS; Needle inference runs in a persistent Cactus child worker. Keyword, local and Needle do not leave the machine.
 - **Lifecycle.** `select(utterance)` returns up to two head ids, or none for chat. Jev posts one `choice` question to the Decisions API. `chat` or an empty choice means no heads from Jev. Keyword scores head keywords and keeps those tied for the top score, at most two. `local` calls keyword. After any successful empty result, keyword still runs when fallback is not `none`.
-- **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. The enforced cap is `[router] timeout_secs` (2 s). Keyword is local string matching; no budget is set. The 2 s cap is what keeps a dead OpenRouter from holding the turn longer than that before fallback.
+- **Latency.** [architecture.md](architecture.md) describes Jev as about 70–500 ms and not a measurement in this repo. `[router] timeout_secs` caps inference, including Needle worker startup. Default is 2 s; the Needle profile uses 10 s. These are failure bounds. Keyword is local string matching; no budget is set. Eval traces record Needle routing duration separately from agent calls.
 - **Throughput.** One decision per turn. No batching.
-- **Configuration.** `[router] backend` (`jev`, `keyword`, `local`), `fallback`, `timeout_secs`, `max_tools`. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
-- **Observability.** None. A failure is indistinguishable from a keyword route unless stderr happens to show a Python error. The chosen head ids are not written to Snapshot.
+- **Configuration.** `[router] backend` (`jev`, `needle-cactus`, `keyword`, `local`, `none`), `fallback`, `timeout_secs`, `max_tools`. `[router.needle]` model id/path, Cactus venv/library and max_tokens. `[router.jev]` base URL, model `typesafe/jev-1.13`, and `api_key_env`. The key is `OPENROUTER_API_KEY` or `~/.config/agavai/secrets.toml` under `openrouter.api_key`. It is not committed.
+- **Observability.** The request log has `router backend=… source=… heads=… secs=…`. `source` names the router whose answer supplied the heads, so a keyword route after a Jev or Needle `chat` answer is visible. A router failure is a warning naming the exception and the fallback. Eval traces label Needle model exchanges `routing` and fingerprint its model/runtime alongside agent engines. The chosen head ids are not written to Snapshot.
 
 Heads:
 
@@ -233,6 +253,7 @@ Heads:
 | files | `search_files` |
 | capture | `screenshot`, `screen_context` |
 | reminders | `reminder`, `list_reminders`, `clear_reminders`, `send_notification`, `clock_now` |
+| agents | `list_agents` |
 
 ### LlamaServer
 
@@ -243,7 +264,7 @@ Heads:
 - **Latency.** Client timeout is `[llm] timeout_secs` (120 s) per call. No tokens-per-second figure is recorded. `max_tokens` 512 limits one completion. Default `n_gpu_layers = 0` runs this model on CPU. A slower GGUF changes the wait, not the timeout, until the config changes.
 - **Throughput.** `--parallel 1`. One completion at a time for the whole machine, shared by nothing else in this design.
 - **Configuration.** `[llm]` host, port, alias, temperature, max tokens, timeout, and the model catalog. `AGAVAI_MODEL`, `AGAVAI_LLAMA_SERVER`, and `AGAVAI_CONFIG` override path, binary, and file for one process.
-- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. The unit journal is the server log. There are no metrics.
+- **Observability.** `agavai status` prints up or down, the base URL, and the resolved model path. HTTP errors become `LlmError` text on Snapshot. Each call is logged in the request log as `llm model=… tools=… prompt_tokens=… completion_tokens=… calls=… secs=…`. The unit journal is the server log. There are no metrics.
 
 ### Tools
 
@@ -254,7 +275,7 @@ Heads:
 - **Latency.** The default subprocess timeout is 15 s. `launch` and `play_url` use 20 s. That bound is the tool’s contribution to a turn. No per-tool target is set.
 - **Throughput.** Tools in one model step run one after another. They are not parallel.
 - **Configuration.** `[files] roots` and `max_results` (default 20). Everything else is the command on `PATH`.
-- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Neither do `start_recording` and `list_recordings`, where the recording itself is the feedback. `agavai mcp` neither lists nor runs those two, so other agents cannot start the microphone or read recordings. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`.
+- **Observability.** Snapshot stores a clipped argument string and a clipped result, with status `running`, `ok`, or `error`. Lookup tools do not set the Done line: `wallpaper_list`, `wallpaper_current`, `list_themes`, `list_windows`, `search_files`, `list_reminders`, `battery_status`, `network_status`, `screen_context`, `list_agents`, `clock_now`. Neither do `start_recording` and `list_recordings`, where the recording itself is the feedback. `agavai mcp` neither lists nor runs those two, so other agents cannot start the microphone or read recordings. Other tools set Done or Not completed. Failure is a result that contains `unknown`, `invalid`, `need`, `failed`, `timed out`, or `error`. The request log has `tool name=… status=ok|error secs=…`, using the same rule. A tool that raises leaves its traceback. Debug level adds the arguments and the clipped result.
 
 ### Speech
 
@@ -265,7 +286,7 @@ Heads:
 - **Latency.** No time-to-first-audio measurement. Assumption: warming at the start of listening hides model load, so the reply plays when the sentence is ready. A cold socket on a short turn would break that. Only the start of a session is audible. Reopening the microphone between turns, including after an empty end of utterance, is silent.
 - **Throughput.** One playback at a time. A new session starts another server only if the socket does not answer.
 - **Configuration.** `[tts] prefer`, `voice` (`af_bella`), `model_path`, `voices_path`, `venv`.
-- **Observability.** Stderr prints the engine name, or that playback fell through to a notification. The server appends to `kokoro-serve.log` in the runtime directory.
+- **Observability.** The request log has `tts engine=…`. Kokoro playback in ListenSession adds `synth_secs` and `playback=completed|cancelled|silent`. Kokoro and pw-play failures are warnings, and so is a fall-through to a notification. The server appends to `kokoro-serve.log` in the runtime directory.
 
 ### Snapshot
 
@@ -277,6 +298,32 @@ Heads:
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.
 - **Configuration.** `[overlay] placement` is copied into every snapshot; an unknown corner fails config loading. Otherwise only the runtime directory. Turn history kept on the overlay is five. Result text is clipped (280 characters on the tool row, 160 on arguments).
 - **Observability.** The file is the log: `phase`, `phase_label`, `ts` when the phase changes, `transcript`, `turns`, `display`, `answer_html`, `completion`, `error`, `level_db`, `session_id`, `model_id`, `placement`, and `recording` while one runs (path, elapsed time, paused, the last 30 lines and marks, the partial line, and whether the live transcript still runs). `state` can disagree with `phase`. The overlay shows `phase`.
+
+### Request log
+
+[src/agavai/journal.py](../src/agavai/journal.py).
+
+- **Deploy.** Every `agavai` command sends its `agavai.*` loggers to the user journal through `/dev/log`, with the identifier `agavai`. Standard library only.
+- **Lifecycle.**
+  - Each capture in ListenSession, and each `agavai ask`, starts a request. Its id is the first eight characters of the Snapshot `session_id` and a counter, such as `request=a2bd4d6f-3`. Every line until the next capture carries it, and lines outside a request carry `request=-`.
+  - A capture that hears nothing still takes a number.
+  - Until the first turn of a session completes, each new capture begins a new Snapshot session, so noise before the first request moves later requests to a new id.
+- **Latency.** One datagram per line, written synchronously.
+- **Throughput.** A turn with one tool call writes about eight lines at `info`.
+- **Configuration.** `[log] level`:
+  - `info`, the default, records timings, decisions and errors, and no user text.
+  - `debug` adds the request text, the reply, and tool arguments and results, each clipped to 500 characters.
+  - Any other value fails config loading.
+
+  The journal's own retention decides how long lines are kept.
+- **Observability.**
+  - `journalctl --user -t agavai` shows every request, and `-f` follows them live.
+  - Piping it through `grep request=a2bd4d6f-3` isolates one request, and `-p warning` shows only problems.
+  - LlamaServer's own timing is under `journalctl --user -u agavai-llm`, at the same timestamps.
+  - Brain tiers add three kinds of line:
+    - `needle model=… tools=… calls=… secs=…` for each Needle inference;
+    - `brain unsupported model=… reason=… tools=…` when a tier cannot handle a request;
+    - `turn escalated from=… to=…: …` when the larger tier takes over.
 
 ## Low-level design
 
@@ -330,7 +377,7 @@ sequenceDiagram
 What crosses each boundary:
 
 1. Bar receives a left click and leaves with the command `agavai invoke`. No transcript yet.
-2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and does not start capture.
+2. ListenSession receives that command. It leaves a summoned Overlay and a detached listen process. If Overlay cannot be summoned, it leaves a stderr line and a request-log error, and does not start capture.
 3. Snapshot receives `begin_session`: empty turns, a new `session_id`, phase `listening`. Overlay receives that file and shows the orb.
 4. Speech receives the start chime once, then the listen cue, which warms the Kokoro socket silently if one was not already up.
 5. Streaming ASR receives microphone audio. It leaves interim hypotheses while the person is still talking. Turn taking writes each one to user context with `final` false. The router is not called.
@@ -389,7 +436,7 @@ Rejected options named by the sources below, and why this design did not take th
 | All tool schemas on the 4B | [architecture.md](architecture.md) | Too many tokens for the useful budget. Heads cut that to at most eight. |
 | MCP inside the turn | [architecture.md](architecture.md), [src/agavai/mcp_server.py](../src/agavai/mcp_server.py) | Same allowlist, extra hop. MCP remains a side door. |
 | Streaming recognizer | [audio.md](audio.md) | Chosen. Parakeet-Realtime-EOU-120M. Partials are not turns. |
-| Silence-timer endpointer | [audio.md](audio.md) | Removed. It guessed the end of a sentence. |
+| Silence-timer endpointer | [src/agavai/meter.py](../src/agavai/meter.py) | Explicit Whistle VAD policy over shared PCM; Parakeet uses native EOU. A long pause can split a sentence. |
 | Voxtype file transcript | [audio.md](audio.md) | Removed from the assistant. Stays on F9 dictation. |
 | eSpeak or a notification as the voice | [src/agavai/tts.py](../src/agavai/tts.py) | Fallbacks when Kokoro cannot play. Kokoro is preferred. |
 | Keyword-only routing | [src/agavai/router.py](../src/agavai/router.py) | Available as `backend = "keyword"` and as the fallback. Default is Jev. |

@@ -53,3 +53,8 @@ def continuous(context):
 def checked(context):
     result = context.worker_check
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@when("I replay speech through recording capture with Whistle selected for the assistant")
+def recording_capture(context):
+    _check(context, "recording")

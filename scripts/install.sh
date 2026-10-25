@@ -58,10 +58,13 @@ install -m 644 "$ROOT/share/agavai.desktop" "$APPS/agavai.desktop"
 rm -f "$APPS/oma-voice.desktop"
 update-desktop-database "$APPS" >/dev/null 2>&1 || true
 
-install -m 644 "$ROOT/systemd/agavai-llm.service" "$UNIT_DIR/agavai-llm.service"
+for unit in agavai-llm.service agavai-llm@.service agavai-sync.service agavai-config.path; do
+  install -m 644 "$ROOT/systemd/$unit" "$UNIT_DIR/$unit"
+done
 systemctl --user daemon-reload
-systemctl --user enable agavai-llm.service >/dev/null
-systemctl --user restart agavai-llm.service
+systemctl --user enable --now agavai-config.path >/dev/null
+# Start, restart or stop agavai-llm to match the brain roles in config.toml.
+env -u AGAVAI_CONFIG "$BIN/agavai" services sync
 
 echo "Installed agavai and agavai-llm to $BIN"
 echo "App launcher: Agavai  (agavai app)"
@@ -69,6 +72,6 @@ echo "Chat overlay plugin: janar.agavai (compact corner orb; expandable results)
 echo "Active model: agavai model   (list/set in ~/.config/agavai/config.toml)"
 echo "Download LLM: $ROOT/scripts/download-model.sh [model-id]"
 echo "Download Kokoro TTS (CPU): $ROOT/scripts/download-tts.sh"
-echo "Then: systemctl --user enable --now agavai-llm"
+echo "Model services follow config.toml changes: agavai services"
 echo "Typed test: agavai ask 'open the browser'"
 echo "Architecture: $ROOT/docs/architecture.md"

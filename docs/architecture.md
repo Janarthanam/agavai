@@ -83,12 +83,11 @@ agavai-llm        â†’  llama-server --model $MODEL --jinja --n-gpu-layers $NGL â
 6. `AGAVAI_LLAMA_SERVER` overrides the llama-server binary.
 7. `AGAVAI_CONFIG` overrides which TOML file is read.
 
-After changing the active id, **restart** the runner so llama-server reloads weights:
+After the active id changes, `agavai services sync` restarts the runner so llama-server reloads weights. `agavai model set` runs it, and so does `agavai-config.path` whenever `config.toml` is saved:
 
 ```bash
 agavai model list
 agavai model set qwen3-4b-instruct
-systemctl --user restart agavai-llm
 agavai status
 ```
 
@@ -156,9 +155,12 @@ prefer = "kokoro"   # kokoro | espeak | notify
 
 [asr]
 device = "cpu"      # gpu is used only when an NVIDIA GPU is present
+
+[log]
+level = "info"      # debug also records what you said, replies, and tool arguments and results
 ```
 
-`agavai status` prints the resolved `model_id` and `model_path`.
+`agavai status` prints the resolved `model_id` and `model_path`. `journalctl --user -t agavai` shows the request log, described in [flow.md](flow.md).
 
 ---
 
@@ -288,5 +290,4 @@ Fresh machine:
 ```bash
 scripts/download-model.sh
 scripts/install.sh
-systemctl --user enable --now agavai-llm
 ```

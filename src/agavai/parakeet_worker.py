@@ -1,14 +1,6 @@
-"""Parakeet-Realtime-EOU-120M streaming worker.
+"""Parakeet-Realtime-EOU-120M adapter implementation (NumPy + ONNX Runtime).
 
-Runs under the TTS venv (onnxruntime + numpy). The parent process stays
-stdlib-only and speaks a length-prefixed PCM protocol on stdin:
-
-    >I length, then that many s16le bytes
-    length 0 resets the recognizer and asks for a reset acknowledgement
-
-Stdout is JSON lines: ready, interim, eou, eob, reset, error.
-
-With --continuous (recordings), an end of utterance does not end the
+In continuous mode (recordings), an end of utterance does not end the
 stream. The next utterance is decoded from the same audio, so nothing
 between utterances is dropped. Each eou also carries start_ms, the time of
 its first word, and end_ms, both from the start of the stream. A flush
@@ -16,12 +8,12 @@ emits an unfinished last utterance as a final eou.
 
 The cache-aware encoder steps 16 new mel frames (160 ms) with nine frames
 of pre-encode context. PCM and mel overlap survive transport boundaries.
+The shared asr_worker.py owns transport and utterance lifecycle.
 """
 
 from __future__ import annotations
 
 import json
-import struct
 import sys
 
 import numpy as np
@@ -46,16 +38,6 @@ LOG_GUARD = np.float32(2**-24)
 def emit(kind: str, text: str = "", **timing: int) -> None:
     sys.stdout.write(json.dumps({"kind": kind, "text": text, **timing}, ensure_ascii=False) + "\n")
     sys.stdout.flush()
-
-
-def read_exact(n: int) -> bytes | None:
-    buf = b""
-    while len(buf) < n:
-        chunk = sys.stdin.buffer.read(n - len(buf))
-        if not chunk:
-            return None
-        buf += chunk
-    return buf
 
 
 def hz_to_mel(frequencies: np.ndarray) -> np.ndarray:
@@ -140,12 +122,15 @@ def decode(ids: list[int], vocab: list[str]) -> str:
 
 
 class Stream:
-    def __init__(self, model_dir: str, device: str, *, continuous: bool = False) -> None:
+    def __init__(self, model_dir: str, device: str, *, continuous: bool = False, on_event=None) -> None:
         from pathlib import Path
 
+        self.on_event = on_event or emit
         root = Path(model_dir)
         providers = ["CPUExecutionProvider"]
         if device == "cuda":
+            if "CUDAExecutionProvider" not in ort.get_available_providers():
+                raise RuntimeError("ONNX CUDA provider is unavailable. Install it or select CPU explicitly.")
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         opts = ort.SessionOptions()
         # Tiny streaming steps fall behind real time with a pool spanning every core.
@@ -246,59 +231,27 @@ class Stream:
                 if self.continuous:
                     self.finish_utterance()
                     return False
-                emit("eou", text)
+                self.on_event("eou", text)
                 return True
             self.last = token
             self.h = h2
             self.c = c2
             if token == EOB:
-                emit("eob", decode(self.hyp, self.vocab))
+                self.on_event("eob", decode(self.hyp, self.vocab))
                 continue
             if not self.hyp:
                 self.first_ms = self.frame_ms
             self.hyp.append(token)
-            emit("interim", decode(self.hyp, self.vocab))
+            self.on_event("interim", decode(self.hyp, self.vocab))
         return False
 
     def finish_utterance(self) -> None:
         """Emit the current utterance with its timing and decode the next one from a fresh predictor."""
         text = decode(self.hyp, self.vocab)
         if text:
-            emit("eou", text, start_ms=self.first_ms or 0, end_ms=self.frame_ms)
+            self.on_event("eou", text, start_ms=self.first_ms or 0, end_ms=self.frame_ms)
         self.hyp = []
         self.first_ms = None
         self.last = BLANK
         self.h = np.zeros((1, 1, 640), np.float32)
         self.c = np.zeros((1, 1, 640), np.float32)
-
-
-def main() -> None:
-    model_dir = sys.argv[1]
-    device = sys.argv[2] if len(sys.argv) > 2 else "cpu"
-    stream = Stream(model_dir, device, continuous="--continuous" in sys.argv[3:])
-    emit("ready")
-    while True:
-        header = read_exact(4)
-        if header is None:
-            break
-        n = struct.unpack(">I", header)[0]
-        if n == 0:
-            stream.feed(np.empty(0, np.float32), final=True)
-            if stream.continuous:
-                stream.finish_utterance()
-            stream.reset()
-            emit("reset")
-            continue
-        payload = read_exact(n)
-        if payload is None:
-            break
-        samples = np.frombuffer(payload, dtype="<i2").astype(np.float32) / np.float32(32768.0)
-        stream.feed(samples)
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as exc:
-        emit("error", str(exc))
-        sys.exit(1)

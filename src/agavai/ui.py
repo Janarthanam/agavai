@@ -68,7 +68,7 @@ class ChatUi:
         self.data: dict[str, Any] = {
             "phase": "idle",
             "phase_label": "Idle",
-            "model_id": cfg.llm.model_id,
+            "model_id": (cfg.small_brain or cfg.llm).model_id,
             "turns": [],
             "transcript": {"text": "", "final": False},
         }
@@ -78,7 +78,7 @@ class ChatUi:
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
-                    for key in ("level_db", "display", "ts", "transcript", "answer_html", "error", "recording"):
+                    for key in ("level_db", "vad_state", "vad_backend", "display", "ts", "transcript", "answer_html", "error", "recording"):
                         loaded.pop(key, None)
                     self.data.update(loaded)
                     self.data["turns"] = []
@@ -89,6 +89,8 @@ class ChatUi:
         """Reset the overlay to a blank session: prior turns and canvas drop."""
         self.clear_conversation()
         self.data["level_db"] = None
+        self.data["vad_state"] = "off"
+        self.data["vad_backend"] = "off"
         self.data["session_id"] = uuid.uuid4().hex
 
     def clear_conversation(self) -> None:
@@ -141,9 +143,15 @@ class ChatUi:
             # Reissuing identical results must still open the canvas once.
             self.data["display"] = {**block, "id": uuid.uuid4().hex}
 
-    def level(self, db: float | None) -> None:
-        """Throttled 10 Hz mic level while listening."""
+    def level(self, db: float | None, vad_state: str, vad_backend: str) -> None:
+        """Throttled 10 Hz mic level + VAD state while listening."""
         self.data["level_db"] = db
+        self.data["vad_state"] = vad_state
+        self.data["vad_backend"] = vad_backend
+        self._write()
+
+    def transcribing(self) -> None:
+        self._set_phase("transcribing", "Transcribing")
         self._write()
 
     def user(self, text: str, *, keep_display: bool = False) -> None:
@@ -242,8 +250,9 @@ class ChatUi:
             self.data["ts"] = int(time.time() * 1000)
         self.data["phase"] = phase
         self.data["phase_label"] = label
-        self.data["model_id"] = self.cfg.llm.model_id
+        self.data["model_id"] = (self.cfg.small_brain or self.cfg.llm).model_id
         self.data["placement"] = self.cfg.overlay.placement
+        self.data["asr_endpoint"] = self.cfg.asr.endpoint
 
     def _write(self, *, summon: bool = False) -> None:
         if self.cancelled():

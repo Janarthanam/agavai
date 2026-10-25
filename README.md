@@ -20,8 +20,7 @@ Default brain: **Qwen3-4B-Instruct-2507 Q4_K_M (~2.5 GB)**. Switch it without ed
 
 ```bash
 agavai model list
-agavai model set qwen3-4b-instruct
-systemctl --user restart agavai-llm
+agavai model set qwen3-4b-instruct    # restarts agavai-llm with the new model
 ```
 
 Add another GGUF under `[llm.models.<id>]` in `~/.config/agavai/config.toml`. See the architecture doc.
@@ -32,10 +31,13 @@ The 1.5B on `:18765` is only the Voxtype sanitizer. Do not reuse it as the agent
 
 ```bash
 ~/Projects/agavai/scripts/download-model.sh
-~/Projects/agavai/scripts/install.sh
-systemctl --user enable --now agavai-llm
+~/Projects/agavai/scripts/install.sh    # installs and syncs the model services
 agavai ask "open the browser"
 ```
+
+Change models any time with `agavai setup`: it explains each choice, downloads what is missing, updates `config.toml` and the services, and shows how a request will flow. `agavai explain` repeats that walkthrough for the current configuration.
+
+`agavai-llm` runs only when a brain role uses llama-server, and follows `config.toml` changes on its own; `agavai services` shows its state. See [engine configuration](docs/engines.md#services-follow-the-configuration).
 
 Spoken replies use **Kokoro-82M on CPU** (Apache-2.0). Whisper stays STT only.
 
@@ -72,3 +74,5 @@ PYTHONPATH=src behave
 ```bash
 PYTHONPATH=src .venv/bin/python -m evals run      # writes evals/results/<run>/report.json and report.html
 ```
+
+Speech, routing, agent and local fallback can be selected independently. See [engine configuration](docs/engines.md), [Needle router + Qwen agent](share/config.needle-router.toml), or [Needle as router and agent + local Qwen fallback](share/config.needle.toml). Cloud support is deferred; full-tool Needle is an opt-in experiment because native probes found incorrect selections.

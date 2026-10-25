@@ -82,3 +82,17 @@ Feature: Configurable on-device model
     Given a config with recordings in "~/Notes/Voice"
     When I load the config
     Then recordings should be kept in "~/Notes/Voice"
+
+  Scenario: The request log keeps user text out by default
+    Given an empty agavai config
+    When I load the config
+    Then the log level should be "info"
+
+  Scenario: Debug logging is configurable
+    Given a config with log level "debug"
+    When I load the config
+    Then the log level should be "debug"
+
+  Scenario: An unknown log level is rejected with the allowed levels
+    Given a config with log level "verbose"
+    Then loading the config fails naming "info, debug"

@@ -186,13 +186,17 @@ def voice_loop(context):
     sequences.append([])
     context.control_capture_snapshots = []
 
-    def events(on_level, should_stop=None):
+    def events(on_level, should_stop=None, should_cancel=None):
         context.control_capture_snapshots.append(deepcopy(context.ui.data))
+        final = ""
         for event in sequences.pop(0) if sequences else []:
             if callable(event):
                 event()
             else:
+                final = event[1] or final
                 yield event
+        if should_stop and should_stop() and not (should_cancel and should_cancel()):
+            yield "eou", final
 
     stream = Mock()
     stream.events.side_effect = events

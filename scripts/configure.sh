@@ -39,9 +39,11 @@ if not path.is_file():
 os.environ.pop("AGAVAI_LLAMA_SERVER", None)
 os.environ.pop("AGAVAI_MODEL", None)
 cfg = load_config(path)
-if not cfg.llm.llama_bin.is_file() or not os.access(cfg.llm.llama_bin, os.X_OK):
-    sys.exit(f"Set [llm] llama_bin to an executable llama-server: {cfg.llm.llama_bin}")
-if sys.argv[2] == "--ready" and not cfg.llm.model_path.is_file():
-    sys.exit(f"LLM model missing: {cfg.llm.model_path}. Download it before installing the service.")
+model = cfg.llama_for_role()
+if model is not None:
+    if not model.llama_bin.is_file() or not os.access(model.llama_bin, os.X_OK):
+        sys.exit(f"Set llama_bin to an executable llama-server: {model.llama_bin}")
+    if sys.argv[2] == "--ready" and not model.model_path.is_file():
+        sys.exit(f"LLM model missing: {model.model_path}. Download it before installing the service.")
 print(f"Configuration validated: {path}")
 PY

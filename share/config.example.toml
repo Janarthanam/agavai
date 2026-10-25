@@ -8,6 +8,7 @@
 [llm]
 # Catalog id. Builtin default is qwen3-4b-instruct (~2.5 GB Q4_K_M).
 model = "qwen3-4b-instruct"
+tool_selection = "routed" # all bypasses routing and offers the full allowlist
 host = "127.0.0.1"
 port = 18766
 alias = "agavai"
@@ -49,11 +50,14 @@ venv = "~/.local/share/agavai/tts-venv"
 card_dir = "~/.config/agavai/a2a"
 
 [router]
-# jev | keyword | local  (local uses the same contract; plug in a small model later)
+# jev | needle-cactus | keyword | none. local is an alias for keyword.
+# For Needle router runtime/model paths, see config.needle-router.toml.
+# Only routed tiers use this section; none gives all tools to both tiers.
 backend = "jev"
 fallback = "keyword"
 timeout_secs = 2
 max_tools = 8
+# max_tools limits routed schemas only. All-tool mode keeps confirmation too.
 
 [router.jev]
 base_url = "https://openrouter.ai/api/alpha/decisions"
@@ -70,9 +74,77 @@ placement = "bottom-right"
 # marks, and corrections), and a readable transcript.md. Kept until deleted.
 dir = "~/Documents/Agavai/Recordings"
 
+[log]
+# Request log in the user journal: journalctl --user -t agavai
+# info records timings, decisions and errors. debug also records what you said,
+# replies, and tool arguments and results.
+level = "info"
+
 [asr]
-# Assistant listen path. cpu is the default. gpu is used only when this is gpu
-# and an NVIDIA GPU is present; otherwise the recognizer stays on CPU.
+# Independent speech model/runtime choice. GPU requires an installed NVIDIA
+# CUDA provider; unavailable devices fail rather than silently switching.
+backend = "parakeet-onnx"
+endpoint = "native"
+mode = "streaming"
 device = "cpu"
 # model_dir = "~/.local/share/agavai/models/parakeet-realtime-eou-120m"
 # venv = "~/.local/share/agavai/tts-venv"
+# To use Whistle, replace the values above and set these paths:
+# backend = "whistle-cactus"
+# endpoint = "vad"     # Explicit energy endpointing; or "manual" for Enter-only
+# mode = "streaming"   # or "batch" (no partial words)
+# model_path = "~/.local/share/agavai/cactus/whistle.cact"
+# runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+# venv = "~/.local/share/agavai/cactus/venv"
+chunk_ms = 1000
+startup_timeout_secs = 120
+finish_timeout_secs = 30
+max_utterance_secs = 120
+
+[vad]
+# Used by [asr] endpoint="vad". Native Parakeet and manual mode ignore it.
+# Streaming VAD requires energy or silero, 16000 Hz and 20 ms frames; no backend fallback.
+# Tune silence_ms for pauses and thresholds for microphone/background levels.
+# silero ignores background noise; install it with scripts/download-vad.sh and use silence_ms = 1100.
+enabled = true
+backend = "energy"
+open_threshold_dbfs = -35.0
+close_threshold_dbfs = -42.0
+noise_margin_db = 12.0
+silence_ms = 900
+min_speech_ms = 250
+max_record_ms = 15000
+start_timeout_ms = 5000
+lead_in_ignore_ms = 300
+rate = 16000
+frame_ms = 20
+
+# Silero-only keys (read when backend = "silero"):
+model_path = "~/.local/share/agavai/vad/silero_vad-v5.1.2.onnx"
+threshold = 0.5
+response_timeout_ms = 250
+device = "cpu"
+venv = "~/.local/share/agavai/tts-venv"
+
+# Optional brain roles. Without these tables, [llm] is the small local brain.
+# The larger runtime is called only on explicit escalation, empty/unsupported
+# output, inference failure or exhausted tool steps. Run setup-cactus.sh first.
+# [brain.small]
+# backend = "needle-cactus"
+# model = "needle3"
+# tool_selection = "all" # Explicit full-tool experiment; default is routed
+# model_path = "~/.local/share/agavai/cactus/needle3.cact"
+# venv = "~/.local/share/agavai/cactus/venv"
+# runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+# timeout_secs = 10
+#
+# [brain.large]
+# backend = "llama-server"
+# model = "qwen3-4b-instruct"
+# tool_selection = "routed"
+# model_path = "~/.local/share/agavai/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+# host = "127.0.0.1"
+# port = 18766
+# alias = "agavai"
+# max_tool_rounds = 6
+# Full working example: share/config.needle.toml. Cloud/OpenAI is deferred.

@@ -134,6 +134,21 @@ def step_retired(context, device):
     _write(context, f'[voxtype]\nprompt_file = "auto"\n\n[vad]\nenabled = false\nbackend = "silero"\n\n[asr]\ndevice = "{device}"\n')
 
 
+@given('a config with vad backend "{backend}" and silence window {ms:d} ms')
+def step_vad(context, backend, ms):
+    _write(context, f'[vad]\nbackend = "{backend}"\nsilence_ms = {ms}\n')
+
+
+@given('a config with vad backend "{backend}", silence window {ms:d} ms and no Silero model')
+def step_vad_no_model(context, backend, ms):
+    _write(context, f'[vad]\nbackend = "{backend}"\nsilence_ms = {ms}\nmodel_path = "/nonexistent/silero.onnx"\n')
+
+
+@given("a config with an unknown vad key")
+def step_vad_unknown(context):
+    _write(context, "[vad]\nquantum_flux = 42\n")
+
+
 @then('the model id should be "{mid}"')
 def step_id(context, mid):
     assert context.cfg.llm.model_id == mid, context.cfg.llm.model_id
@@ -215,6 +230,15 @@ def step_recordings(context, folder):
 @then('recordings should be kept in "{folder}"')
 def step_recordings_dir(context, folder):
     assert context.cfg.recordings.dir == Path(folder).expanduser(), context.cfg.recordings.dir
+
+@given('a config with log level "{level}"')
+def step_log_level(context, level):
+    _write(context, f'[log]\nlevel = "{level}"\n')
+
+
+@then('the log level should be "{level}"')
+def step_log_level_is(context, level):
+    assert context.cfg.log.level == level, context.cfg.log.level
 
 
 @then('loading the config fails naming "{allowed}"')

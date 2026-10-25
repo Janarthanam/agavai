@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from behave import given, then, when
 
-from agavai.config import Config
+from agavai.config import Config, LlmConfig
 from agavai.heads import schemas_for_heads
 from agavai.router import select_head_ids
 from agavai.tools import wallpaper_set
@@ -87,3 +87,37 @@ def step_name_out(context, name):
 @then("there should be {n:d} selected heads")
 def step_n(context, n):
     assert len(context.heads) == n, context.heads
+
+
+@given('a Needle router returning "{outcome}" with "{fallback}" fallback')
+def step_needle_router(context, outcome, fallback):
+    context.cfg = Config()
+    context.cfg.router.backend = "needle-cactus"
+    context.cfg.router.fallback = fallback
+    context.cfg.router.needle = LlmConfig(backend="needle-cactus", model_id="needle3")
+    context.needle_router = Mock()
+    names = {"volume": ["set_volume"], "agents": ["list_agents"],
+             "multiple": ["set_volume", "mute_microphone", "launch", "list_agents"],
+             "unknown": ["run_shell"], "empty": []}
+    if outcome == "error":
+        context.needle_router.respond.side_effect = TimeoutError("worker timed out")
+    elif outcome == "malformed":
+        context.needle_router.respond.return_value = {"tool_calls": ["bad call"]}
+    else:
+        context.needle_router.respond.return_value = {"tool_calls": [
+            {"function": {"name": name, "arguments": '{"percent": 1}'}} for name in names[outcome]
+        ]}
+    factory = patch("agavai.router.create_brain", return_value=context.needle_router)
+    factory.start()
+    context.add_cleanup(factory.stop)
+
+
+@then('Needle was offered every registered tool for selection only')
+def step_needle_offers(context):
+    from agavai.heads import TOOL_TO_HEAD
+    from agavai.tools import OPENAPI_TOOLS
+    context.needle_router.respond.assert_called_once()
+    messages, tools = context.needle_router.respond.call_args.args
+    assert tools == OPENAPI_TOOLS
+    assert messages[-1]["content"] == "increase playback level"
+    assert set(TOOL_TO_HEAD) == {tool["function"]["name"] for tool in OPENAPI_TOOLS}

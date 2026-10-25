@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Replaceable engines on Omarchy</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground);font-family:var(--font-sans,system-ui);background:transparent}main{padding-bottom:16px}h2{margin-top:24px}p{line-height:1.5}.flow{display:grid;gap:8px}.process{border:1px solid var(--border);padding:16px;border-radius:var(--radius,8px)}.label{display:block;color:var(--muted-foreground);margin-bottom:8px}.arrow{text-align:center;padding:4px;overflow-wrap:anywhere}.options{display:grid;grid-template-columns:1fr 1fr;gap:12px}.branch{border-left:2px solid var(--border);padding-left:16px;margin-top:12px}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--border);padding:10px 5px}summary{padding:12px 0}code{overflow-wrap:anywhere}a{color:inherit}@media(max-width:500px){.options{grid-template-columns:1fr}}
+</style></head><body><main>
+<p><strong>Omarchy: replace the engines, keep the voice loop.</strong><br>Proposed design. The small local brain handles the request first; the larger model runs only when needed.</p>
+<div class="flow" aria-label="Processes and data flow on one Omarchy machine">
+<div class="process"><span class="label">Capture process · parec</span>Microphone → 16 kHz mono PCM</div>
+<div class="arrow">↓ audio bytes → session → selected speech worker</div>
+<div class="process"><span class="label">Speech worker process · replaceable</span><div class="options"><div><strong>Parakeet + ONNX Runtime</strong><p>Streams words and signals end of utterance.</p></div><div><strong>Whistle + Cactus</strong><p>Streams stable + pending words, or transcribes a whole clip. No turn-end event in the inspected API.</p></div></div></div>
+<div class="arrow">↓ partial words / native endpoint / final transcript · JSONL<br>↑ finish or cancel · framed command</div>
+<div class="process"><span class="label">Agavai session process</span><strong>Turn controller</strong><p>Show partials. End input on Parakeet EOU or Enter; optional VAD uses the same microphone feed. Flush the worker’s final words, then commit once.</p><div class="arrow">↓ finished request + history + allowed tools</div><strong>Brain coordinator</strong><p>Owns history, escalation and tool execution. No model or router runs on partial words.</p></div>
+<div class="arrow">↓ request → selected small runtime<br>↑ answer / tool calls / unsupported</div>
+<div class="process"><span class="label">Small brain process · replaceable</span><strong>Small Qwen + llama-server, or Needle + Cactus</strong><p>Qwen can be the local brain. Needle can directly request supported tools. Their capabilities differ; the adapter reports unsupported requests explicitly.</p></div>
+<div class="branch"><strong>Handled → session validates tools → actual result → reply.</strong><p>“Open the browser” can finish here. A result acknowledgement does not require a larger-model call.</p></div>
+<div class="branch"><strong>Cannot handle → session escalates ↓</strong><p>Send the request, history and completed tool results. Never repeat an action just because the model changed.</p><div class="process"><span class="label">Larger brain process · separately configured</span>Model + compatible runtime → answer or tool calls → session validation → reply</div></div>
+<div class="arrow">↓ reply text → existing speech synthesis / player → speakers<br>Session state → Quickshell overlay process</div>
+</div>
+<h2>What becomes replaceable?</h2>
+<table><thead><tr><th>Boundary</th><th>Contract</th></tr></thead><tbody>
+<tr><td>Speech backend</td><td>Start → feed audio → finish or cancel. Partial text is optional; one final transcript is required.</td></tr>
+<tr><td>Turn-end policy</td><td>Native EOU, manual Enter, or proposed VAD. Stable words alone never submit a request.</td></tr>
+<tr><td>Brain backend</td><td>History + tools in; answer, tool calls, clarification, unsupported or error out.</td></tr>
+<tr><td>Runtime selection</td><td>Choose a compatible model/runtime pair at startup. ONNX weights, Cactus weights and GGUF are not interchangeable.</td></tr>
+</tbody></table>
+<h2>Where the time goes</h2>
+<table><thead><tr><th>Wait</th><th>Expected cost</th></tr></thead><tbody>
+<tr><td>First words</td><td>Chunk buffering + decode. Parakeet steps: 160 ms. Whistle suggests ~1 s chunks; faster compute does not remove buffering.</td></tr>
+<tr><td>Finish speaking → submit</td><td>Endpoint wait + remaining decode. Existing eval target: 0.5 s. Whistle unmeasured locally.</td></tr>
+<tr><td>Small model handles it</td><td>Small inference + tool time if needed. No larger-model wait.</td></tr>
+<tr><td>Escalation</td><td>Small attempt + larger inference, plus load time if cold.</td></tr>
+</tbody></table>
+<p>Whistle is expected to decode faster. Confirm on this Omarchy machine with identical recordings; vendor Apple M4 Pro results are not local latency measurements.</p>
+<details><summary>Concrete changes and unresolved choices</summary><ul>
+<li>Split capture/turn control from the Parakeet-specific worker. Give finish and cancel distinct commands.</li>
+<li>Add Whistle streaming and batch adapters; keep workers warm and reject incompatible configuration at startup.</li>
+<li>Wrap existing llama calls and add a Needle adapter. Remove mandatory Qwen calls before the small attempt.</li>
+<li>Run live and replay evaluations through the same adapters; record engine, weights, endpoint policy and hardware.</li>
+<li>Start Whistle with Enter-to-submit. Automatic VAD needs pause/cutoff evaluation and a deliberate update to the current native-EOU-only specification.</li>
+<li>Exact small/large model assignments and acceptance rules for general answers remain to be selected.</li>
+</ul><p><a href="../model-engines.md">Full design, failure handling and sources</a> · Whistle API verified in cactus-needle 3.2.8.</p></details>
+</main></body></html>

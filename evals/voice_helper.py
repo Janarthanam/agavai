@@ -1,14 +1,8 @@
-"""Runs in the Agavai speech venv (numpy, onnxruntime, kokoro-onnx).
+"""Run synthesis in the TTS environment or recognition in its selected ASR environment.
 
-Reads one JSON request on stdin and writes one JSON answer on stdout:
-
-    {"mode": "synth", ...}      synthesize clips to 16 kHz mono PCM16 WAV
-    {"mode": "recognize", ...}  replay WAVs through the streaming recognizer
-    {"mode": "synth_time", ...} time warm Kokoro synthesis of reply texts
-
-Recognition feeds the recognizer's own Stream 160 ms at a time and resets it
-after each end of utterance, as the listen session does, so commits are a
-function of the audio alone.
+One JSON request/response on stdin/stdout. Recognition uses the product speech
+adapters with 160 ms PCM packets (20 ms for VAD). Native EOU or VAD commits automatically; manual mode
+simulates Enter at clip end. Replay timing excludes live capture/IPC jitter.
 """
 
 from __future__ import annotations
@@ -20,7 +14,7 @@ import time
 import wave
 from pathlib import Path
 
-import numpy as np
+import statistics
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -43,6 +37,7 @@ def _kokoro(model: str, voices: str):
 
 
 def _to_16k(samples: np.ndarray, rate: int) -> np.ndarray:
+    import numpy as np
     samples = np.asarray(samples, dtype=np.float32).reshape(-1)
     if rate == RATE:
         return samples
@@ -51,6 +46,7 @@ def _to_16k(samples: np.ndarray, rate: int) -> np.ndarray:
 
 
 def _write(path: Path, samples: np.ndarray) -> None:
+    import numpy as np
     pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as wav:
@@ -61,6 +57,7 @@ def _write(path: Path, samples: np.ndarray) -> None:
 
 
 def synth(req: dict) -> dict:
+    import numpy as np
     kokoro = _kokoro(req["model"], req["voices"])
     out = []
     for item in req["items"]:
@@ -90,46 +87,88 @@ def synth(req: dict) -> dict:
 
 
 def recognize(req: dict) -> dict:
-    import agavai.parakeet_worker as worker
+    from types import SimpleNamespace
+    from agavai.config import VadConfig
+    from agavai.meter import streaming_endpointer
+    from agavai.speech_backends import create_backend
 
     events: list[dict] = []
-    worker.emit = lambda kind, text="": events.append({"kind": kind, "text": text})
+    cfg = SimpleNamespace(**req["asr"])
+    endpointer = streaming_endpointer(VadConfig(**req["vad"])) if cfg.endpoint == "vad" else None
     started = time.perf_counter()
-    stream = worker.Stream(req["model_dir"], "cpu")
+    stream = create_backend(cfg, lambda kind, text: events.append({"kind": kind, "text": text}))
     load_s = time.perf_counter() - started
     results = []
     for clip in req["clips"]:
         with wave.open(clip["path"]) as wav:
-            pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
-        stream.reset()
+            if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) != (RATE, 1, 2):
+                raise ValueError("Replay requires 16 kHz mono PCM16 WAV")
+            pcm = wav.readframes(wav.getnframes())
+        if len(pcm) > cfg.max_utterance_secs * RATE * 2:
+            raise ValueError("Replay exceeds maximum utterance duration")
+        stream.start()
+        if endpointer is not None:
+            endpointer.reset()
         events.clear()
         timeline, commits, step_seconds = [], [], []
         pending = ""
-        for offset in range(0, len(pcm), CHUNK):
+        ready_at = 0.0
+        chunk_bytes = 640 if endpointer is not None else CHUNK * 2
+        for offset in range(0, len(pcm), chunk_bytes):
             seen = len(events)
             tick = time.perf_counter()
-            stream.feed(pcm[offset:offset + CHUNK])
-            step_seconds.append(time.perf_counter() - tick)
-            at = min(len(pcm), offset + CHUNK) / RATE
+            chunk = pcm[offset:offset + chunk_bytes]
+            stream.feed(chunk)
+            reason = endpointer.feed(chunk) if endpointer is not None else None
+            step_s = time.perf_counter() - tick
+            step_seconds.append(step_s)
+            at = min(len(pcm), offset + chunk_bytes) / (RATE * 2)
+            ready_at = max(ready_at, at) + step_s
+            finish = reason == "silence"
             for event in events[seen:]:
-                timeline.append({**event, "t": round(at, 3)})
-                if event["kind"] == "eou":
-                    commits.append({"text": event["text"], "t": round(at, 3)})
-                    pending = ""
-                    stream.reset()
+                timeline.append({**event, "t": round(at, 3), "ready_t": round(ready_at, 3)})
+                if event["kind"] == "endpoint" and cfg.endpoint == "native":
+                    finish = True
                 else:
                     pending = event["text"]
-        first = next((e["t"] for e in timeline if e["kind"] == "interim"), None)
+            if reason == "max_duration":
+                raise ValueError("Maximum utterance duration exceeded; request was not submitted")
+            if reason == "backend_failed":
+                raise ValueError("Voice activity detection stopped responding")
+            if reason == "start_timeout":
+                endpointer.reset()
+            if finish or reason == "min_speech":
+                if finish:
+                    tick = time.perf_counter()
+                    text = stream.finish()
+                    ready_at += time.perf_counter() - tick
+                    commits.append({"text": text, "t": round(at, 3), "ready_t": round(ready_at, 3)})
+                pending = ""
+                stream.cancel()
+                stream.start()
+                if endpointer is not None:
+                    endpointer.reset()
+        if cfg.endpoint == "manual":
+            tick = time.perf_counter()
+            final = stream.finish()
+            ready_at += time.perf_counter() - tick
+            commits.append({"text": final, "t": len(pcm) / (RATE * 2), "ready_t": round(ready_at, 3)})
+            pending = ""
+        stream.cancel()
+        first = next((e for e in timeline if e["kind"] == "partial" and e["text"]), {})
         results.append({
             "id": clip["id"],
             "commits": commits,
             "uncommitted": pending,
-            "first_interim_t": first,
-            "interims": sum(e["kind"] == "interim" for e in timeline),
-            "step_mean_s": round(float(np.mean(step_seconds)), 4) if step_seconds else 0.0,
-            "step_max_s": round(float(np.max(step_seconds)), 4) if step_seconds else 0.0,
+            "first_interim_t": first.get("t"),
+            "first_interim_ready_t": first.get("ready_t"),
+            "endpoint": cfg.endpoint,
+            "interims": sum(e["kind"] == "partial" for e in timeline),
+            "step_mean_s": round(statistics.fmean(step_seconds), 4) if step_seconds else 0.0,
+            "step_max_s": round(max(step_seconds), 4) if step_seconds else 0.0,
         })
-    return {"clips": results, "load_s": round(load_s, 2), "peak_rss_mb": round(_peak_rss_mb(), 1)}
+    return {"clips": results, "load_s": round(load_s, 2), "peak_rss_mb": round(_peak_rss_mb(), 1),
+            "backend": cfg.backend, "endpoint": cfg.endpoint, "mode": cfg.mode}
 
 
 def synth_time(req: dict) -> dict:

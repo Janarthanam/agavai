@@ -106,7 +106,7 @@ Feature: Local tool loop
     And the tool "wallpaper_next" should have been called once
     And the model was given the chat instructions, then the desktop instructions
 
-  Scenario: A turn without a chat UI has no canvas, so an on-screen answer is an unknown tool
+  Scenario: A turn without a chat UI has no canvas, so an on-screen answer is refused
     Given the router selects no heads
     And llama-server shows this answer
       """
@@ -115,7 +115,7 @@ Feature: Local tool loop
     When I run a turn with text "list the planets"
     Then the model was not offered "show_answer"
     And the model was given the desktop instructions
-    And the spoken reply should be "Here are the planets in a second round."
+    And the spoken reply should be "The model requested a tool unavailable in this turn: show_answer"
 
   Scenario: An incomplete on-screen answer is an error, not a blank canvas
     Given a chat UI in a temp runtime dir

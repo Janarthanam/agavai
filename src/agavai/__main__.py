@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import subprocess
 import sys
-import traceback
+import time
 from pathlib import Path
 
+from agavai import journal
 from agavai.a2a import write_card
 from agavai.asr import AsrError, open_stream
 from agavai.config import dump_llm_env, load_config, set_model_id
@@ -16,9 +18,12 @@ from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.orchestrator import control_command, run_turn
 from agavai.recording import Recorder, control as recording_control, correct, recover
+from agavai.setup import ROUTERS, SPEECH
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_record, cue_start, cue_think, speak
 from agavai.ui import ChatUi, cancel_ui, summon_overlay
+
+log = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,14 +51,39 @@ def main(argv: list[str] | None = None) -> int:
     say.add_argument("text", nargs="+")
     sub.add_parser("status")
     sub.add_parser("mcp", help="Run the MCP stdio server")
-    sub.add_parser("dump-llm", help="Print llama-server env for the launcher script")
+    dump = sub.add_parser("dump-llm", help="Print llama-server env for the launcher script")
+    dump.add_argument("--role", choices=["service", "small", "large"], default="service")
     app_cmd = sub.add_parser("app", help="Start Agavai listening (app launcher)")
     app_cmd.description = "Start Agavai listening in the single voice widget"
     model = sub.add_parser("model", help="Show, list, or select the on-device GGUF")
     model.add_argument("action", nargs="?", default="show", choices=["show", "list", "set"])
     model.add_argument("name", nargs="?", help="Model id for 'set'")
+    services = sub.add_parser("services", help="Show or sync the llama-server services that config.toml needs")
+    services.add_argument("action", nargs="?", default="status", choices=["status", "sync"])
+    setup = sub.add_parser("setup", help="Choose, download and configure the speech and brain models")
+    setup.add_argument("--speech", choices=SPEECH)
+    setup.add_argument("--small", metavar="needle|GGUF-ID", help="the first model to handle each request")
+    setup.add_argument("--large", metavar="none|GGUF-ID", help="the model that takes over when the small one cannot")
+    setup.add_argument("--router", choices=ROUTERS)
+    setup.add_argument("--yes", action="store_true", help="apply without asking")
+    setup.add_argument("--dry-run", action="store_true", help="show the plan and change nothing")
+    download = sub.add_parser("download", help="List the models, or download the named ones")
+    download.add_argument("ids", nargs="*", metavar="ID")
+    sub.add_parser("explain", help="Explain what happens to a request with the current configuration")
     args = parser.parse_args(argv)
-    cfg = load_config()
+    # The hotkey and the detached listener have no terminal, so a bad config
+    # must reach the journal before the configured level is known.
+    journal.setup("info")
+    if args.cmd == "services":
+        return _services_cmd(args.action)
+    if args.cmd in {"setup", "download", "explain"}:
+        return _setup_cmd(args)
+    try:
+        cfg = load_config()
+    except Exception:
+        log.exception("config could not be loaded")
+        raise
+    journal.setup(cfg.log.level)
     cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
     write_card(cfg)
 
@@ -65,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         serve_stdio()
         return 0
     if args.cmd == "dump-llm":
-        sys.stdout.write(dump_llm_env(cfg))
+        sys.stdout.write(dump_llm_env(cfg, args.role))
         return 0
     if args.cmd in {"app", "invoke"}:
         from agavai.app import run as run_app
@@ -74,15 +104,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "model":
         return _model_cmd(cfg, args.action, args.name)
     if args.cmd == "status":
-        spec = cfg.llm.active_spec()
+        from agavai.brain import create_brain
+        from agavai.llm import LlmError, chat
+        model = cfg.small_brain or cfg.llm
+        spec = model.active_spec()
+        try:
+            available = create_brain(model, chat=chat, health=health).ready()
+        except LlmError:
+            available = False
         print(f"state={read_state(cfg)}")
-        print(f"llm={'up' if health(cfg.llm) else 'down'} {cfg.llm.base_url}")
-        print(f"model_id={cfg.llm.model_id}")
-        print(f"model_path={cfg.llm.model_path}")
-        print(f"model_present={cfg.llm.model_path.is_file()}")
+        print(f"asr_backend={cfg.asr.backend} endpoint={cfg.asr.endpoint} mode={cfg.asr.mode}")
+        print(f"brain_backend={model.backend}")
+        print(f"llm={'up' if available else 'down'} {model.base_url if model.backend == 'llama-server' else 'worker'}")
+        print(f"model_id={model.model_id}")
+        print(f"model_path={model.model_path}")
+        print(f"model_present={model.model_path.is_file()}")
         if spec and spec.description:
             print(f"model_desc={spec.description}")
-        if cfg.llm.path_overridden:
+        if model.path_overridden:
             print("model_path_overridden=true")
         return 0
     if args.cmd == "speak":
@@ -93,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         text = " ".join(args.text)
         ui = ChatUi(cfg)
         ui.begin_session()
+        journal.start_request(str(ui.data["session_id"]))
         cue_think(cfg)
         write_state(cfg, "thinking")
         reply = run_turn(text, cfg, ui)
@@ -129,6 +169,43 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def _services_cmd(action: str) -> int:
+    from agavai.services import ServiceError, service_config, status_lines, sync
+
+    try:
+        cfg = service_config()
+        lines = sync(cfg) if action == "sync" else status_lines(cfg)
+    except (ServiceError, ValueError) as exc:
+        print(f"agavai services: {exc}", file=sys.stderr)
+        return 1
+    print("\n".join(lines))
+    return 0
+
+
+def _setup_cmd(args) -> int:
+    from agavai import setup
+
+    try:
+        if args.cmd == "setup":
+            choices = {"speech": args.speech, "small": args.small, "large": args.large, "router": args.router}
+            return setup.run_setup(choices, yes=args.yes, dry_run=args.dry_run, interactive=sys.stdin.isatty())
+        cfg = load_config()
+        if args.cmd == "explain":
+            print("\n".join(setup.walkthrough(cfg)))
+        elif not args.ids:
+            print("\n".join(setup.download_list(cfg)))
+        else:
+            unknown = [mid for mid in args.ids if mid not in setup.downloads(cfg)]
+            if unknown:
+                raise setup.SetupError(f"unknown model {', '.join(unknown)}; run agavai download to list them")
+            for command in setup.run_downloads(cfg, args.ids):
+                print(f"ran scripts/{command}")
+        return 0
+    except (setup.SetupError, ValueError) as exc:
+        print(f"agavai {args.cmd}: {exc}", file=sys.stderr)
+        return 1
+
+
 def _model_cmd(cfg, action: str, name: str | None) -> int:
     if action == "list":
         for mid, spec in sorted(cfg.llm.models.items()):
@@ -149,7 +226,8 @@ def _model_cmd(cfg, action: str, name: str | None) -> int:
             return 1
         print(f"model_id={cfg.llm.model_id}")
         print(f"model_path={cfg.llm.model_path}")
-        print("restart the runner: systemctl --user restart agavai-llm")
+        from agavai.services import apply_config_change
+        print("\n".join(apply_config_change()))
         return 0
     spec = cfg.llm.active_spec()
     print(f"model_id={cfg.llm.model_id}")
@@ -319,7 +397,7 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
 
     The mic stays open until the user dismisses it or the capture ends.
     A finished action returns to listening with the results still on screen.
-    The recognizer, not a silence timer, decides when the line is finished.
+    Native EOU or Enter ends input; final decoding completes before submission.
     With record, the session records first and ends when the recording stops.
     """
     _cancel_path(cfg).unlink(missing_ok=True)
@@ -342,16 +420,20 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
     reply: str | None = None
     followups = 0
     stream = None
+    ended = "crashed"
     try:
+        log.info("session start")
         if record:
             ui.begin_session()
-            return 1 if _record_session(cfg, ui, requests, lambda: stop_requested) == "error" else 0
+            ended = _record_session(cfg, ui, requests, lambda: stop_requested)
+            return 1 if ended == "error" else 0
         try:
             stream = open_stream(cfg)
         except AsrError as exc:
             ui.error(str(exc))
             write_state(cfg, "error")
-            print(exc, file=sys.stderr)
+            log.error("asr did not start: %s", exc)
+            ended = "recognizer did not start"
             return 1
         cue_start(cfg)
         while True:
@@ -365,6 +447,7 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
                 record_requested=lambda: requests.signalled,
             )
             if heard == "error":
+                ended = "error"
                 return 1
             if heard == "record":
                 # Only a toggle starts a recording; stop, pause, and mark need one running.
@@ -376,6 +459,7 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
                 ui.continue_listening()
                 continue
             if heard == "cancel" or ui.cancelled():
+                ended = "cancel" if heard == "cancel" else "dismissed"
                 return 0
             if heard == "ignore":
                 stop_requested = False
@@ -384,10 +468,12 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
             if heard != "speech":
                 if ui.data.get("phase") != "listening" and not ui.cancelled():
                     ui.continue_listening()
+                ended = "stream ended"
                 return 0
             if not text.strip():
                 speak("I did not hear anything.", cfg)
                 if ui.cancelled():
+                    ended = "dismissed"
                     return 0
                 stop_requested = False
                 cancel_requested = False
@@ -404,16 +490,24 @@ def listen_session(cfg, ui: ChatUi, *, record: bool = False) -> int:
                 finish(cfg)
                 ui.idle()
                 write_state(cfg, "idle")
+                ended = "cancel during the turn"
                 return 0
             if ui.cancelled():
+                ended = "dismissed"
                 return 0
             followups += 1
             stop_requested = False
             cancel_requested = False
             ui.continue_listening()
+    except Exception:
+        log.exception("session crashed")
+        raise
     finally:
+        log.info("session end reason=%s", ended)
         if stream is not None:
             stream.close()
+        from agavai.brain import close_brains
+        close_brains()
         from agavai.tts import sweep_playback_wavs
 
         sweep_playback_wavs()
@@ -442,36 +536,49 @@ def _await_utterance(
         finish(cfg)
         ui.error(str(exc))
         write_state(cfg, "error")
-        print(exc, file=sys.stderr)
+        log.exception("listen failed: %s", exc)
         return "error", ""
+    journal.start_request(str(ui.data["session_id"]))
     write_state(cfg, "listening")
-    hypothesis = ""
+    started = time.monotonic()
+
+    def captured(reason: str, line: str = "") -> None:
+        log.info("asr end reason=%s words=%d secs=%.2f", reason, len(line.split()), time.monotonic() - started)
+
     try:
         for kind, text in stream.events(
-            on_level=ui.level,
+            on_level=lambda db: ui.level(db, "active" if cfg.asr.endpoint == "vad" else "off",
+                                         cfg.vad.backend if cfg.asr.endpoint == "vad" else "off"),
             should_stop=lambda: stop_requested() or record_requested(),
+            should_cancel=lambda: record_requested() or (stop_requested() and cancel_requested()),
         ):
-            if kind == "interim" and text:
-                hypothesis = text
+            if kind == "finishing":
+                ui.transcribing()
+                write_state(cfg, "transcribing")
+            elif kind == "interim" and text:
                 ui.partial(text)
             elif kind == "eob" and text:
-                hypothesis = text
                 ui.partial(text)
             elif kind == "eou":
-                line = (text or hypothesis).strip()
+                if stop_requested() and cancel_requested():
+                    break
+                line = text.strip()
                 if not line:
+                    captured("empty")
                     return "ignore", ""
+                captured("enter" if stop_requested() else "eou", line)
                 ui.partial(line)
                 return "speech", line
-            if stop_requested() or record_requested():
+            if record_requested():
                 break
     except AsrError as exc:
         finish(cfg)
         ui.error(str(exc))
         write_state(cfg, "error")
-        print(exc, file=sys.stderr)
+        log.error("asr failed: %s", exc)
         return "error", ""
     if stop_requested() and cancel_requested():
+        captured("cancel")
         ui.partial("")
         finish(cfg)
         ui.idle()
@@ -480,8 +587,7 @@ def _await_utterance(
     if record_requested():
         ui.partial("")
         return "record", ""
-    if stop_requested():
-        return "speech", hypothesis.strip()
+    captured("stream_ended")
     return "ended", ""
 
 
@@ -607,7 +713,7 @@ def _run_stop_body(
     try:
         reply = run_turn(text, cfg, ui, continue_conversation=continue_conversation)
     except Exception:
-        traceback.print_exc()
+        log.exception("turn failed")
         reply = "The local agent hit an error."
         ui.error(reply)
     if aborted():

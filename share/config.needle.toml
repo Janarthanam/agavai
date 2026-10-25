@@ -1,0 +1,57 @@
+# Needle as router and agent: Whistle → Needle3 (one inference) → local Qwen fallback.
+# This is a complete config, not an include. Install models with setup-cactus.sh.
+# Native probes show wrong Needle selections for some general/time questions;
+# for the conservative path, route with keyword and give Needle routed tools.
+
+[asr]
+backend = "whistle-cactus"
+model_path = "~/.local/share/agavai/cactus/whistle.cact"
+runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+venv = "~/.local/share/agavai/cactus/venv"
+device = "cpu"
+mode = "streaming"
+endpoint = "vad"
+
+[vad]
+backend = "energy"
+enabled = true
+silence_ms = 900
+min_speech_ms = 250
+max_record_ms = 120000
+
+[router]
+# No [router.needle]: the router shares the Needle [brain.small], so Needle
+# selects and calls tools in one inference over the full allowlist.
+# After escalation, Qwen gets the fallback heads instead of a second Needle call.
+backend = "needle-cactus"
+fallback = "keyword"
+max_tools = 8
+timeout_secs = 10
+
+[brain.small]
+backend = "needle-cactus"
+model = "needle3"
+model_path = "~/.local/share/agavai/cactus/needle3.cact"
+runtime_library = "~/.local/share/agavai/cactus/libneedle.so"
+venv = "~/.local/share/agavai/cactus/venv"
+timeout_secs = 10
+max_tokens = 512
+max_tool_rounds = 6
+
+[brain.large]
+backend = "llama-server"
+# Built-in catalog id resolves the installed GGUF; model_path can override it.
+model = "qwen3-4b-instruct"
+host = "127.0.0.1"
+port = 18766
+alias = "agavai"
+tool_selection = "routed"
+timeout_secs = 120
+max_tokens = 512
+max_tool_rounds = 6
+
+[tts]
+prefer = "kokoro"
+voice = "af_bella"
+
+# Cloud/OpenAI support is deferred. Do not add a cloud table.

@@ -81,7 +81,7 @@ class _AssistantScript:
     def __init__(self, utterances) -> None:
         self.utterances = list(utterances)
 
-    def events(self, on_level, should_stop=None):
+    def events(self, on_level, should_stop=None, should_cancel=None):
         for item in self.utterances.pop(0) if self.utterances else []:
             if callable(item):
                 item()

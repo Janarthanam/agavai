@@ -50,18 +50,18 @@ Feature: Configure before installing the service
 
   Scenario: Service activation follows configuration and app installation
     When I install with "ready" configuration
-    Then the service is installed and restarted
+    Then the service is installed and started by sync
     And setup returns 0
 
-  Scenario: Report a service restart failure
-    When service restart fails during installation
-    Then the service is installed and restarted
+  Scenario: Report a service start failure
+    When service start fails during installation
+    Then the service is installed and started by sync
     And setup returns 1
 
   Scenario: Save configuration in the editor before installing the service
     When I configure through the installation editor
     Then the edited configuration is saved
-    And the service is installed and restarted
+    And the service is installed and started by sync
     And setup returns 0
 
   Scenario: Cancelling the editor prevents service installation

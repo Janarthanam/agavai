@@ -40,6 +40,11 @@ def check_frontend(lengths, packet_sizes):
             np.testing.assert_allclose(actual, expected, rtol=0, atol=2e-5)
 
 
+def frame(command, uid, data=b""):
+    payload = struct.pack(">cI", command, uid) + data
+    return struct.pack(">I", len(payload)) + payload
+
+
 def check_speech(model_dir, *, reset, silence):
     fixture = ROOT / "features" / "fixtures" / "asr-sentence.wav"
     with wave.open(str(fixture)) as wav:
@@ -50,18 +55,23 @@ def check_speech(model_dir, *, reset, silence):
     expected = "please find the meeting notes from yesterday and open the document in my downloads folder"
     sizes = (3200,) if reset or silence else (160, 3200, 10174)
     for size in sizes:
-        frames = b"".join(struct.pack(">I", len(pcm[i:i + size])) + pcm[i:i + size]
-                          for i in range(0, len(pcm), size))
-        turn = frames + struct.pack(">I", 0)
+        from agavai.asr import worker_settings
+        from agavai.config import AsrConfig
+        settings = worker_settings(AsrConfig(model_dir=Path(model_dir)))
+        turns = []
+        for uid in range(1, 3 if reset else 2):
+            frames = b"".join(frame(b"A", uid, pcm[i:i + size]) for i in range(0, len(pcm), size))
+            turns.append(frame(b"S", uid) + frames + frame(b"F", uid))
         result = subprocess.run(
-            [sys.executable, str(ROOT / "src" / "agavai" / "parakeet_worker.py"), model_dir, "cpu"],
-            input=turn * (2 if reset else 1), capture_output=True, timeout=45,
+            [sys.executable, str(ROOT / "src" / "agavai" / "asr_worker.py"), json.dumps(settings)],
+            input=b"".join(turns), capture_output=True, timeout=45,
         )
-        assert result.returncode == 0, result.stderr.decode()
+        assert result.returncode == 0, result.stderr.decode() + result.stdout.decode()
         events = [json.loads(line) for line in result.stdout.splitlines()]
-        utterances = [event["text"] for event in events if event["kind"] == "eou"]
+        utterances = [event["text"] for event in events if event["kind"] == "final"]
         assert utterances == [expected] * (2 if reset else 1), (size, utterances)
-        assert sum(event["kind"] == "reset" for event in events) == (2 if reset else 1), events
+        assert sum(event["kind"] == "endpoint" for event in events) == (2 if reset else 1), events
+
 
 
 def check_continuous(model_dir):
@@ -74,22 +84,69 @@ def check_continuous(model_dir):
     for gap_ms, utterances in ((2000, [expected, expected]), (0, [f"{expected} {expected}"])):
         gap = bytes(2 * 16 * gap_ms)
         audio = pcm + gap + pcm + gap
-        frames = b"".join(struct.pack(">I", len(audio[i:i + 3200])) + audio[i:i + 3200]
-                          for i in range(0, len(audio), 3200))
+        from agavai.asr import worker_settings
+        from agavai.config import AsrConfig
+        settings = worker_settings(AsrConfig(model_dir=Path(model_dir)))
+        settings["continuous"] = True
+        frames = b"".join(frame(b"A", 1, audio[i:i + 3200]) for i in range(0, len(audio), 3200))
         result = subprocess.run(
-            [sys.executable, str(ROOT / "src" / "agavai" / "parakeet_worker.py"), model_dir, "cpu", "--continuous"],
-            input=frames + struct.pack(">I", 0), capture_output=True, timeout=90,
+            [sys.executable, str(ROOT / "src" / "agavai" / "asr_worker.py"), json.dumps(settings)],
+            input=frame(b"S", 1) + frames + frame(b"F", 1), capture_output=True, timeout=90,
         )
         assert result.returncode == 0, result.stderr.decode()
         events = [json.loads(line) for line in result.stdout.splitlines()]
         eous = [event for event in events if event["kind"] == "eou"]
         assert [event["text"] for event in eous] == utterances, (gap_ms, eous)
-        assert [event["kind"] for event in events].count("reset") == 1, events
+        assert [event["kind"] for event in events].count("final") == 1, events
         assert 0 <= eous[0]["start_ms"] < 1000, eous[0]
         if gap_ms:
             second = sentence_ms + gap_ms
             assert eous[0]["end_ms"] < eous[1]["start_ms"], eous
             assert second - 500 < eous[1]["start_ms"] < second + 1000, (second, eous[1])
+
+
+def check_recording_capture():
+    import tempfile
+    from unittest.mock import patch
+
+    from agavai.asr import open_stream
+    from agavai.config import Config
+    from agavai.meter import ParecSource
+    from agavai.recording import Recorder
+
+    fixture = ROOT / "features" / "fixtures" / "asr-sentence.wav"
+    with wave.open(str(fixture)) as wav:
+        sentence = wav.readframes(wav.getnframes())
+    pcm = (sentence + bytes(64000)) * 2
+    expected = "please find the meeting notes from yesterday and open the document in my downloads folder"
+    with tempfile.TemporaryDirectory(prefix="agavai-recording-replay-") as directory:
+        root = Path(directory)
+        audio = root / "microphone.pcm"
+        audio.write_bytes(pcm)
+        cfg = Config()
+        cfg.asr.backend = "whistle-cactus"
+        cfg.asr.endpoint = "vad"
+        cfg.asr.venv = root / "assistant-runtime-is-not-used-for-recording"
+        cfg.recordings.dir = root / "Recordings"
+        recorder = Recorder(cfg)
+        # A real pipe, capture pump, model worker and encoder; only the microphone is replaced.
+        with patch.object(ParecSource, "ARGV", ["cat", str(audio)]):
+            stream = open_stream(cfg, continuous=True)
+            try:
+                for message in stream.record(recorder.audio, should_stop=lambda: False):
+                    if message["kind"] == "asr_lost":
+                        raise AssertionError("The recording lost its recognizer")
+                    if message["kind"] == "eou":
+                        recorder.add_line(message["text"], message["start_ms"], message["end_ms"])
+            finally:
+                stream.close()
+        folder = recorder.finish()
+        meta = json.loads((folder / "recording.json").read_text())
+        assert cfg.asr.backend == "whistle-cactus" and cfg.asr.endpoint == "vad"
+        assert meta["duration_ms"] == len(pcm) * 1000 // 32000, meta
+        assert [line["live"] for line in meta["segments"]] == [expected, expected], meta
+        assert meta["audio"] == "audio.opus" and (folder / "audio.opus").is_file(), meta
+        assert not (folder / "audio.wav").exists()
 
 
 if __name__ == "__main__":
@@ -100,5 +157,7 @@ if __name__ == "__main__":
         check_frontend([0, 1, 159, 160, 255, 256, 257, 319, 320, 511, 512, 2561], [1, 83, 3200])
     elif mode == "continuous":
         check_continuous(model_dir)
+    elif mode == "recording":
+        check_recording_capture()
     else:
         check_speech(model_dir, reset=mode == "reset", silence=mode == "silence")

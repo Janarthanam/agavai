@@ -1,0 +1,9 @@
+[Unit]
+Description=Apply Agavai configuration changes to its model services
+
+[Path]
+PathChanged=%h/.config/agavai/config.toml
+Unit=agavai-sync.service
+
+[Install]
+WantedBy=default.target
