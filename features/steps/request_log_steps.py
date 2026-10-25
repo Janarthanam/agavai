@@ -6,6 +6,8 @@ import logging
 import os
 import re
 import socket
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +17,8 @@ from behave import given, then, when
 from agavai import journal
 from agavai.__main__ import listen_session, main
 from agavai.router import select_head_ids
+
+SRC = Path(__file__).resolve().parents[2] / "src"
 
 
 def _start(context, patcher):
@@ -50,6 +54,35 @@ def log_to_socket(context, session, line):
             handler.close()
         for handler in kept:
             logger.addHandler(handler)
+
+
+@when('"python -m agavai status" runs with that config against the journal socket')
+def cli_status_to_socket(context):
+    # run_module with run_name="__main__" is how `python -m agavai` loads the
+    # entry point, so its module logger is named "__main__" as on the desktop.
+    script = (
+        "import runpy, sys\n"
+        "from agavai import journal\n"
+        "journal.JOURNAL_SOCKET = sys.argv[1]\n"
+        "sys.argv = ['agavai', 'status']\n"
+        "runpy.run_module('agavai', run_name='__main__', alter_sys=True)\n"
+    )
+    env = dict(os.environ, AGAVAI_CONFIG=str(context.config_path), PYTHONPATH=str(SRC))
+    context.cli = subprocess.run([sys.executable, "-c", script, str(context.journal_path)],
+                                 env=env, capture_output=True, text=True, timeout=30)
+
+
+@then('the journal socket receives a line containing "{text}"')
+def socket_receives_containing(context, text):
+    received = []
+    try:
+        while True:
+            received.append(context.journal_socket.recv(65536).decode())
+            if text in received[-1]:
+                return
+    except TimeoutError:
+        pass
+    raise AssertionError(f"{text!r} not in {received!r}; stderr: {context.cli.stderr[-500:]}")
 
 
 @then('the journal socket receives "{datagram}"')
