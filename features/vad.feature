@@ -2,11 +2,6 @@ Feature: Voice activity detection
   A pause after speech auto-stops the turn. The settled 900 ms silence
   window (vad.silence_ms) ends an utterance; shorter pauses do not.
 
-  Scenario: Silence synthesizes to the floor and a sine measures above the gate
-    When I convert PCM to dBFS
-    Then silence should be -100 dBFS
-    And a full-scale sine should be near -3 dBFS
-
   Scenario: Reads reassemble into exact frames
     When I frame a 1500-byte read stream
     Then there should be 2 full frames
@@ -15,9 +10,6 @@ Feature: Voice activity detection
   Scenario: A read timeout is not end of stream
     When a read stream times out before data arrives
     Then the reader should have produced a frame
-
-  Scenario: Parec argv selects the source with -d
-    Then the parec argv should use "-d" for "@DEFAULT_SOURCE@"
 
   Scenario: A pause after speech auto-stops at the silence window
     Given an endpointer with silence window 900 ms

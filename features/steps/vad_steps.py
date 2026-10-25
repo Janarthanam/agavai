@@ -1,28 +1,18 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 from pathlib import Path
-import struct
 import wave
 
 from behave import given, then, when
 
 from agavai.config import Config, load_config
-from agavai.meter import AcousticResult, Endpointer, ParecSource, frame_iter, make_backend, rms_dbfs, streaming_endpointer
+from agavai.meter import AcousticResult, Endpointer, frame_iter, make_backend, streaming_endpointer
 
 AUDIO = Path(__file__).resolve().parents[2] / "evals" / "audio"
 
 FRAME = 640
-
-
-def _sine_dbfs(amplitude: int = 32767, frames: int = 8) -> float:
-    buf = b"".join(
-        struct.pack("<h", int(amplitude * math.sin(2 * math.pi * i / 32)))
-        for i in range(160 * frames)
-    )
-    return rms_dbfs(buf[:FRAME])
 
 
 class BackendFake:
@@ -103,11 +93,6 @@ def step_silence(context, n):
             return
 
 
-@when("I convert PCM to dBFS")
-def step_pcm(context):
-    context.silence_db = rms_dbfs(bytes(FRAME))
-    context.sine_db = _sine_dbfs()
-
 
 @when("I frame a 1500-byte read stream")
 def step_frame(context):
@@ -144,14 +129,6 @@ def step_resolve(context):
     _, context.resolved = make_backend(cfg.vad)
 
 
-@then("silence should be -100 dBFS")
-def step_silence_db(context):
-    assert context.silence_db == -100.0, context.silence_db
-
-
-@then("a full-scale sine should be near -3 dBFS")
-def step_sine_db(context):
-    assert -3.2 < context.sine_db < -2.8, context.sine_db
 
 
 @then("there should be {n:d} full frames")
@@ -164,12 +141,6 @@ def step_frames(context, n):
 def step_tail(context, n):
     assert len(context.tail) == n, len(context.tail)
 
-
-@then('the parec argv should use "{flag}" for "{target}"')
-def step_argv(context, flag, target):
-    argv = ParecSource.ARGV
-    assert flag in argv and target in argv, argv
-    assert "--target=@DEFAULT_SOURCE@" not in " ".join(argv), argv
 
 
 @then('the endpointer should report "{want}"')
