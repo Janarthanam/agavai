@@ -9,8 +9,10 @@ Scenarios tagged `@asr_model` additionally replay a checked-in speech fixture
 through the actual worker and require `scripts/download-asr.sh` first. Set
 `AGAVAI_ASR_TEST_MODEL_DIR` to test assets in another directory. Cactus scenarios
 tagged `@cactus_model` require `scripts/setup-cactus.sh` and
-`AGAVAI_CACTUS_TEST_DIR` pointing at its destination. To omit native model
-replays, run `PYTHONPATH=src behave --tags=-asr_model --tags=-cactus_model`.
+`AGAVAI_CACTUS_TEST_DIR` pointing at its destination. The Silero scenario tagged
+`@vad_model` requires `scripts/download-vad.sh`; set `AGAVAI_VAD_TEST_MODEL` to
+use a model file elsewhere. To omit native model replays, run
+`PYTHONPATH=src behave --tags=-asr_model --tags=-cactus_model --tags=-vad_model`.
 
 Microphone feedback scenarios replay isolated PCM into the parent capture
 path without opening a live microphone. Orb animation checks use Qt's

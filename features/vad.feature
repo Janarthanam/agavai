@@ -54,6 +54,7 @@ Feature: Voice activity detection
     When I resolve the vad backend
     Then the resolved backend should be "energy"
 
+  @vad_model
   Scenario: Silero ends each spoken request once and never a noise-only turn
     Given the streaming VAD uses the installed Silero model with a 1100 ms quiet window
     When I replay "clean.af_bella.04", "turn.noise" and "turn.pause.700ms" through one endpointer
