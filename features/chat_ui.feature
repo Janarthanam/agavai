@@ -28,7 +28,7 @@ Feature: Top chat overlay snapshot
 
   Scenario: A failed wallpaper change is marked not completed
     Given a chat UI in a temp runtime dir
-    When the UI finishes tool "wallpaper_set" with "unknown wallpaper 'nope'"
+    When the UI reports tool "wallpaper_set" failed with "unknown wallpaper 'nope'"
     Then the completion is "Not completed" with "unknown wallpaper"
 
   Scenario: Listing images is not announced as a finished action

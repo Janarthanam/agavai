@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 
 from agavai.config import Config
+from agavai.tools import call_tool
 from agavai.tools import (
     bluetooth,
     open_app,
@@ -44,27 +45,27 @@ def step_bt(context, action):
 
 @when('I take a screenshot with mode "{mode}"')
 def step_shot(context, mode):
-    context.tool_result = screenshot({"mode": mode}, Config())
+    context.tool_result = call_tool("screenshot", {"mode": mode}, Config())
 
 
 @when("I send a notification with no headline")
 def step_note_empty(context):
-    context.tool_result = send_notification({"headline": ""}, Config())
+    context.tool_result = call_tool("send_notification", {"headline": ""}, Config())
 
 
 @when('I send a notification with headline "{headline}"')
 def step_note(context, headline):
-    context.tool_result = send_notification({"headline": headline}, Config())
+    context.tool_result = call_tool("send_notification", {"headline": headline}, Config())
 
 
 @when('I open app "{name}"')
 def step_open(context, name):
-    context.tool_result = open_app({"name": name}, Config())
+    context.tool_result = call_tool("open_app", {"name": name}, Config())
 
 
 @when('I step workspace "{direction}"')
 def step_ws(context, direction):
-    context.tool_result = workspace_step({"direction": direction}, Config())
+    context.tool_result = call_tool("workspace_step", {"direction": direction}, Config())
 
 
 @then('the last omarchy argv should include "{token}"')

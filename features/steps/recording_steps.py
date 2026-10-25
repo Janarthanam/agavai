@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 from behave import given, then, when
 
-from agavai.__main__ import _cancel_path, _record_request_path, listen_session, main
+from agavai.harness.session import _cancel_path, _record_request_path, listen_session
+from agavai.__main__ import main
 from agavai.canvas import display_for, model_view
 from agavai.recording import correct, line_text
 from agavai.state import write_state
@@ -95,13 +96,13 @@ class _AssistantScript:
 def _quiet_session():
     """Hardware, chimes, and the assistant turn are not what these scenarios check."""
     return [
-        patch("agavai.__main__.prepare_listen"),
-        patch("agavai.__main__.finish"),
-        patch("agavai.__main__.cue_record"),
-        patch("agavai.__main__.cue_start"),
-        patch("agavai.__main__.cue_listen"),
-        patch("agavai.__main__._publish_pid"),
-        patch("agavai.__main__.speak"),
+        patch("agavai.harness.session.prepare_listen"),
+        patch("agavai.harness.session.finish"),
+        patch("agavai.harness.session.cue_record"),
+        patch("agavai.harness.session.cue_start"),
+        patch("agavai.harness.session.cue_listen"),
+        patch("agavai.harness.session._publish_pid"),
+        patch("agavai.harness.session.speak"),
         patch("agavai.tts.sweep_playback_wavs"),
     ]
 
@@ -163,7 +164,7 @@ def step_crashed(context):
 @when("I record while the microphone hears")
 def step_record(context):
     script = _ContinuousScript(context, context.text)
-    patches = _quiet_session() + [patch("agavai.__main__.open_stream", return_value=script)]
+    patches = _quiet_session() + [patch("agavai.harness.session.open_stream", return_value=script)]
     if getattr(context, "no_ffmpeg", False):
         patches.append(patch("agavai.recording.shutil.which", return_value=None))
     context.listen_result = _run(context, patches)
@@ -185,12 +186,12 @@ def step_assistant_toggle(context):
         context.streams.append(continuous)
         return recording if continuous else assistant
 
-    patches = _quiet_session() + [patch("agavai.__main__.open_stream", side_effect=open_stream),
-                                  patch("agavai.__main__._run_stop_body", return_value="Done")]
+    patches = _quiet_session() + [patch("agavai.harness.session.open_stream", side_effect=open_stream),
+                                  patch("agavai.harness.session._run_stop_body", return_value="Done")]
     for item in patches:
         item.start()
     try:
-        context.listen_result = listen_session(context.cfg, context.ui)
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
     finally:
         for item in reversed(patches):
             item.stop()
@@ -198,9 +199,9 @@ def step_assistant_toggle(context):
 
 def _record_cmd_idle(context, argv):
     with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), \
-            patch("agavai.__main__.read_listener", return_value=None), \
-            patch("agavai.__main__.summon_overlay", return_value=True), \
-            patch("agavai.__main__.start_session", return_value=True) as start:
+            patch("agavai.harness.session.read_listener", return_value=None), \
+            patch("agavai.harness.session.summon_overlay", return_value=True), \
+            patch("agavai.harness.session.start_session", return_value=True) as start:
         context.exit_code = main(argv)
         context.start_calls = start.call_args_list
 
@@ -215,7 +216,7 @@ def step_voice_start(context, text):
         context.streams.append(continuous)
         return recording if continuous else assistant
 
-    def model_turn(cfg, ui, stop_requested, *, continue_conversation=False, text=""):
+    def model_turn(cfg, ui, stop_requested, *, continue_conversation=False, text="", harness=None):
         # The model's tool call; its spoken reply comes before the recording starts.
         context.tool_result = call_tool("start_recording", {}, cfg)
         return "Recording."
@@ -224,15 +225,15 @@ def step_voice_start(context, text):
         raise AssertionError("a voice start must reuse this session, not start a process")
 
     patches = _quiet_session() + [
-        patch("agavai.__main__.open_stream", side_effect=open_stream),
-        patch("agavai.__main__._run_stop_body", side_effect=model_turn),
-        patch("agavai.__main__.read_listener", return_value=os.getpid()),
-        patch("agavai.__main__.start_session", side_effect=no_process),
+        patch("agavai.harness.session.open_stream", side_effect=open_stream),
+        patch("agavai.harness.session._run_stop_body", side_effect=model_turn),
+        patch("agavai.harness.session.read_listener", return_value=os.getpid()),
+        patch("agavai.harness.session.start_session", side_effect=no_process),
     ]
     for item in patches:
         item.start()
     try:
-        context.listen_result = listen_session(context.cfg, context.ui)
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
     finally:
         for item in reversed(patches):
             item.stop()
@@ -300,8 +301,8 @@ def step_record_cmd_idle_action(context, action):
 def step_record_cmd_running(context, action):
     write_state(context.cfg, "recording")
     with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), \
-            patch("agavai.__main__.read_listener", return_value=4242), \
-            patch("agavai.__main__.os.kill") as kill:
+            patch("agavai.harness.session.read_listener", return_value=4242), \
+            patch("agavai.harness.session.os.kill") as kill:
         context.exit_code = main(["record", action])
         context.kills = kill.call_args_list
 
@@ -310,8 +311,8 @@ def step_record_cmd_running(context, action):
 def step_record_cmd_starting(context):
     write_state(context.cfg, "idle")
     with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), \
-            patch("agavai.__main__.read_listener", return_value=4242), \
-            patch("agavai.__main__.os.kill") as kill:
+            patch("agavai.harness.session.read_listener", return_value=4242), \
+            patch("agavai.harness.session.os.kill") as kill:
         context.exit_code = main(["record"])
         context.kills = kill.call_args_list
 

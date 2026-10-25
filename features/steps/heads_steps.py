@@ -8,7 +8,7 @@ from behave import given, then, when
 from agavai.config import Config, LlmConfig
 from agavai.heads import schemas_for_heads
 from agavai.router import select_head_ids
-from agavai.tools import wallpaper_set
+from agavai.tools import call_tool
 
 
 @given("the keyword router")
@@ -66,7 +66,7 @@ def step_route(context, text):
 
 @when('I set wallpaper to "{name}"')
 def step_wp(context, name):
-    context.tool_result = wallpaper_set({"name": name}, Config())
+    context.tool_result = call_tool("wallpaper_set", {"name": name}, Config())
 
 
 @then('the selected heads should include "{head}"')

@@ -166,7 +166,7 @@ def help_execution(context):
 
 @when('the pipeline help listener handles a committed request without speech assets')
 def help_listener(context):
-    from agavai.__main__ import _run_stop_body
+    from agavai.harness.session import _run_stop_body
     cfg = load_config(context.help_config_path)
     cfg.runtime_dir = context.help_dir / 'agavai'
     ui = ChatUi(cfg)

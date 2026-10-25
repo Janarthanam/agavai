@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import patch
 
-import agavai.orchestrator as orchestrator
+import agavai.harness.engine as orchestrator
+from agavai.harness import Harness
 import agavai.router as router
 import agavai.tools as tools
 from agavai.config import Config, load_config
@@ -180,8 +181,8 @@ class Recorder:
         return message
 
     def call_tool(self, name, arguments, cfg):
-        result = tools.call_tool(name, arguments, cfg)
-        self.tools.append({"name": name, "arguments": arguments if isinstance(arguments, str) else json.dumps(arguments), "result": str(result)[:600]})
+        result = tools.execute_tool(name, arguments, cfg)
+        self.tools.append({"name": name, "arguments": arguments if isinstance(arguments, str) else json.dumps(arguments), "result": result.text[:600]})
         self._note_change()
         return result
 
@@ -242,6 +243,7 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
         stack.enter_context(patch.object(orchestrator, "select_head_ids", recorder.select_head_ids))
         ui = ChatUi(cfg)
         ui.begin_session()
+        harness = Harness(cfg, ui)
         in_session = 0
         for index, turn in enumerate(case.turns):
             if turn.get("new_session"):
@@ -249,6 +251,7 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
                 world.now = clock.now
                 ui = ChatUi(cfg)
                 ui.begin_session()
+                harness = Harness(cfg, ui)
                 in_session = 0
             say = turn["say"]
             heard = spoken(say) if spoken and index == 0 else None
@@ -259,7 +262,7 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
             t0 = time.monotonic()
             error = ""
             try:
-                reply = orchestrator.run_turn(heard if heard is not None else say, cfg, ui, continue_conversation=in_session > 0)
+                reply = harness.run_turn(heard if heard is not None else say, continue_conversation=in_session > 0)
             except Exception:  # noqa: BLE001 - a harness or product crash must be visible, not scored as a miss
                 reply = ""
                 error = traceback.format_exc(limit=6)

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from behave import given, then, when
 
 from agavai.config import Config
+from agavai.harness import Harness
 from agavai.ui import ChatUi
 
 
@@ -22,10 +23,12 @@ def step_ui(context):
     context.add_cleanup(context.summon.stop)
     context.ui = ChatUi(cfg)
     context.cfg = cfg
+    context.harness = Harness(cfg, context.ui)
 
 
 @when("the UI starts listening")
 def step_listen(context):
+    context.harness = Harness(context.cfg, context.ui)
     context.ui.listening()
 
 
@@ -62,6 +65,7 @@ def step_idle(context):
 @when("I open a second chat UI on the same runtime dir")
 def step_second(context):
     context.ui = ChatUi(context.cfg)
+    context.harness = Harness(context.cfg, context.ui)
 
 
 @then('the snapshot phase should be "{phase}"')
@@ -108,3 +112,8 @@ def step_no_completion(context):
 def step_asst_line(context, text):
     data = json.loads((context.runtime_dir / "ui.json").read_text())
     assert text in data["turns"][-1]["assistant"]
+
+
+@when('the UI reports tool "{name}" failed with "{result}"')
+def failed_tool(context, name, result):
+    context.ui.tool_done(name, result, status="error")

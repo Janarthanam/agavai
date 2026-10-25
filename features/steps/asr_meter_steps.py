@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from behave import when, then
 
-from agavai.__main__ import _cancel_path, listen_session
+from agavai.harness.session import _cancel_path, listen_session
 from agavai.asr import rms_dbfs
 from agavai.meter import ParecSource
 
@@ -76,8 +76,8 @@ def capture(context, *, cancel=False, empty=False, vad=False):
         assert Path(argv[1]).name == "asr_worker.py", argv
         return spawn([sys.executable, "-c", WORKER, str(context.recorded)], **kwargs)
 
-    with patch("agavai.asr.subprocess.Popen", side_effect=popen), patch("agavai.asr.shutil.which", return_value="/usr/bin/parec"), patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch.object(context.ui, "level", side_effect=level), patch("agavai.__main__._run_stop_body") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.asr.subprocess.Popen", side_effect=popen), patch("agavai.asr.shutil.which", return_value="/usr/bin/parec"), patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch.object(context.ui, "level", side_effect=level), patch("agavai.harness.session._run_stop_body") as submit:
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.submit_count = submit.call_count
 
 

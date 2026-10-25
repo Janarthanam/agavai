@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from behave import when, then
 from agavai import app
-from agavai.__main__ import _cancel_path, listen_session, main, start_session
+from agavai.harness.session import _cancel_path, listen_session, start_session
+from agavai.__main__ import main
 from agavai.asr import AsrError
 from agavai.state import read_state
 from agavai.ui import summon_overlay
@@ -116,7 +117,7 @@ def assistant_state(context, state):
 
 @when("I launch a detached listening session")
 def detached(context):
-    with patch("agavai.__main__.read_listener", return_value=None), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.subprocess.Popen", return_value=SimpleNamespace(pid=987654)) as spawn:
+    with patch("agavai.harness.session.read_listener", return_value=None), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.subprocess.Popen", return_value=SimpleNamespace(pid=987654)) as spawn:
         assert start_session(context.cfg)
         context.detached_command = spawn.call_args.args[0]
 
@@ -134,8 +135,8 @@ def session(context, sequences, stop_body=None):
     def default_stop(*_args, **_kwargs):
         return "Done"
 
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start") as chime, patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body or default_stop) as submit:
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start") as chime, patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", side_effect=stop_body or default_stop) as submit:
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.submit_count = submit.call_count
         context.submit_calls = submit.call_args_list
         context.start_chimes = chime.call_count
@@ -157,16 +158,16 @@ def missing(context):
             return None
 
     scripted = _Down()
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", return_value="Done") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", return_value="Done") as submit:
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.submit_count = submit.call_count
 
 
 @when("an automatic session cannot start the recognizer")
 def recognizer_down(context):
     down = AsrError("Streaming ASR model is not installed. Run scripts/download-asr.sh.")
-    with patch("agavai.__main__.cue_start") as chime, patch("agavai.__main__._publish_pid"), patch("agavai.__main__.open_stream", side_effect=down), patch("agavai.__main__._run_stop_body") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.cue_start") as chime, patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.open_stream", side_effect=down), patch("agavai.harness.session._run_stop_body") as submit:
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.submit_count = submit.call_count
         context.start_chimes = chime.call_count
 
@@ -246,7 +247,7 @@ def _choice_session(context, sequences, replies):
     def opened():
         context.phases.append(context.ui.data.get("phase"))
 
-    def stop_body(cfg, ui, stop_requested, continue_conversation=False, text=""):
+    def stop_body(cfg, ui, stop_requested, continue_conversation=False, text="", harness=None):
         context.continued.append(continue_conversation)
         reply = replies.pop(0)
         ui.assistant(reply)
@@ -256,8 +257,8 @@ def _choice_session(context, sequences, replies):
         return reply
 
     scripted = _Scripted(sequences, on_open=opened)
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.__main__.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.__main__.open_stream", return_value=scripted), patch("agavai.__main__._run_stop_body", side_effect=stop_body):
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", side_effect=stop_body):
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.submit_count = len(context.continued)
 
 

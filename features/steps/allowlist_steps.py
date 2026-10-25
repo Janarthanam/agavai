@@ -20,7 +20,7 @@ def step_call_query(context, name, query):
 
 @when('I launch target "{target}"')
 def step_launch(context, target):
-    context.tool_result = launch({"target": target}, Config())
+    context.tool_result = call_tool("launch", {"target": target}, Config())
 
 
 @given('the launch binary "{binary}" is on PATH')
@@ -46,12 +46,12 @@ def step_launch_on_path(context, binary):
 
 @when("I switch to workspace {n:d}")
 def step_workspace(context, n):
-    context.tool_result = to_workspace({"workspace": n}, Config())
+    context.tool_result = call_tool("to_workspace", {"workspace": n}, Config())
 
 
 @when('I play url "{url}"')
 def step_play(context, url):
-    context.tool_result = play_url({"url": url}, Config())
+    context.tool_result = call_tool("play_url", {"url": url}, Config())
 
 
 @then('the tool result should contain "{text}"')

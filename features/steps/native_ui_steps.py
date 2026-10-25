@@ -1,9 +1,10 @@
 import json
 from unittest.mock import patch
 
+from features.support.tool_replay import tool_patch
 from behave import given, when, then
 from agavai.ui import cancel_ui, open_result
-from agavai.orchestrator import run_turn
+from agavai.harness.engine import run_turn
 
 
 def snapshot(context):
@@ -77,8 +78,8 @@ def long_results(context):
         if len(reply) == 1:
             context.model_result = messages[-1]["content"]
         return reply.pop(0)
-    with patch("agavai.orchestrator.health", return_value=True), patch("agavai.orchestrator.select_head_ids", return_value=["files"]), patch("agavai.orchestrator.chat", side_effect=chat), patch("agavai.orchestrator.call_tool", return_value=result):
-        run_turn("find notes", context.cfg, context.ui)
+    with patch("agavai.harness.engine.health", return_value=True), patch("agavai.harness.engine.select_head_ids", return_value=["files"]), patch("agavai.harness.engine.chat", side_effect=chat), tool_patch("agavai.harness.engine.call_tool", return_value=result):
+        run_turn("find notes", context.cfg, context.ui, context=context.harness.context)
 
 
 @then("the native browser has {count:d} items")

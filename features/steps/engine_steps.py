@@ -13,12 +13,13 @@ import tempfile
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from features.support.tool_replay import tool_patch
 from behave import given, when, then
 
 from agavai.config import Config, LlmConfig, load_config
 from agavai.llm import LlmError
 from agavai.meter import AcousticResult, Endpointer
-from agavai.orchestrator import run_turn
+from agavai.harness.engine import run_turn
 from agavai.speech_backends import WhistleBackend
 
 
@@ -234,7 +235,7 @@ while True:
 
 
 def worker_session(context, mode, *, endpoint='manual', pcm=None):
-    from agavai.__main__ import listen_session, _cancel_path
+    from agavai.harness.session import listen_session, _cancel_path
     cfg = context.cfg
     cfg.asr.backend = 'whistle-cactus'
     cfg.asr.endpoint = endpoint
@@ -273,7 +274,7 @@ def worker_session(context, mode, *, endpoint='manual', pcm=None):
         from agavai.ui import cancel_ui
         cancel_ui(cfg)
         return 'Browser opened.'
-    with patch('agavai.asr.subprocess.Popen', side_effect=popen), patch('agavai.asr.shutil.which', return_value='parec'), patch.object(context.ui, 'level', side_effect=level), patch('agavai.__main__._run_stop_body', side_effect=submitted) as submit, patch('agavai.__main__.prepare_listen'), patch('agavai.__main__.cue_listen'), patch('agavai.__main__.finish'), patch('agavai.__main__._publish_pid'), patch('agavai.tts.sweep_playback_wavs'):
+    with patch('agavai.asr.subprocess.Popen', side_effect=popen), patch('agavai.asr.shutil.which', return_value='parec'), patch.object(context.ui, 'level', side_effect=level), patch('agavai.harness.session._run_stop_body', side_effect=submitted) as submit, patch('agavai.harness.session.prepare_listen'), patch('agavai.harness.session.cue_listen'), patch('agavai.harness.session.finish'), patch('agavai.harness.session._publish_pid'), patch('agavai.tts.sweep_playback_wavs'):
         listen_session(cfg, context.ui)
         context.submit_count = submit.call_count
         context.submit_calls = submit.call_args_list
@@ -395,8 +396,8 @@ def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_
         return item
     large_script = iter(large_responses or [{'content':'Larger answer.'}])
     large.respond.side_effect = record
-    with patch('agavai.orchestrator.create_brain', side_effect=factory), patch('agavai.orchestrator.call_tool', return_value='Opened browser.') as tool:
-        context.reply = run_turn(text, cfg, context.ui)
+    with patch('agavai.harness.engine.create_brain', side_effect=factory), tool_patch('agavai.harness.engine.call_tool', return_value='Opened browser.') as tool:
+        context.reply = run_turn(text, cfg, context.ui, context=context.harness.context)
     context.small_engine, context.large_engine = small, large
     context.executed_tools = tool.call_count
 
@@ -716,8 +717,8 @@ def register_brain(context):
     with patch.dict(BRAIN_BACKENDS, {'registered-brain':Adapter}):
         cfg = load_config(path)
         cfg.router.backend = 'keyword'
-        with patch('agavai.orchestrator.chat') as chat, patch('agavai.orchestrator.health') as health:
-            context.reply = run_turn('hello', cfg, context.ui)
+        with patch('agavai.harness.engine.chat') as chat, patch('agavai.harness.engine.health') as health:
+            context.reply = run_turn('hello', cfg, context.ui, context=context.harness.context)
             context.used_llama = chat.called or health.called
 
 
@@ -773,10 +774,10 @@ def native_all_eval_record(context):
 
 @when('the recognizer replaces a partial with an empty final transcript')
 def empty_final(context):
-    from agavai.__main__ import _await_utterance
+    from agavai.harness.session import _await_utterance
     stream = Mock()
     stream.events.return_value = iter([('interim', 'open the browser'), ('eou', '')])
-    with patch('agavai.__main__.prepare_listen'), patch('agavai.__main__.cue_listen'), patch('agavai.__main__.finish'):
+    with patch('agavai.harness.session.prepare_listen'), patch('agavai.harness.session.cue_listen'), patch('agavai.harness.session.finish'):
         outcome, text = _await_utterance(context.cfg, context.ui, stream, fresh=True,
                                         stop_requested=lambda:False, cancel_requested=lambda:False)
     assert outcome == 'ignore' and not text
@@ -809,8 +810,8 @@ tool_selection = "{policy}"
         return next(responses)
     responses = iter([call, {'content':'Finished.'}])
     brain.respond.side_effect = respond
-    with patch('agavai.orchestrator.create_brain', return_value=brain), patch('agavai.orchestrator.select_head_ids', return_value=['launch']) as route, patch('agavai.orchestrator.call_tool', return_value='Finished.') as tool:
-        context.reply = run_turn('inspect local agents' if full else 'open the browser', cfg, context.ui)
+    with patch('agavai.harness.engine.create_brain', return_value=brain), patch('agavai.harness.engine.select_head_ids', return_value=['launch']) as route, tool_patch('agavai.harness.engine.call_tool', return_value='Finished.') as tool:
+        context.reply = run_turn('inspect local agents' if full else 'open the browser', cfg, context.ui, context=context.harness.context)
     context.mixed_route_calls = route.call_count
     context.mixed_tool_calls = tool.call_args_list
     assert cfg.asr.backend == speech and cfg.small_brain.backend == agent
@@ -839,12 +840,12 @@ def all_tools_confirmation(context):
 @then('no tool runs until Yes and the confirmed agent listing runs once')
 def all_tools_confirmed(context):
     assert context.executed_tools == 0
-    assert context.ui.pending_action.name == 'list_agents'
-    with patch('agavai.orchestrator.create_brain') as brain, patch('agavai.orchestrator.call_tool', return_value='Agents listed.') as tool:
-        reply = run_turn('yes', context.cfg, context.ui, continue_conversation=True)
+    assert context.harness.context.pending_action.name == 'list_agents'
+    with patch('agavai.harness.engine.create_brain') as brain, tool_patch('agavai.harness.engine.call_tool', return_value='Agents listed.') as tool:
+        reply = run_turn('yes', context.cfg, context.ui, context=context.harness.context, continue_conversation=True)
     brain.assert_not_called()
     tool.assert_called_once_with('list_agents', '{}', context.cfg)
-    assert reply == 'Agents listed.' and context.ui.pending_action is None
+    assert reply == 'Agents listed.' and context.harness.context.pending_action is None
 
 
 @when('a routed small agent fails with full-tool fallback configured')
@@ -903,8 +904,8 @@ tool_selection = "{policy}"
         {'tool_calls': [{'id':'volume', 'function': {'name':'set_volume', 'arguments':'{"action":"raise"}'}}]},
         {'content': 'Volume increased.'},
     ]
-    with patch('agavai.router.create_brain', return_value=router) as factory, patch('agavai.orchestrator.create_brain', return_value=agent), patch('agavai.orchestrator.call_tool', return_value='Volume increased.') as tool:
-        context.reply = run_turn('increase playback level', cfg, context.ui)
+    with patch('agavai.router.create_brain', return_value=router) as factory, patch('agavai.harness.engine.create_brain', return_value=agent), tool_patch('agavai.harness.engine.call_tool', return_value='Volume increased.') as tool:
+        context.reply = run_turn('increase playback level', cfg, context.ui, context=context.harness.context)
     context.routing_cfg, context.routing_policy = cfg, policy
     context.routing_factory, context.routing_model = factory, router
     context.routing_agent, context.routing_actions = agent, tool
@@ -998,9 +999,9 @@ def needle_router_and_agent(context, router_config, policy):
     needle.ready.return_value = True
     needle.respond.return_value = {'tool_calls': [{'id': 'volume', 'function': {'name': 'set_volume', 'arguments': '{"action":"raise"}'}}]}
     with patch('agavai.router.create_brain') as router_factory, \
-            patch('agavai.orchestrator.create_brain', return_value=needle), \
-            patch('agavai.orchestrator.call_tool', return_value='Volume raised.') as tool:
-        context.reply = run_turn('turn the volume up', cfg, context.ui)
+            patch('agavai.harness.engine.create_brain', return_value=needle), \
+            tool_patch('agavai.harness.engine.call_tool', return_value='Volume raised.') as tool:
+        context.reply = run_turn('turn the volume up', cfg, context.ui, context=context.harness.context)
     context.both = SimpleNamespace(cfg=cfg, config=router_config, needle=needle, router=router_factory, tool=tool)
 
 
@@ -1050,9 +1051,9 @@ tool_selection = "routed"
     qwen.respond.side_effect = qwen_respond
     brains = {'needle-cactus': needle, 'llama-server': qwen}
     with patch('agavai.router.create_brain') as router_factory, \
-            patch('agavai.orchestrator.create_brain', side_effect=lambda tier, **_: brains[tier.backend]), \
-            patch('agavai.orchestrator.call_tool', return_value='Volume raised.') as tool:
-        context.reply = run_turn(text, cfg, context.ui)
+            patch('agavai.harness.engine.create_brain', side_effect=lambda tier, **_: brains[tier.backend]), \
+            tool_patch('agavai.harness.engine.call_tool', return_value='Volume raised.') as tool:
+        context.reply = run_turn(text, cfg, context.ui, context=context.harness.context)
     context.both = SimpleNamespace(cfg=cfg, text=text, needle=needle, offers=offers, router=router_factory, tool=tool)
 
 

@@ -8,12 +8,13 @@ from copy import deepcopy
 from dataclasses import replace
 from unittest.mock import Mock, patch
 
+from features.support.tool_replay import tool_patch
 from behave import given, then, when
 
-from agavai.__main__ import listen_session
-from agavai.orchestrator import CONTEXT_SYSTEM, run_turn
+from agavai.harness.session import listen_session
+from agavai.harness.engine import CONTEXT_SYSTEM, run_turn
 from agavai.router import select_head_ids
-from agavai.tools import call_tool
+from agavai.tools import execute_tool as call_tool
 from agavai.ui import cancel_ui
 
 
@@ -42,10 +43,10 @@ def dependencies(context):
         return context.control_responses.pop(0) if context.control_responses else {"content": "Normal answer."}
 
     mocks = {
-        "control_health": patch("agavai.orchestrator.health", return_value=True),
-        "control_chat": patch("agavai.orchestrator.chat", side_effect=chat),
-        "control_router": patch("agavai.orchestrator.select_head_ids", wraps=select_head_ids),
-        "control_tool": patch("agavai.orchestrator.call_tool", wraps=call_tool),
+        "control_health": patch("agavai.harness.engine.health", return_value=True),
+        "control_chat": patch("agavai.harness.engine.chat", side_effect=chat),
+        "control_router": patch("agavai.harness.engine.select_head_ids", wraps=select_head_ids),
+        "control_tool": tool_patch("agavai.harness.engine.call_tool", wraps=call_tool),
         "control_desktop": patch("agavai.tools._run", return_value=subprocess.CompletedProcess([], 0, "", "")),
         "control_which": patch("agavai.tools.shutil.which", return_value="/mock/desktop-command"),
         "control_wallpapers": patch("agavai.tools._list_wallpaper_files", return_value=[]),
@@ -58,10 +59,10 @@ def dependencies(context):
 @given("a browser launch is awaiting confirmation")
 def pending_browser(context):
     context.control_responses.append(_browser_proposal())
-    context.reply = run_turn("open the browser but confirm first", context.cfg, context.ui)
+    context.reply = run_turn("open the browser but confirm first", context.cfg, context.ui, context=context.harness.context)
     assert context.reply == "Open the browser?", context.reply
-    assert context.ui.pending_action.name == "launch"
-    assert context.ui.pending_action.arguments == {"target": "browser"}
+    assert context.harness.context.pending_action.name == "launch"
+    assert context.harness.context.pending_action.arguments == {"target": "browser"}
     context.control_desktop.assert_not_called()
     context.control_tool.assert_not_called()
     for mock in (context.control_chat, context.control_health, context.control_router):
@@ -158,18 +159,18 @@ def empty_local_result(context):
 
 @when("a control request is made without a chat UI")
 def no_ui(context):
-    context.reply = run_turn("open the browser but confirm first", context.cfg)
+    context.reply = run_turn("open the browser but confirm first", context.cfg, context=context.harness.context)
 
 
 @when("the control proposal belongs to another session")
 def stale(context):
-    context.ui.pending_action = replace(context.ui.pending_action, session_id="stale")
+    context.harness.context.pending_action = replace(context.harness.context.pending_action, session_id="stale")
 
 
 @when("a control request combines two tool heads")
 def budget(context):
     context.control_router.side_effect = lambda text, cfg, **kwargs: ["wallpaper", "system"]
-    context.reply = run_turn("show wallpaper and system settings", context.cfg, context.ui)
+    context.reply = run_turn("show wallpaper and system settings", context.cfg, context.ui, context=context.harness.context)
 
 
 @when("a real control listen loop receives")
@@ -200,8 +201,8 @@ def voice_loop(context):
 
     stream = Mock()
     stream.events.side_effect = events
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.hide_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.cue_think") as think, patch("agavai.__main__._publish_pid"), patch("agavai.__main__.open_stream", return_value=stream), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="kokoro") as playback:
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.hide_listen"), patch("agavai.harness.session.finish"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.cue_think") as think, patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.open_stream", return_value=stream), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="kokoro") as playback:
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
         context.control_playback = playback.call_args_list
         context.control_think_count = think.call_count
 
@@ -227,17 +228,17 @@ def launch_once(context):
 
 @then("there is no pending control action")
 def no_pending(context):
-    assert context.ui.pending_action is None, context.ui.pending_action
+    assert context.harness.context.pending_action is None, context.harness.context.pending_action
 
 
 @then("a control action remains pending")
 def still_pending(context):
-    assert context.ui.pending_action is not None
+    assert context.harness.context.pending_action is not None
 
 
 @then("the control history contains the actual tool result")
 def history(context):
-    messages = context.ui.model_messages
+    messages = context.harness.context.messages
     result = next(message for message in messages if message.get("role") == "tool" and message.get("content") == "launched browser")
     call = next(call for message in messages for call in message.get("tool_calls", []) if call["id"] == result["tool_call_id"])
     assert call["function"]["name"] == "launch"
@@ -260,12 +261,12 @@ def context_once(context):
 
 @then("the prior control conversation was retained")
 def conversation_retained(context):
-    assert any(message.get("content") == "open the browser but confirm first" for message in context.ui.model_messages)
+    assert any(message.get("content") == "open the browser but confirm first" for message in context.harness.context.messages)
 
 
 @then("the control conversation is empty")
 def empty_conversation(context):
-    assert not context.ui.model_messages and not context.ui.model_heads
+    assert not context.harness.context.messages and not context.harness.context.heads
     assert not context.ui.data["turns"]
     for key in ("display", "answer_html", "completion", "error"):
         assert key not in context.ui.data, context.ui.data

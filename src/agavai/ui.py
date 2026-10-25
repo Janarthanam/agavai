@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import time
 import uuid
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -38,13 +37,6 @@ _QUIET_TOOLS = {
     "start_recording",
     "list_recordings",
 }
-
-
-def _action_failed(result: str) -> bool:
-    text = " ".join(str(result).lower().split())
-    if not text:
-        return True
-    return any(marker in text for marker in ("unknown ", "invalid ", "need ", "failed", "timed out", " error", "error:"))
 
 
 def _clip(text: str, limit: int = RESULT_CHARS) -> str:
@@ -97,20 +89,10 @@ def _pipeline_config(cfg: Config) -> list[dict[str, str]]:
     ]
 
 
-@dataclass(frozen=True)
-class PendingAction:
-    session_id: str
-    name: str
-    arguments: dict[str, Any]
-
-
 class ChatUi:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.path = cfg.runtime_dir / "ui.json"
-        self.model_messages: list[dict[str, Any]] = []
-        self.model_heads: list[str] = []
-        self.pending_action: PendingAction | None = None
         self.data: dict[str, Any] = {
             "phase": "idle",
             "phase_label": "Idle",
@@ -154,9 +136,6 @@ class ChatUi:
         self.data.pop("error", None)
         self.data.pop("display", None)
         self.data.pop("completion", None)
-        self.model_messages = []
-        self.model_heads = []
-        self.pending_action = None
         self.data["execution"] = []
 
     def pipeline_event(self, stage: str, detail: str) -> None:
@@ -187,8 +166,6 @@ class ChatUi:
     def cancelled(self) -> bool:
         try:
             cancelled = (self.cfg.runtime_dir / "dismissed-session").read_text() == self.data.get("session_id")
-            if cancelled:
-                self.pending_action = None
             return cancelled
         except OSError:
             return False
@@ -251,13 +228,13 @@ class ChatUi:
         self._set_phase("thinking", f"Calling {name}")
         self.pipeline_event("Action", name)
 
-    def tool_done(self, name: str, result: str) -> None:
-        failed = _action_failed(result)
+    def tool_done(self, name: str, result: str, *, status: str = "ok") -> None:
+        failed = status != "ok"
         turn = self._current_turn()
         for tool in reversed(turn["tools"]):
             if tool.get("name") == name and tool.get("status") == "running":
                 tool["result"] = _clip(result)
-                tool["status"] = "error" if failed else "ok"
+                tool["status"] = status
                 break
         block = display_for(name, result)
         if block is not None:

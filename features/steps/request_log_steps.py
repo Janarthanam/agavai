@@ -15,7 +15,8 @@ from unittest.mock import patch
 from behave import given, then, when
 
 from agavai import journal
-from agavai.__main__ import listen_session, main
+from agavai.harness.session import listen_session
+from agavai.__main__ import main
 from agavai.router import select_head_ids
 
 SRC = Path(__file__).resolve().parents[2] / "src"
@@ -115,7 +116,7 @@ def llama_server(context, tool, reply):
     def urlopen(request, timeout):
         return io.BytesIO(json.dumps(bodies.pop(0)).encode())
 
-    _start(context, patch("agavai.orchestrator.health", return_value=True))
+    _start(context, patch("agavai.harness.engine.health", return_value=True))
     _start(context, patch("agavai.llm.urllib.request.urlopen", side_effect=urlopen))
 
 
@@ -127,7 +128,7 @@ def file_search(context, path):
 
 @when('I ask "{text}"')
 def ask(context, text):
-    with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), patch("agavai.__main__.cue_think"), patch("agavai.tts._kokoro", return_value="/tmp/reply.wav"):
+    with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), patch("agavai.harness.session.cue_think"), patch("agavai.tts._kokoro", return_value="/tmp/reply.wav"):
         context.exit_code = main(["ask", text])
     assert context.exit_code == 0
 
@@ -181,8 +182,8 @@ class _Captures:
 
 
 def _listen(context, captures, turn):
-    with patch("agavai.__main__.prepare_listen"), patch("agavai.__main__.cue_listen"), patch("agavai.__main__.cue_start"), patch("agavai.__main__.cue_think"), patch("agavai.__main__.hide_listen"), patch("agavai.__main__.finish"), patch("agavai.__main__._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="completed"), patch("agavai.__main__.open_stream", return_value=_Captures(captures)), patch("agavai.__main__.run_turn", side_effect=turn):
-        context.listen_result = listen_session(context.cfg, context.ui)
+    with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.cue_think"), patch("agavai.harness.session.hide_listen"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="completed"), patch("agavai.harness.session.open_stream", return_value=_Captures(captures)), patch("agavai.harness.Harness.run_turn", side_effect=turn if isinstance(turn, Exception) else lambda text, **kwargs: turn(text, context.cfg, context.ui, **kwargs)):
+        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
 
 
 @when("an automatic session hears a request, noise, and a follow-up")

@@ -16,7 +16,7 @@ from agavai import journal
 from agavai.config import Config
 from agavai.recording import recordings
 from agavai.state import read_state
-from agavai.ui import _action_failed
+from agavai.outcomes import ToolFailure, ToolOutcome
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def _ok(text: str) -> str:
 def list_windows(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["hyprctl", "clients", "-j"])
     if proc.returncode != 0:
-        return f"hyprctl failed: {proc.stderr.strip()}"
+        raise ToolFailure(f"hyprctl failed: {proc.stderr.strip()}")
     try:
         clients = json.loads(proc.stdout or "[]")
     except json.JSONDecodeError:
@@ -81,7 +81,7 @@ def focus_window(args: dict[str, Any], _cfg: Config) -> str:
     title = str(args.get("title") or "").strip()
     klass = str(args.get("class") or "").strip()
     if not title and not klass:
-        return "need title or class"
+        raise ToolFailure("need title or class")
     proc = _run(["hyprctl", "clients", "-j"])
     clients = json.loads(proc.stdout or "[]")
     match = None
@@ -93,7 +93,7 @@ def focus_window(args: dict[str, Any], _cfg: Config) -> str:
         match = c
         break
     if not match:
-        return "no matching window"
+        raise ToolFailure("no matching window")
     addr = match.get("address")
     _run(["hyprctl", "dispatch", "focuswindow", f"address:{addr}"])
     return f"focused {match.get('title')}"
@@ -102,10 +102,10 @@ def focus_window(args: dict[str, Any], _cfg: Config) -> str:
 def to_workspace(args: dict[str, Any], _cfg: Config) -> str:
     n = int(args.get("workspace") or 0)
     if n < 1 or n > 20:
-        return "workspace must be 1-20"
+        raise ToolFailure("workspace must be 1-20")
     proc = _run(["hyprctl", "dispatch", "workspace", str(n)])
     if proc.returncode != 0:
-        return proc.stderr.strip() or "hyprctl failed"
+        raise ToolFailure(proc.stderr.strip() or "hyprctl failed")
     return f"switched to workspace {n}"
 
 
@@ -114,13 +114,13 @@ def launch(args: dict[str, Any], _cfg: Config) -> str:
     argv = LAUNCH_TARGETS.get(target)
     if not argv:
         allowed = ", ".join(sorted(LAUNCH_TARGETS))
-        return f"unknown target {target!r}; allowed: {allowed}"
+        raise ToolFailure(f"unknown target {target!r}; allowed: {allowed}")
     bin_path = shutil.which(argv[0])
     if not bin_path:
-        return f"{argv[0]} not on PATH"
+        raise ToolFailure(f"{argv[0]} not on PATH")
     proc = _run(argv, timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "launch failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "launch failed")[:500])
     return f"launched {target}"
 
 
@@ -138,15 +138,15 @@ def list_themes(_args: dict[str, Any], _cfg: Config) -> str:
 def set_theme(args: dict[str, Any], _cfg: Config) -> str:
     name = str(args.get("name") or "").strip()
     if not name:
-        return "need theme name"
+        raise ToolFailure("need theme name")
     listed = _run(["omarchy", "theme", "list"])
     names = [ln.strip() for ln in listed.stdout.splitlines() if ln.strip()]
     match = next((n for n in names if n.lower() == name.lower()), None)
     if not match:
-        return f"unknown theme {name!r}. available: {', '.join(names)}"
+        raise ToolFailure(f"unknown theme {name!r}. available: {', '.join(names)}")
     proc = _run(["omarchy", "theme", "set", match], timeout=30)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "theme set failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "theme set failed")[:500])
     return f"theme set to {match}"
 
 
@@ -211,9 +211,9 @@ def wallpaper_list(_args: dict[str, Any], _cfg: Config) -> str:
 def wallpaper_set(args: dict[str, Any], _cfg: Config) -> str:
     raw = str(args.get("name") or args.get("path") or "").strip()
     if not raw:
-        return "need wallpaper name or path"
+        raise ToolFailure("need wallpaper name or path")
     if ".." in raw:
-        return "invalid wallpaper path"
+        raise ToolFailure("invalid wallpaper path")
     files = _list_wallpaper_files()
     needle = raw.lower()
     match = None
@@ -229,17 +229,17 @@ def wallpaper_set(args: dict[str, Any], _cfg: Config) -> str:
             match = candidate
     if match is None:
         names = [p.stem.replace("-", " ") for p in files[:12]]
-        return f"unknown wallpaper {raw!r}. try: {', '.join(names)}"
+        raise ToolFailure(f"unknown wallpaper {raw!r}. try: {', '.join(names)}")
     proc = _run(["omarchy", "theme", "bg", "set", str(match.resolve())], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "wallpaper set failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "wallpaper set failed")[:500])
     return f"wallpaper set to {match.stem.replace('-', ' ')}"
 
 
 def wallpaper_next(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "theme", "bg", "next"], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "wallpaper next failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "wallpaper next failed")[:500])
     current = _run(["omarchy", "theme", "bg", "current"])
     return current.stdout.strip() or _ok(proc.stdout) or "next wallpaper"
 
@@ -247,14 +247,14 @@ def wallpaper_next(_args: dict[str, Any], _cfg: Config) -> str:
 def wallpaper_picker(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "theme", "bg-switcher"], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "wallpaper picker failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "wallpaper picker failed")[:500])
     return "opened wallpaper picker"
 
 
 def toggle_nightlight(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "toggle", "nightlight"])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "toggle failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "toggle failed")[:500])
     return _ok(proc.stdout) or "toggled night light"
 
 
@@ -265,16 +265,16 @@ def reminder(args: dict[str, Any], _cfg: Config) -> str:
         return "minutes must be 1-1440"
     proc = _run(["omarchy", "reminder", str(minutes), message])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "reminder failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "reminder failed")[:500])
     return f"reminder in {minutes} minutes: {message}"
 
 
 def search_files(args: dict[str, Any], cfg: Config) -> str:
     query = str(args.get("query") or "").strip()
     if not query or len(query) < 2:
-        return "need a query of at least 2 characters"
+        raise ToolFailure("need a query of at least 2 characters")
     if not shutil.which("fd"):
-        return "fd not installed"
+        raise ToolFailure("fd not installed")
     hits: list[str] = []
     for root in cfg.files.roots:
         if not root.is_dir():
@@ -300,13 +300,13 @@ def play_url(args: dict[str, Any], _cfg: Config) -> str:
     url = str(args.get("url") or "").strip()
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return "url must be http(s)"
+        raise ToolFailure("url must be http(s)")
     if shutil.which("omarchy-launch-webapp"):
         proc = _run(["omarchy-launch-webapp", url], timeout=20)
     else:
         proc = _run(["omarchy-launch-browser", url], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "open failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "open failed")[:500])
     return f"opened {url}"
 
 
@@ -397,7 +397,7 @@ def set_volume(args: dict[str, Any], _cfg: Config) -> str:
         return "action must be raise, lower, or mute"
     proc = _run(["omarchy", "audio", "output", "volume", action])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "volume failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "volume failed")[:500])
     return _ok(proc.stdout) or f"volume {action}"
 
 
@@ -419,14 +419,14 @@ def set_brightness(args: dict[str, Any], _cfg: Config) -> str:
         return "action must be show, up, down, or set"
     proc = _run(["omarchy", "brightness", "display", spec])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "brightness failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "brightness failed")[:500])
     return _ok(proc.stdout) or f"brightness {spec}"
 
 
 def mute_microphone(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "audio", "input", "mute"])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "mic mute failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "mic mute failed")[:500])
     return _ok(proc.stdout) or "toggled microphone mute"
 
 
@@ -440,7 +440,7 @@ def battery_status(_args: dict[str, Any], _cfg: Config) -> str:
 def network_status(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "network", "status"])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "network status failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "network status failed")[:500])
     return _ok(proc.stdout) or "network unknown"
 
 
@@ -452,17 +452,17 @@ def bluetooth(args: dict[str, Any], _cfg: Config) -> str:
         return "action must be on, off, toggle, or status"
     proc = _run(["omarchy", "bluetooth", "power", action])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "bluetooth failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "bluetooth failed")[:500])
     return _ok(proc.stdout) or f"bluetooth {action}"
 
 
 def lock_screen(_args: dict[str, Any], _cfg: Config) -> str:
     lock = shutil.which("omarchy-system-lock")
     if not lock:
-        return "omarchy-system-lock not on PATH"
+        raise ToolFailure("omarchy-system-lock not on PATH")
     proc = _run([lock], timeout=10)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "lock failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "lock failed")[:500])
     return "locked"
 
 
@@ -478,7 +478,7 @@ def stay_awake(args: dict[str, Any], _cfg: Config) -> str:
         return "action must be on, off, toggle, or status"
     proc = _run(["omarchy", "toggle", "idle", flag])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "idle toggle failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "idle toggle failed")[:500])
     return _ok(proc.stdout) or f"idle {flag}"
 
 
@@ -491,7 +491,7 @@ def dnd(args: dict[str, Any], _cfg: Config) -> str:
         return "action must be on, off, or toggle"
     proc = _run(argv)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "dnd failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "dnd failed")[:500])
     return _ok(proc.stdout) or "do-not-disturb toggled"
 
 
@@ -499,30 +499,30 @@ def screenshot(args: dict[str, Any], _cfg: Config) -> str:
     mode = str(args.get("mode") or "fullscreen").strip().lower()
     dest = str(args.get("dest") or "copy").strip().lower()
     if mode not in {"fullscreen", "windows"}:
-        return "mode must be fullscreen or windows (region needs the pointer)"
+        raise ToolFailure("mode must be fullscreen or windows (region needs the pointer)")
     if dest not in {"copy", "save"}:
         return "dest must be copy or save"
     proc = _run(["omarchy", "capture", "screenshot", mode, dest], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "screenshot failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "screenshot failed")[:500])
     return _ok(proc.stdout) or f"screenshot {mode} {dest}"
 
 
 def list_reminders(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "reminder", "show", "--json"])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "reminder show failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "reminder show failed")[:500])
     return _ok(proc.stdout) or "[]"
 
 
 def start_recording(_args: dict[str, Any], cfg: Config) -> str:
-    # Imported here, as app.py does: __main__ owns the listener and imports this module.
-    from agavai.__main__ import request_recording
+    # The session controller imports the tool catalog during startup.
+    from agavai.harness.session import request_recording
 
     if read_state(cfg) == "recording":
         return "A recording is already running."
     if request_recording(cfg, "toggle") != 0:
-        return "Could not start a recording."
+        raise ToolFailure("Could not start a recording.")
     return "Recording starts right after your reply, so reply in a few words."
 
 
@@ -533,7 +533,7 @@ def list_recordings(_args: dict[str, Any], cfg: Config) -> str:
 def clear_reminders(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["omarchy", "reminder", "clear"])
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "reminder clear failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "reminder clear failed")[:500])
     return _ok(proc.stdout) or "reminders cleared"
 
 
@@ -541,13 +541,13 @@ def send_notification(args: dict[str, Any], _cfg: Config) -> str:
     headline = str(args.get("headline") or args.get("title") or "").strip()
     body = str(args.get("body") or args.get("message") or "").strip()
     if not headline:
-        return "need a headline"
+        raise ToolFailure("need a headline")
     argv = ["omarchy", "notification", "send", headline]
     if body:
         argv.append(body)
     proc = _run(argv)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "notify failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "notify failed")[:500])
     return "notified"
 
 
@@ -562,7 +562,7 @@ def close_window(args: dict[str, Any], _cfg: Config) -> str:
     if not title:
         proc = _run(["hyprctl", "dispatch", "killactive"])
         if proc.returncode != 0:
-            return proc.stderr.strip() or "close failed"
+            raise ToolFailure(proc.stderr.strip() or "close failed")
         return "closed focused window"
     proc = _run(["hyprctl", "clients", "-j"])
     clients = json.loads(proc.stdout or "[]")
@@ -571,7 +571,7 @@ def close_window(args: dict[str, Any], _cfg: Config) -> str:
         None,
     )
     if not match:
-        return "no matching window"
+        raise ToolFailure("no matching window")
     _run(["hyprctl", "dispatch", "closewindow", f"address:{match.get('address')}"])
     return f"closed {match.get('title')}"
 
@@ -579,7 +579,7 @@ def close_window(args: dict[str, Any], _cfg: Config) -> str:
 def toggle_fullscreen(_args: dict[str, Any], _cfg: Config) -> str:
     proc = _run(["hyprctl", "dispatch", "fullscreen"])
     if proc.returncode != 0:
-        return proc.stderr.strip() or "fullscreen failed"
+        raise ToolFailure(proc.stderr.strip() or "fullscreen failed")
     return "toggled fullscreen"
 
 
@@ -590,17 +590,17 @@ def workspace_step(args: dict[str, Any], _cfg: Config) -> str:
     elif direction in {"prev", "previous", "left"}:
         token = "e-1"
     else:
-        return "direction must be next or prev"
+        raise ToolFailure("direction must be next or prev")
     proc = _run(["hyprctl", "dispatch", "workspace", token])
     if proc.returncode != 0:
-        return proc.stderr.strip() or "workspace step failed"
+        raise ToolFailure(proc.stderr.strip() or "workspace step failed")
     return f"workspace {direction}"
 
 
 def open_app(args: dict[str, Any], _cfg: Config) -> str:
     name = str(args.get("name") or "").strip()
     if not name or "/" in name or ".." in name:
-        return "need a simple app name"
+        raise ToolFailure("need a simple app name")
     needle = name.lower()
     matches: list[tuple[str, str]] = []
     for folder in DESKTOP_DIRS:
@@ -622,14 +622,14 @@ def open_app(args: dict[str, Any], _cfg: Config) -> str:
             if needle in hay:
                 matches.append((pretty or path.stem, path.stem))
     if not matches:
-        return f"no app matching {name!r}"
+        raise ToolFailure(f"no app matching {name!r}")
     exact = next((m for m in matches if m[0].lower() == needle or m[1].lower() == needle), matches[0])
     label, desktop_id = exact
     if not shutil.which("gtk-launch"):
-        return "gtk-launch not installed"
+        raise ToolFailure("gtk-launch not installed")
     proc = _run(["gtk-launch", desktop_id], timeout=20)
     if proc.returncode != 0:
-        return (proc.stderr or proc.stdout or "launch failed")[:500]
+        raise ToolFailure((proc.stderr or proc.stdout or "launch failed")[:500])
     return f"opened {label}"
 
 
@@ -1087,31 +1087,37 @@ DISPATCH: dict[str, ToolFn] = {
 
 
 def call_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) -> str:
+    """Text transport for MCP clients; the harness consumes the typed outcome."""
+    return execute_tool(name, arguments, cfg).text
+
+
+def execute_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) -> ToolOutcome:
     started = time.monotonic()
-    result = _run_tool(name, arguments, cfg)
-    status = "error" if _action_failed(result) else "ok"
-    log.info("tool name=%s status=%s secs=%.2f", name, status, time.monotonic() - started)
-    log.debug('tool name=%s arguments %s result "%s"', name, journal.clip(arguments), journal.clip(result))
+    try:
+        result = ToolOutcome(_run_tool(name, arguments, cfg))
+    except ToolFailure as exc:
+        result = ToolOutcome(str(exc), "error")
+    except subprocess.TimeoutExpired:
+        result = ToolOutcome(f"{name} timed out", "unknown")
+    except Exception as exc:
+        log.exception("tool name=%s raised", name)
+        result = ToolOutcome(f"{name} error: {exc}", "unknown")
+    log.info("tool name=%s status=%s secs=%.2f", name, result.status, time.monotonic() - started)
+    log.debug('tool name=%s arguments %s result "%s"', name, journal.clip(arguments), journal.clip(result.text))
     return result
 
 
 def _run_tool(name: str, arguments: dict[str, Any] | str | None, cfg: Config) -> str:
     fn = DISPATCH.get(name)
     if not fn:
-        return f"unknown tool {name}"
+        raise ToolFailure(f"unknown tool {name}")
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments) if arguments else {}
-        except json.JSONDecodeError:
-            return "invalid tool arguments json"
+        except json.JSONDecodeError as exc:
+            raise ToolFailure("invalid tool arguments json") from exc
     if arguments is None:
         arguments = {}
     if not isinstance(arguments, dict):
-        return "tool arguments must be an object"
-    try:
-        return fn(arguments, cfg)
-    except subprocess.TimeoutExpired:
-        return f"{name} timed out"
-    except Exception as exc:  # noqa: BLE001 — surface to the model, don't crash the loop
-        log.exception("tool name=%s raised", name)
-        return f"{name} error: {exc}"
+        raise ToolFailure("tool arguments must be an object")
+    return fn(arguments, cfg)

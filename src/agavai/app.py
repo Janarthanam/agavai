@@ -4,7 +4,7 @@ import sys
 
 from agavai.ui import summon_overlay
 from agavai.config import load_config
-from agavai.__main__ import read_listener, start_session
+from agavai.harness.session import read_listener, start_session
 
 log = logging.getLogger(__name__)
 

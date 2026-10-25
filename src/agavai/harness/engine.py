@@ -16,8 +16,9 @@ from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import fallback_head_ids, routes_itself, select_head_ids
 from agavai.canvas import answer_block, model_view, read_aloud
-from agavai.tools import DISPATCH, OPENAPI_TOOLS, call_tool
-from agavai.ui import ChatUi, PendingAction
+from agavai.tools import DISPATCH, OPENAPI_TOOLS, execute_tool as call_tool
+from agavai.ui import ChatUi
+from agavai.harness.context import ContextStore, PendingAction
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ def _call_arguments(call: dict[str, Any], label: str) -> dict[str, Any]:
     return arguments
 
 
-def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi) -> str:
+def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi, context: ContextStore) -> str:
     proposal = _call_arguments(call, "confirmation")
     name = proposal.get("name")
     arguments = proposal.get("arguments")
@@ -149,7 +150,7 @@ def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: Ch
         raise LlmError("That action is not available for confirmation in this turn.")
     if not isinstance(arguments, dict) or not isinstance(question, str) or not question.strip():
         raise LlmError("Confirmation needs resolved arguments and a question.")
-    ui.pending_action = PendingAction(str(ui.data["session_id"]), name, arguments)
+    context.pending_action = PendingAction(context.session_id, name, arguments)
     return read_aloud(question, ui.data.get("display"))
 
 
@@ -165,32 +166,33 @@ def _show_answer(call: dict[str, Any], ui: ChatUi) -> str:
 
 def _finish_with_local_call(
     calls: list[dict[str, Any]], note: str, reply: str,
-    messages: list[dict[str, Any]], ui: ChatUi, head_ids: list[str],
+    messages: list[dict[str, Any]], ui: ChatUi, head_ids: list[str], context: ContextStore,
 ) -> str:
     """End the turn on a call handled here, without another model round."""
     messages.append({"role": "assistant", "content": None, "tool_calls": calls})
     messages.append({"role": "tool", "tool_call_id": calls[0].get("id") or calls[0]["function"]["name"], "content": note})
     messages.append({"role": "assistant", "content": reply})
-    _remember(ui, messages, head_ids)
+    _remember(context, messages, head_ids)
     ui.assistant(reply)
     return reply
 
 
-def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation: bool) -> str | None:
+def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation: bool, context: ContextStore) -> str | None:
     command = control_command(text)
     if command == "agavai":
+        context.new_task()
         ui.clear_conversation()
         ui.continue_listening()
         return ""
-    pending = ui.pending_action if continue_conversation else None
-    if pending and pending.session_id != ui.data.get("session_id"):
+    pending = context.pending_action if continue_conversation else None
+    if pending and pending.session_id != context.session_id:
         pending = None
     if command not in {"yes", "no"} and not (command == "continue" and pending):
         return None
     log.info("turn control=%s pending=%s", command, pending.name if pending else "none")
-    messages = list(ui.model_messages) if continue_conversation else []
-    heads = list(ui.model_heads) if messages else []
-    ui.pending_action = None
+    messages = list(context.messages) if continue_conversation else []
+    heads = list(context.heads) if messages else []
+    context.pending_action = None
     ui.user(text, keep_display=continue_conversation)
     ui.pipeline_event("Control", f"{command} · model and router bypassed")
     messages.append({"role": "user", "content": text})
@@ -205,7 +207,7 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
             "function": {"name": pending.name, "arguments": json.dumps(pending.arguments, ensure_ascii=False)},
         }
         messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
-        result = _execute_tool_call(call, cfg, ui, messages)
+        result = _execute_tool_call(call, cfg, ui, messages, context)
         if result is None:
             return ""
         reply = read_aloud(result, ui.data.get("display"))
@@ -214,7 +216,7 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
         elif reply.startswith(("{", "[")) or len(reply) > 280 or len(re.split(r"(?<=[.!?])\s+", reply)) > 2:
             reply = "The tool returned a result. See the details on screen."
     messages.append({"role": "assistant", "content": reply})
-    _remember(ui, messages, heads)
+    _remember(context, messages, heads)
     ui.assistant(reply)
     return reply
 
@@ -243,7 +245,7 @@ def _model_tool_text(name: str, result: str) -> str:
 
 
 def _execute_tool_call(
-    call: dict[str, Any], cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]],
+    call: dict[str, Any], cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]], context: ContextStore,
 ) -> str | None:
     fn = call.get("function") or {}
     name = fn.get("name") or ""
@@ -254,11 +256,14 @@ def _execute_tool_call(
         ui.tool_start(name, raw_args)
         if ui.cancelled():
             return None
-    result = call_tool(name, raw_args, cfg)
+    outcome = context.execution.execute(call, cfg, call_tool, lambda: bool(ui and ui.cancelled()))
+    if outcome is None:
+        return None
+    result = outcome.text
     if ui:
         if ui.cancelled():
             return None
-        ui.tool_done(name, result)
+        ui.tool_done(name, result, status=outcome.status)
     messages.append({
         "role": "tool",
         "tool_call_id": call.get("id") or name,
@@ -317,7 +322,7 @@ def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[
         return
     if ui:
         ui.tool_start("wallpaper_list", "{}")
-    result = call_tool("wallpaper_list", "{}", cfg)
+    result = call_tool("wallpaper_list", "{}", cfg).text
     if ui:
         ui.tool_done("wallpaper_list", result)
     messages.append(
@@ -336,12 +341,8 @@ def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[
     messages.append({"role": "tool", "tool_call_id": "wallpaper_list", "content": _model_tool_text("wallpaper_list", result)})
 
 
-def _remember(ui: ChatUi, messages: list[dict[str, Any]], heads: list[str]) -> None:
-    stored = [message for message in messages if message.get("role") != "system"][-24:]
-    while stored and stored[0].get("role") == "tool":
-        stored.pop(0)
-    ui.model_messages = stored
-    ui.model_heads = list(heads)
+def _remember(context: ContextStore, messages: list[dict[str, Any]], heads: list[str]) -> None:
+    context.remember(messages, heads)
 
 
 def _validate_call(call, selected):
@@ -382,30 +383,34 @@ def run_turn(
     ui: ChatUi | None = None,
     *,
     continue_conversation: bool = False,
+    context: ContextStore,
 ) -> str:
     started = time.monotonic()
     log.info("turn start continue=%s", continue_conversation)
     log.debug('turn text "%s"', journal.clip(text))
-    reply = _run_turn(text, cfg, ui, continue_conversation=continue_conversation)
+    reply = _run_turn(text, cfg, ui, continue_conversation=continue_conversation, context=context)
     log.info("turn done secs=%.2f", time.monotonic() - started)
     log.debug('turn reply "%s"', journal.clip(reply))
     return reply
 
 
-def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversation: bool) -> str:
+def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversation: bool, context: ContextStore) -> str:
     text = text.strip()
     if not text:
         return "I did not hear anything."
     if ui and ui.cancelled():
+        context.pending_action = None
         return ""
     if ui:
-        reply = _handle_control(text, cfg, ui, continue_conversation=continue_conversation)
+        reply = _handle_control(text, cfg, ui, continue_conversation=continue_conversation, context=context)
         if reply is not None:
             return reply
         # A new committed request replaces any proposal; partials never reach here.
-        ui.pending_action = None
-    prior_messages = list(ui.model_messages) if ui and continue_conversation else []
-    prior_heads = list(ui.model_heads) if prior_messages else []
+        context.pending_action = None
+    if not continue_conversation:
+        context.new_task()
+    prior_messages = list(context.messages) if continue_conversation else []
+    prior_heads = list(context.heads) if prior_messages else []
     if ui:
         ui.user(text, keep_display=bool(prior_messages))
     try:
@@ -451,6 +456,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if ui.cancelled():
                 return ""
             if not related:
+                context.new_task()
                 prior_messages = []
                 prior_heads = []
                 ui.user(text)
@@ -481,7 +487,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             {"role": "user", "content": text},
         ]
         if "wallpaper" in head_ids and "wallpaper_list" in selected_names and _asking_for_images(text):
-            listed = call_tool("wallpaper_list", "{}", cfg)
+            listed = call_tool("wallpaper_list", "{}", cfg).text
             if ui:
                 ui.tool_start("wallpaper_list", "{}")
                 ui.tool_done("wallpaper_list", listed)
@@ -522,7 +528,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             try:
                 if ui:
                     ui.brain(active_cfg, "Brain")
-                message = backend.respond(messages, offered)
+                message = backend.respond(context.pack(messages, offered, active_cfg), offered)
             except LlmError as exc:
                 escalate(str(exc))
                 continue
@@ -550,19 +556,19 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if "request_confirmation" in names:
                 if len(calls) != 1 or "request_confirmation" not in selected_names:
                     raise LlmError("A confirmation must be requested alone in an interactive turn.")
-                reply = _prepare_confirmation(calls[0], selected_names, ui)
-                return _finish_with_local_call(calls, "Awaiting user confirmation. No action has executed.", reply, messages, ui, head_ids)
+                reply = _prepare_confirmation(calls[0], selected_names, ui, context)
+                return _finish_with_local_call(calls, "Awaiting user confirmation. No action has executed.", reply, messages, ui, head_ids, context)
             if "show_answer" in names and "show_answer" in selected_names:
                 if len(calls) != 1:
                     raise LlmError("An on-screen answer must be shown alone.")
                 reply = _show_answer(calls[0], ui)
-                return _finish_with_local_call(calls, "Shown on screen.", reply, messages, ui, head_ids)
+                return _finish_with_local_call(calls, "Shown on screen.", reply, messages, ui, head_ids, context)
             if not calls:
                 _list_images(text, cfg, ui, messages)
                 reply = read_aloud(_strip_think(content), ui.data.get("display") if ui else None)
                 messages.append({"role": "assistant", "content": reply})
                 if ui:
-                    _remember(ui, messages, head_ids)
+                    _remember(context, messages, head_ids)
                     ui.assistant(reply)
                 return reply
             extra_heads: list[str] = []
@@ -597,7 +603,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 if escalated and key in completed_calls:
                     messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": completed_calls[key]})
                     continue
-                result = _execute_tool_call(call, cfg, ui, messages)
+                result = _execute_tool_call(call, cfg, ui, messages, context)
                 if result is None:
                     return ""
                 completed_calls[key] = _model_tool_text(call["function"]["name"], result)
@@ -608,7 +614,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                     reply = "The tools returned results. See the details on screen."
                 messages.append({"role": "assistant", "content": reply})
                 if ui:
-                    _remember(ui, messages, head_ids)
+                    _remember(context, messages, head_ids)
                     ui.assistant(reply)
                 return reply
         msg = "I ran out of tool steps before finishing."

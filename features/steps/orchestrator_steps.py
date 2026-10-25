@@ -1,20 +1,22 @@
 from __future__ import annotations
+from agavai.harness.context import ContextStore
 
 import json
 from copy import deepcopy
 from unittest.mock import patch
 
+from features.support.tool_replay import tool_patch
 from behave import given, then, when
 
 from agavai.config import Config
 from agavai.llm import LlmError
-from agavai.orchestrator import CHAT_SYSTEM, CONTEXT_SYSTEM, SYSTEM, _strip_think, run_turn, wants_followup
+from agavai.harness.engine import CHAT_SYSTEM, CONTEXT_SYSTEM, SYSTEM, _strip_think, run_turn, wants_followup
 from agavai.ui import cancel_ui
 
 
 @given("llama-server is down")
 def step_down(context):
-    context.health_patch = patch("agavai.orchestrator.health", return_value=False)
+    context.health_patch = patch("agavai.harness.engine.health", return_value=False)
     context.health_patch.start()
     context.add_cleanup(context.health_patch.stop)
 
@@ -37,10 +39,10 @@ def step_script(context, tool, reply):
     def fake_chat(_cfg, _messages, tools=None):
         return calls.pop(0)
 
-    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
-    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
-    context.tool_patch = patch(
-        "agavai.orchestrator.call_tool", return_value="launched browser"
+    context.health_patch = patch("agavai.harness.engine.health", return_value=True)
+    context.chat_patch = patch("agavai.harness.engine.chat", side_effect=fake_chat)
+    context.tool_patch = tool_patch(
+        "agavai.harness.engine.call_tool", return_value="launched browser"
     )
     context.health_patch.start()
     context.chat_patch.start()
@@ -52,7 +54,7 @@ def step_script(context, tool, reply):
 
 @given("the router selects no heads")
 def step_router_none(context):
-    context.router_patch = patch("agavai.orchestrator.select_head_ids", return_value=[])
+    context.router_patch = patch("agavai.harness.engine.select_head_ids", return_value=[])
     context.router_patch.start()
     context.add_cleanup(context.router_patch.stop)
 
@@ -78,9 +80,9 @@ def step_script_retry(context, first, second, reply):
         context.prompts.append(messages[0]["content"])
         return scripted.pop(0)
 
-    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
-    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
-    context.tool_patch = patch("agavai.orchestrator.call_tool", return_value="ok")
+    context.health_patch = patch("agavai.harness.engine.health", return_value=True)
+    context.chat_patch = patch("agavai.harness.engine.chat", side_effect=fake_chat)
+    context.tool_patch = tool_patch("agavai.harness.engine.call_tool", return_value="ok")
     context.health_patch.start()
     context.chat_patch.start()
     context.tool_mock = context.tool_patch.start()
@@ -113,10 +115,10 @@ def step_named_listing(context, tool):
         context.seen_messages = messages
         return scripted.pop(0)
 
-    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
-    context.router_patch = patch("agavai.orchestrator.select_head_ids", return_value=["files"])
-    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
-    context.tool_patch = patch("agavai.orchestrator.call_tool", return_value=payload)
+    context.health_patch = patch("agavai.harness.engine.health", return_value=True)
+    context.router_patch = patch("agavai.harness.engine.select_head_ids", return_value=["files"])
+    context.chat_patch = patch("agavai.harness.engine.chat", side_effect=fake_chat)
+    context.tool_patch = tool_patch("agavai.harness.engine.call_tool", return_value=payload)
     context.health_patch.start()
     context.router_patch.start()
     context.chat_patch.start()
@@ -134,7 +136,7 @@ def step_ship_listing(context):
     def fake(name, raw, cfg):
         return payload
 
-    context.tool_patch = patch("agavai.orchestrator.call_tool", side_effect=fake)
+    context.tool_patch = tool_patch("agavai.harness.engine.call_tool", side_effect=fake)
     context.tool_mock = context.tool_patch.start()
     context.add_cleanup(context.tool_patch.stop)
 
@@ -167,8 +169,8 @@ def step_reply_only(context, reply):
         context.model_tools = {item["function"]["name"] for item in (tools or [])}
         return {"content": reply, "tool_calls": []}
 
-    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
-    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
+    context.health_patch = patch("agavai.harness.engine.health", return_value=True)
+    context.chat_patch = patch("agavai.harness.engine.chat", side_effect=fake_chat)
     context.health_patch.start()
     context.chat_patch.start()
     context.add_cleanup(context.health_patch.stop)
@@ -203,23 +205,23 @@ def step_context_dismiss(context):
 
 @when('I run a turn with text "{text}"')
 def step_turn(context, text):
-    context.reply = run_turn(text, Config())
+    context.reply = run_turn(text, Config(), context=ContextStore())
 
 
 @when('I run a turn with text "{text}" on the chat UI')
 def step_turn_ui(context, text):
     context.before_turn = deepcopy(context.ui.data)
-    context.reply = run_turn(text, context.cfg, context.ui)
+    context.reply = run_turn(text, context.cfg, context.ui, context=context.harness.context)
 
 
 @when('I continue the turn with text "{text}"')
 def step_continue(context, text):
     context.before_turn = deepcopy(context.ui.data)
-    context.before_messages = deepcopy(context.ui.model_messages)
-    context.before_heads = list(context.ui.model_heads)
+    context.before_messages = deepcopy(context.harness.context.messages)
+    context.before_heads = list(context.harness.context.heads)
     context.context_requests = []
     context.action_requests = []
-    context.reply = run_turn(text, context.cfg, context.ui, continue_conversation=True)
+    context.reply = run_turn(text, context.cfg, context.ui, context=context.harness.context, continue_conversation=True)
 
 
 @then('the spoken reply should be "{text}"')
@@ -294,12 +296,12 @@ def step_offered_now(context, name):
 @then('the model messages excluded "{text}"')
 def step_messages_excluded(context, text):
     assert text not in json.dumps(context.seen_messages), context.seen_messages
-    assert text not in json.dumps(context.ui.model_messages), context.ui.model_messages
+    assert text not in json.dumps(context.harness.context.messages), context.harness.context.messages
 
 
 @then('the new answer uses head "{head}"')
 def step_new_head(context, head):
-    assert context.ui.model_heads == ([] if head == "none" else [head]), context.ui.model_heads
+    assert context.harness.context.heads == ([] if head == "none" else [head]), context.harness.context.heads
     if head != "wallpaper":
         assert "wallpaper_set" not in context.model_tools, context.model_tools
 
@@ -342,16 +344,16 @@ def step_retained_conversation(context):
     snapshot = context.action_requests[0]
     assert snapshot["display"] == context.before_turn["display"]
     assert snapshot["turns"][:-1] == context.before_turn["turns"]
-    assert context.seen_messages[1:-2] == context.before_messages, context.seen_messages
-    assert all(message.get("content") != CONTEXT_SYSTEM for message in context.ui.model_messages)
+    assert context.seen_messages[1:-1] == context.before_messages, context.seen_messages
+    assert all(message.get("content") != CONTEXT_SYSTEM for message in context.harness.context.messages)
 
 
 @then("the earlier canvas and model history were retained")
 def step_retained_history(context):
     snapshot = json.loads((context.runtime_dir / "ui.json").read_text())
     assert snapshot["display"] == context.before_turn["display"]
-    assert context.ui.model_messages == context.before_messages
-    assert context.ui.model_heads == context.before_heads
+    assert context.harness.context.messages == context.before_messages
+    assert context.harness.context.heads == context.before_heads
 
 
 @then("the listening session identity was retained")
@@ -377,8 +379,8 @@ def step_show_answer(context):
         context.model_tools = {item["function"]["name"] for item in (tools or [])}
         return {"content": "", "tool_calls": [call]} if context.model_rounds == 1 else {"content": "Here are the planets in a second round.", "tool_calls": []}
 
-    context.health_patch = patch("agavai.orchestrator.health", return_value=True)
-    context.chat_patch = patch("agavai.orchestrator.chat", side_effect=fake_chat)
+    context.health_patch = patch("agavai.harness.engine.health", return_value=True)
+    context.chat_patch = patch("agavai.harness.engine.chat", side_effect=fake_chat)
     context.health_patch.start()
     context.chat_patch.start()
     context.add_cleanup(context.health_patch.stop)
@@ -415,8 +417,8 @@ def step_model_not_offered(context, name):
 
 @then("the remembered conversation keeps the shown Markdown")
 def step_remembered_answer(context):
-    calls = [call for message in context.ui.model_messages for call in message.get("tool_calls") or []]
-    assert any("Venus" in call["function"]["arguments"] for call in calls), context.ui.model_messages
+    calls = [call for message in context.harness.context.messages for call in message.get("tool_calls") or []]
+    assert any("Venus" in call["function"]["arguments"] for call in calls), context.harness.context.messages
 
 
 _INSTRUCTIONS = {"chat": CHAT_SYSTEM, "desktop": SYSTEM}
