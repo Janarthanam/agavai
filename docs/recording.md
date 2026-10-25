@@ -1,6 +1,6 @@
 # Recordings
 
-Status: design agreed 2026-10-23. P0 is implemented in the repository and not yet deployed; what P0 includes is under [P0 as built](#p0-as-built). Decisions are listed at the end, and progress is tracked in [tasks/recording.md](../tasks/recording.md).
+Status: design agreed 2026-10-23. P0 is deployed locally from `feature/recordings` on 2026-10-25; what P0 includes is under [P0 as built](#p0-as-built). Decisions are listed at the end, and progress is tracked in [tasks/recording.md](../tasks/recording.md).
 
 Agavai can listen without answering. It keeps the audio, a timestamped transcript, and your corrections, so you can play any moment back later. The same recording can become a transcript, notes, or a translation. The assistant loop stays as specified in [flow.md](flow.md), and the overlay rules stay in [ui-design.md](ui-design.md). This file covers only what recording adds or changes.
 

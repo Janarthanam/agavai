@@ -1,6 +1,6 @@
 # Recordings: listen, keep the audio, transcript, notes, translation
 
-In progress. Deployment authorized; integrating current `main` on `feature/recordings` in `.worktrees/recordings-deploy` before validation and deployment. Design: [docs/recording.md](../docs/recording.md).
+P0 complete and deployed on 2026-10-25 from `feature/recordings` at implementation commit `896659e`. The installed launchers use `.worktrees/recordings-deploy`; keep that checkout while deployed. P1 and P2 remain pending. Design: [docs/recording.md](../docs/recording.md).
 
 Previous deployment blockers (resolved by the deployment authorization and integration below):
 
@@ -15,9 +15,9 @@ Previous deployment blockers (resolved by the deployment authorization and integ
 
 ## Surface
 
-- [~] P0 voice Record continuously to a recording folder with a live timestamped transcript; start by voice, shortcut, or CLI; stop never discards
-- [~] P0 ui Recording state: red orb ring, timer chip in compact, bar indicator, start and stop chimes, Pause, Mark, and Stop
-- [~] P0 ui Review sheet: player, click a line to seek, highlight during playback, in-place corrections, library list
+- [x] P0 voice Record continuously to a recording folder with a live timestamped transcript; start by voice, shortcut, or CLI; stop never discards
+- [x] P0 ui Recording state: red orb ring, timer chip in compact, bar indicator, start and stop chimes, Pause, Mark, and Stop
+- [x] P0 ui Review sheet: player, click a line to seek, highlight during playback, in-place corrections, library list
 - [ ] P1 voice Offline polish pass, title, Notes view, voice follow-ups and search over recordings
 - [ ] P2 voice Computer audio as a second channel, translation, glossary from corrections
 
@@ -83,3 +83,8 @@ Previous deployment blockers (resolved by the deployment authorization and integ
   - Integration files beyond the original P0 list: `src/agavai/asr_worker.py`, `src/agavai/speech_backends.py`, `features/setup_cli.feature` (37 tools with the two recording tools). Adapted `features/support/asr_checks.py` to the shared protocol and added a real capture/model/Opus BDD replay with Whistle selected for the assistant; recording scenario stand-ins accept the current cancellation callback. Updated `docs/recording.md` and `docs/flow.md` for the shared worker.
   - Validation: `AGAVAI_CONFIG=share/config.example.toml AGAVAI_CACTUS_TEST_DIR=~/.local/share/agavai/cactus PYTHONPATH=src <main-checkout>/.venv/bin/python -m behave --tags=-vad_model --format progress`: **431 scenarios passed**, 1 skipped (Silero model absent; configured live VAD is energy). Includes installed Parakeet, Whistle and Needle model replays and full recording capture, timestamps and verified Opus. `python3 scripts/check-compact-ui.py`: all compact, canvas-focus and recording scenarios passed (an initial canvas-focus timing failure passed on repeat and the final all-scenario run). `git diff --check` passed; reviewed integration diff against main.
   - Backup prepared at `~/.local/share/agavai/deployments/20261025T170706+0530/`: plugin, launcher targets, config, bindings, shell settings and units. Plan: switch only launchers/plugin and the approved Super+Ctrl+M binding; preserve live brain/speech config and model service. Main checkout still has the other session's original uncommitted files.
+- 2026-10-25T17:11:23+05:30 — Codex session recordings-deploy — P0 deployment complete. Implementation committed as `896659e`; the branch includes main `9434473` and stays separate from main.
+  - Deployed files: `~/.local/bin/agavai` and `agavai-llm` now link into `/home/janar/Projects/agavai/.worktrees/recordings-deploy/scripts/`; installed all ten plugin files including `RecordingLive.qml`, `RecordingView.qml` and `Clock.js`; changed only the Super+Ctrl+M line in `~/.config/hypr/bindings.lua` from the legacy invoke shortcut to `agavai record` (existing unbind retained). Super+M remains invoke. `omarchy plugin validate`, `hyprctl reload`, `hyprctl configerrors` and `omarchy restart shell` passed; shell IPC answers.
+  - Live Given/When/Then smoke: with the installed launcher and shell, use a copied config pointing recordings into `/tmp/agavai-recordings-live-qzwid229/Recordings`, start real microphone capture, pause (elapsed time held), mark, resume, stop. Saved **1600 ms** as verified `audio.opus`, one pause and one mark, no residual WAV, listener exited, microphone mute restored. The prior UI document was restored and the test overlay dismissed; app is idle. No test files were saved in the user's configured recordings folder. This validates capture/control/save plumbing; recognizable speech and timestamps were verified with fixtures in the BDD suite, not speech from the microphone smoke.
+  - All ten installed plugin files byte-match the committed sources. Live config.toml, shell.json and installed model units byte-match the backups. Whistle/energy-VAD assistant input, Needle small brain and active Qwen large fallback remain configured. Main checkout's three other-session modified files and untracked `:memory:.ses` remain untouched.
+  - Rollback: `/home/janar/.local/share/agavai/deployments/20261025T170706+0530/ROLLBACK.md`; `deployment.json` records launchers and service state, `smoke.json` records live results, and BDD/native UI logs plus the feature diff are archived alongside it. Repo bookkeeping files changed after deployment: `tasks/recording.md`, `docs/recording.md`. P0 requirements and acceptance checks are satisfied; P1/P2 are not part of this deployment.
