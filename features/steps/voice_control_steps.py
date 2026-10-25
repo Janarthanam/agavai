@@ -168,7 +168,7 @@ def stale(context):
 
 @when("a control request combines two tool heads")
 def budget(context):
-    context.control_router.side_effect = lambda text, cfg: ["wallpaper", "system"]
+    context.control_router.side_effect = lambda text, cfg, **kwargs: ["wallpaper", "system"]
     context.reply = run_turn("show wallpaper and system settings", context.cfg, context.ui)
 
 

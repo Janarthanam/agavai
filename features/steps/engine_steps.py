@@ -1017,6 +1017,7 @@ def needle_router_and_agent_result(context):
     assert offered == [t['function']['name'] for t in OPENAPI_TOOLS] + ['request_confirmation'], offered
     both.tool.assert_called_once()
     assert both.tool.call_args.args[0] == 'set_volume' and context.reply == 'Volume raised.'
+    assert {'stage': 'Router', 'detail': 'combined with Needle inference'} in context.ui.data['execution']
 
 
 @when('self-routed Needle cannot match "{text}" and routed Qwen is configured')
@@ -1067,3 +1068,6 @@ def needle_router_and_agent_escalation_result(context, head):
     assert both.offers == [expected + ['request_confirmation']] * 2, both.offers
     both.tool.assert_called_once()
     assert both.tool.call_args.args[0] == 'set_volume' and context.reply == 'Volume raised.'
+    assert [row['detail'] for row in context.ui.data['execution'] if row['stage'] == 'Router'] == [
+        'combined with Needle inference', f'keyword fallback after combined Needle · heads: {head}']
+    assert context.ui.data['model_id'] == 'qwen3-4b-instruct'

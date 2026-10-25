@@ -142,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
             write_state(cfg, "idle")
             return 0
         write_state(cfg, "speaking")
-        speak(reply, cfg)
+        ui.speech(speak(reply, cfg))
         ui.idle()
         write_state(cfg, "idle")
         print(reply)
@@ -728,7 +728,7 @@ def _run_stop_body(
     finish(cfg)
     from agavai.tts import _interruptible_speak
 
-    result = _interruptible_speak(reply, cfg, stop_requested=lambda: aborted())
+    result = _interruptible_speak(reply, cfg, stop_requested=lambda: aborted(), on_engine=ui.speech)
     if result in {"cancelled", "silent"}:
         return None if result == "cancelled" else reply
     return reply

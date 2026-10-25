@@ -58,7 +58,7 @@ ShellRoot {
     function canvasFocusStep(step, panel, details) {
         if (step === 0) {
             chat.applySnapshot(JSON.stringify({session_id: "focus", phase: "listening"}));
-            input.mouseClick(find(chat, "agavaiOrbPointer"), 40, 40, Qt.LeftButton);
+            chat.compact = false;
         } else if (step === 1) {
             check(!chat.compact && panel.contentItem.Window.active, "Expanded view must acquire focus when activated");
             chat.applySnapshot(JSON.stringify({session_id: "focus", phase: "speaking", turns: [{user: "list the planets", assistant: "Here are the planets."}], display: {id: "planets", kind: "answer", title: "Planets", html: "<p>Mercury</p>"}}));
@@ -77,7 +77,74 @@ ShellRoot {
             Qt.quit();
         }
     }
-    // Live recording, its review, and the Recordings list. Commands the overlay runs reach a stub agavai.
+    function helpStep(step, panel, stage, details, orb) {
+        var source = JSON.parse(Quickshell.env("AGAVAI_UI_HELP_JSON"));
+        if (step === 0) {
+            input.parent = panel.contentItem;
+            chat.applySnapshot(JSON.stringify(source));
+            // QtTest dispatches directly, so map with on-demand focus as in canvasFocusStep.
+            chat.compact = false;
+        } else if (step === 1) {
+            // Direct QtTest events need a window parent; compositor focus is checked by canvas-focus.
+            chat.compact = false;
+            check(panel.WlrLayershell.keyboardFocus === WlrKeyboardFocus.OnDemand, "Help must use on-demand keyboard focus");
+        } else if (step === 2) {
+            var toggle = find(chat, "agavaiHelp");
+            check(toggle.visible && toggle.Accessible.name === "Version and pipeline help", "Expanded sheet must expose accessible help");
+            input.mouseClick(toggle, toggle.width / 2, toggle.height / 2, Qt.LeftButton);
+            if (Quickshell.env("AGAVAI_UI_SCREENSHOT"))
+                stage.grabToImage(result => result.saveToFile(Quickshell.env("AGAVAI_UI_SCREENSHOT")));
+        } else if (step === 3) {
+            var help = find(chat, "agavaiPipelineHelp");
+            var text = find(chat, "agavaiPipelineText").text;
+            check(chat.helpOpen && help.visible && !chat.compact, "Help must open inside the expanded sheet");
+            check(text.indexOf(source.version) >= 0 && text.indexOf("SESSION CONFIGURATION") >= 0 && text.indexOf("LATEST TURN EXECUTION") >= 0, "Help must label version, config and actual execution separately");
+            for (var row of source.pipeline.concat(source.execution))
+                check(text.indexOf(row.detail) >= 0, "Help must render the session's exact stage detail: " + row.detail);
+            check(chat.snapshot.transcript.text === source.transcript.text && JSON.stringify(chat.snapshot.turns) === JSON.stringify(source.turns), "Opening help must preserve the transcript and results");
+            check(help.contentHeight > help.height && help.height <= panel.height * 0.4, "Long pipeline details must have a bounded scrolling area");
+            help.forceActiveFocus();
+            input.keyClick(Qt.Key_PageDown);
+        } else if (step === 4) {
+            check(find(chat, "agavaiPipelineHelp").contentY > 0, "Keyboard must scroll the help details");
+            input.keyClick(Qt.Key_Escape);
+            check(!chat.helpOpen && chat.opened && !chat.compact, "Escape from help must return to the session without cancellation");
+            find(chat, "agavaiHelp").clicked();
+        } else if (step >= 5 && step <= 8) {
+            source.placement = placements[step - 5];
+            chat.applySnapshot(JSON.stringify(source));
+        } else if (step === 9) {
+            checkPosition(stage, panel, orb);
+            source.phase = "listening";
+            source.phase_label = "Listening";
+            source.input_mode = "voice";
+            source.transcript = {text: "new partial words", final: false};
+            chat.applySnapshot(JSON.stringify(source));
+            check(chat.helpOpen && chat.transcript === "new partial words", "Live snapshots must continue while help is open");
+            find(chat, "agavaiPipelineHelp").forceActiveFocus();
+            input.keyClick(Qt.Key_Return);
+            source.phase = "recording";
+            source.recording = {elapsed_ms: 1000, at: Date.now(), paused: false, lines: []};
+            chat.applySnapshot(JSON.stringify(source));
+        } else if (step === 10) {
+            check(find(chat, "agavaiPipelineText").text.indexOf("assistant tools and spoken replies are bypassed") >= 0, "Recording help must explain the model bypass");
+            find(chat, "agavaiMinimize").clicked();
+            check(chat.compact && !chat.helpOpen && stage.width === Style.space(80), "Minimizing help must restore the compact input boundary");
+            chat.applySnapshot(JSON.stringify({session_id: "new-help-session", phase: "listening"}));
+            input.mouseClick(find(chat, "agavaiOrbPointer"), 40, 40, Qt.LeftButton);
+        } else if (step === 11) {
+            check(!chat.helpOpen, "A new session must not inherit the open help panel");
+            find(chat, "agavaiHelp").clicked();
+            check(find(chat, "agavaiPipelineText").text.indexOf("session version unavailable") >= 0, "An older writer must not inherit the prior version");
+            chat.dismiss();
+            console.log("COMPACT_UI_PASS");
+            Qt.quit();
+        }
+        if (step >= 6 && step <= 9)
+            checkPosition(stage, panel, orb);
+    }
+
+    // Live recording, its review, and the Recordings list. Commands reach a stub agavai.
     // Returns false to repeat the step on the next tick.
     function recordingStep(step, panel, stage, details, orb) {
         var live = {path: recordingFolder, elapsed_ms: 64000, at: Date.now(), paused: false, lines: [{time: "00:58", text: "the canary ships"}], partial: "widen it on monday", transcribing: true};
@@ -143,7 +210,9 @@ ShellRoot {
                 var details = find(chat, "agavaiDetails");
                 var orb = find(chat, "agavaiOrb");
                 var closeButton = find(chat, "agavaiClose");
-                if (scenario === "canvas-focus") {
+                if (scenario === "help") {
+                    helpStep(step, panel, stage, details, orb);
+                } else if (scenario === "canvas-focus") {
                     canvasFocusStep(step, panel, details);
                 } else if (scenario === "recording") {
                     if (recordingStep(step, panel, stage, details, orb) === false)

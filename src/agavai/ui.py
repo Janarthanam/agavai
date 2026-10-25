@@ -8,12 +8,15 @@ import subprocess
 import time
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from agavai.config import Config
+from agavai import __version__
+from agavai.config import Config, LlmConfig
 from agavai.canvas import display_for, OPEN_EXTS
 from agavai.richtext import rich_text
+from agavai.tts import speech_engines
 
 PLUGIN_ID = "janar.agavai"
 MAX_TURNS = 5
@@ -51,6 +54,49 @@ def _clip(text: str, limit: int = RESULT_CHARS) -> str:
     return text[: limit - 1] + "…"
 
 
+@lru_cache(maxsize=1)
+def _running_version() -> str:
+    """Capture source identity once, before later checkout edits can relabel a session."""
+    root = Path(__file__).resolve().parents[2]
+    if (root / ".git").exists():
+        try:
+            revision = subprocess.run(["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+                                      capture_output=True, text=True, timeout=2, check=True).stdout.strip()
+            changed = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--", "src", "plugin", "pyproject.toml"],
+                                     capture_output=True, text=True, timeout=2, check=True).stdout.strip()
+            return f"{__version__} · {revision}" + (" · modified source" if changed else "")
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return f"{__version__} · source revision unavailable"
+
+
+def brain_label(tier: LlmConfig) -> str:
+    label = f"{tier.model_id} · {tier.backend} · {tier.model_path.name}"
+    return label + (f" · {tier.base_url} ({tier.alias})" if tier.backend == "llama-server" else "")
+
+
+def _pipeline_config(cfg: Config) -> list[dict[str, str]]:
+    asr = cfg.asr
+    model = asr.model_path.name if asr.backend == "whistle-cactus" else asr.model_dir.name
+    endpoint = {"native": "native end of utterance", "manual": "Enter to send",
+                "vad": f"{cfg.vad.backend} VAD · {cfg.vad.silence_ms} ms quiet"}[asr.endpoint]
+    router = cfg.router.backend
+    if router == "jev":
+        router += f" · {cfg.router.jev_model} · OpenRouter"
+    elif router == "needle-cactus" and cfg.router.needle:
+        router += f" · {cfg.router.needle.model_id} · {cfg.router.needle.model_path.name}"
+    speech_order = [*speech_engines(cfg), "notification"]
+    return [
+        {"stage": "Input", "detail": f"Default microphone · 16 kHz mono → {asr.backend} · {model} · {asr.device} · {asr.mode}"},
+        {"stage": "Send", "detail": endpoint},
+        {"stage": "Router", "detail": f"{router} · fallback: {cfg.router.fallback} (unless bypassed by the brain's tool policy)"},
+        {"stage": "Primary", "detail": f"{brain_label(cfg.small_brain or cfg.llm)} · tools: {(cfg.small_brain or cfg.llm).tool_selection}"},
+        {"stage": "Fallback", "detail": f"{brain_label(cfg.large_brain)} · tools: {cfg.large_brain.tool_selection}" if cfg.large_brain else "None configured"},
+        {"stage": "Actions", "detail": "Local allowlisted tools; confirmation when required"},
+        {"stage": "Reply", "detail": " → ".join(speech_order) + f" · Kokoro voice: {cfg.tts.voice}"},
+    ]
+
+
 @dataclass(frozen=True)
 class PendingAction:
     session_id: str
@@ -84,6 +130,12 @@ class ChatUi:
                     self.data["turns"] = []
             except (OSError, json.JSONDecodeError):
                 pass
+        # These describe this writer, never the process that left the previous file.
+        self.data["version"] = _running_version()
+        self.data["pipeline"] = _pipeline_config(cfg)
+        self.data["execution"] = []
+        self.data["model_id"] = (cfg.small_brain or cfg.llm).model_id
+        self.data["input_mode"] = "typed"
 
     def begin_session(self) -> None:
         """Reset the overlay to a blank session: prior turns and canvas drop."""
@@ -92,6 +144,7 @@ class ChatUi:
         self.data["vad_state"] = "off"
         self.data["vad_backend"] = "off"
         self.data["session_id"] = uuid.uuid4().hex
+        self.data["input_mode"] = "typed"
 
     def clear_conversation(self) -> None:
         """Drop conversation content while keeping the listening session identity."""
@@ -104,9 +157,23 @@ class ChatUi:
         self.model_messages = []
         self.model_heads = []
         self.pending_action = None
+        self.data["execution"] = []
+
+    def pipeline_event(self, stage: str, detail: str) -> None:
+        self.data["execution"].append({"stage": stage, "detail": detail})
+        self._write()
+
+    def brain(self, tier: LlmConfig, purpose: str) -> None:
+        self.data["model_id"] = tier.model_id
+        self.pipeline_event(purpose, "Requested " + brain_label(tier))
+
+    def speech(self, engine: str) -> None:
+        if engine:
+            self.pipeline_event("Reply", "notification only · speech unavailable" if engine == "notify" else engine)
 
     def listening(self) -> None:
         self.begin_session()
+        self.data["input_mode"] = "voice"
         self._set_phase("listening", "Listening")
         self._write(summon=True)
 
@@ -157,6 +224,7 @@ class ChatUi:
     def user(self, text: str, *, keep_display: bool = False) -> None:
         if not keep_display:
             self.clear_conversation()
+        self.data["execution"] = []
         self.data.pop("error", None)
         self.data.pop("answer_html", None)
         self.data.pop("completion", None)
@@ -181,7 +249,7 @@ class ChatUi:
             }
         )
         self._set_phase("thinking", f"Calling {name}")
-        self._write()
+        self.pipeline_event("Action", name)
 
     def tool_done(self, name: str, result: str) -> None:
         failed = _action_failed(result)
@@ -216,6 +284,7 @@ class ChatUi:
     def recording(self, block: dict[str, Any], *, summon: bool = False) -> None:
         """The live recording for the overlay: time, recent lines, and the line being heard."""
         self.data["recording"] = block
+        self.data["input_mode"] = "recording"
         self._set_phase("recording", "Paused" if block.get("paused") else "Recording")
         self._write(summon=summon)
 
@@ -250,7 +319,6 @@ class ChatUi:
             self.data["ts"] = int(time.time() * 1000)
         self.data["phase"] = phase
         self.data["phase_label"] = label
-        self.data["model_id"] = (self.cfg.small_brain or self.cfg.llm).model_id
         self.data["placement"] = self.cfg.overlay.placement
         self.data["asr_endpoint"] = self.cfg.asr.endpoint
 

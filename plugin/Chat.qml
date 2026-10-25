@@ -26,6 +26,8 @@ Item {
     property int selected: 0
     property string actionError: ""
     property bool typing: false
+    property bool helpOpen: false
+    onCompactChanged: { if (compact) helpOpen = false; }
     readonly property bool listening: phase === "listening"
     readonly property bool recording: phase === "recording"
     readonly property var rec: snapshot.recording || null
@@ -40,7 +42,7 @@ Item {
     readonly property var turn: (snapshot.turns || []).length ? snapshot.turns[snapshot.turns.length - 1] : ({})
     readonly property var tools: turn.tools || []
     readonly property var latestTool: tools.length ? tools[tools.length - 1] : null
-    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing || recording
+    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing || recording || helpOpen
     readonly property string reviewPath: recording ? "" : openedRecording || (display && display.kind === "recording" ? String(display.path || "") : "")
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
@@ -132,6 +134,7 @@ Item {
         var canvasChanged = !!obj.display && nextDisplay !== JSON.stringify(snapshot.display || null);
         var canvasCleared = !obj.display && !!snapshot.display;
         if (nextSession !== sessionId) {
+            helpOpen = false;
             selected = 0;
             actionError = "";
             openedRecording = "";
@@ -153,10 +156,33 @@ Item {
         if (canvasCleared)
             minimizeIfUnfocused();
     }
+    function pipelineText() {
+        var lines = ["Agavai · " + (snapshot.version || "session version unavailable"),
+            "Current stage: " + phaseLabel, "", "SESSION CONFIGURATION",
+            "Loaded when this session started. Changes require a new session."];
+        var stages = snapshot.pipeline || [];
+        if (!stages.length)
+            lines.push("Pipeline details unavailable from this session. Restart Agavai to refresh.");
+        for (var i = 0; i < stages.length; i++)
+            lines.push(stages[i].stage + ": " + stages[i].detail);
+        lines.push("", recording ? "RECORDING" : "LATEST TURN EXECUTION");
+        if (recording) {
+            lines.push("Speech is recording content. Router, brain, assistant tools and spoken replies are bypassed; only isolated recording controls run. An offline transcription pass may follow stopping.");
+        } else {
+            if (snapshot.input_mode === "typed")
+                lines.push("Typed input · microphone, ASR and speech endpointing bypassed.");
+            var events = snapshot.execution || [];
+            if (!events.length)
+                lines.push("No model or tool stage reported for this turn yet.");
+            for (var j = 0; j < events.length; j++)
+                lines.push(events[j].stage + ": " + events[j].detail);
+        }
+        return lines.join("\n");
+    }
     // Focus elsewhere minimizes the expanded view, but not while a canvas is on
     // screen: with follow_mouse, merely moving the pointer would hide the answer.
     function minimizeIfUnfocused() {
-        if (wantsKeyboardFocus && !display && !panel.contentItem.Window.window.active)
+        if (wantsKeyboardFocus && !display && !helpOpen && !panel.contentItem.Window.window.active)
             compact = true;
     }
     function acquireFocus() {
@@ -271,8 +297,17 @@ Item {
                 focus: root.wantsKeyboardFocus
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
-                        root.dismiss();
+                        if (root.helpOpen) root.helpOpen = false;
+                        else root.dismiss();
                         event.accepted = true;
+                    } else if (root.helpOpen) {
+                        if ([Qt.Key_Down, Qt.Key_PageDown, Qt.Key_Up, Qt.Key_PageUp].indexOf(event.key) >= 0) {
+                            var direction = event.key === Qt.Key_Up || event.key === Qt.Key_PageUp ? -1 : 1;
+                            helpView.contentY = Math.max(0, Math.min(helpView.contentHeight - helpView.height, helpView.contentY + direction * helpView.height / 2));
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            event.accepted = true;
+                        }
                     } else if (event.key === Qt.Key_Down && root.items.length) {
                         root.selected = Math.min(root.items.length - 1, root.selected + 1);
                         event.accepted = true;
@@ -293,11 +328,46 @@ Item {
                     y: root.atTop ? stage.inset : parent.height - implicitHeight - stage.inset
                     rowSpacing: Style.space(12)
 
+                    Flickable {
+                        id: helpView
+                        objectName: "agavaiPipelineHelp"
+                        Layout.row: root.atTop ? 1 : 0
+                        Layout.column: 0
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(Style.space(300), panel.height * 0.4)
+                        visible: root.helpOpen
+                        clip: true
+                        contentWidth: width
+                        contentHeight: helpText.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
+                        activeFocusOnTab: true
+                        onVisibleChanged: { if (visible) contentY = 0; }
+                        Text {
+                            id: helpText
+                            objectName: "agavaiPipelineText"
+                            width: parent.width - Style.space(10)
+                            text: root.pipelineText()
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            color: root.ink
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.caption
+                        }
+                        Rectangle {
+                            visible: helpView.contentHeight > helpView.height
+                            x: helpView.width - width
+                            y: helpView.contentY + (helpView.contentY / Math.max(1, helpView.contentHeight - helpView.height)) * (helpView.height - height)
+                            width: Style.space(3)
+                            height: Math.max(Style.space(20), helpView.height * helpView.height / helpView.contentHeight)
+                            radius: width / 2
+                            color: root.inkMuted
+                        }
+                    }
                     ColumnLayout {
                         Layout.row: root.atTop ? 1 : 0
                         Layout.column: 0
                         Layout.fillWidth: true
-                        visible: !!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool || root.recording
+                        visible: !root.helpOpen && (!!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool || root.recording)
                         spacing: Style.space(12)
 
                         RecordingLive {
@@ -440,6 +510,13 @@ Item {
                                     font.family: Style.font.family
                                     font.pixelSize: Style.font.caption
                                     elide: Text.ElideRight
+                                }
+                                NativeButton {
+                                    objectName: "agavaiHelp"
+                                    quiet: true
+                                    text: "?"
+                                    accessibleName: root.helpOpen ? "Close version and pipeline help" : "Version and pipeline help"
+                                    onClicked: root.helpOpen = !root.helpOpen
                                 }
                                 NativeButton {
                                     objectName: "agavaiMinimize"

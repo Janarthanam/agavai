@@ -24,18 +24,17 @@ _PLAYBACK_WAVS: list[Path] = []
 log = logging.getLogger(__name__)
 
 
+def speech_engines(cfg: Config) -> list[str]:
+    order = [(cfg.tts.prefer or "kokoro").lower(), "kokoro", "espeak"]
+    return list(dict.fromkeys(engine for engine in order if engine in {"kokoro", "espeak"}))
+
+
 def speak(text: str, cfg: Config) -> str:
     """Speak text. Returns the engine used: kokoro, espeak, notify, or empty."""
     text = " ".join(text.split())
     if not text:
         return ""
-    prefer = (cfg.tts.prefer or "kokoro").lower()
-    order = [prefer, "kokoro", "espeak"]
-    seen: set[str] = set()
-    for engine in order:
-        if engine in seen or engine == "notify":
-            continue
-        seen.add(engine)
+    for engine in speech_engines(cfg):
         if engine == "kokoro" and _kokoro(text, cfg):
             log.info("tts engine=kokoro")
             return "kokoro"
@@ -344,6 +343,7 @@ def _interruptible_speak(
     *,
     stop_requested: Callable[[], bool] | None = None,
     poll_s: float = 0.1,
+    on_engine: Callable[[str], None] | None = None,
 ) -> str:
     """Listener-routed playback: synth + owned pw-play group + poll loop.
 
@@ -355,28 +355,30 @@ def _interruptible_speak(
     if not text:
         return "silent"
     cancelled = stop_requested if stop_requested is not None else (lambda: False)
-    prefer = (cfg.tts.prefer or "kokoro").lower()
-    order = [prefer, "kokoro", "espeak"]
-    seen: set[str] = set()
-    for engine in order:
-        if engine in seen or engine == "notify":
-            continue
-        seen.add(engine)
+    for engine in speech_engines(cfg):
         if engine == "kokoro":
             started = time.monotonic()
             wav = _kokoro(text, cfg, keep_wav=True)
             if wav is None:
                 continue
             synth_secs = time.monotonic() - started
+            if on_engine:
+                on_engine("kokoro · synthesized; starting playback")
             result = _play_interruptible(Path(wav), cancelled, poll_s=poll_s)
+            if on_engine:
+                on_engine(f"kokoro · playback {result}")
             log.info("tts engine=kokoro synth_secs=%.2f playback=%s", synth_secs, result)
             return result
         if engine == "espeak":
             if _espeak(text):
+                if on_engine:
+                    on_engine("espeak")
                 log.info("tts engine=espeak")
                 return "silent"
             continue
     notify(text)
+    if on_engine:
+        on_engine("notification only · speech unavailable")
     log.warning("tts failed; notification only")
     return "silent"
 

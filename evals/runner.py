@@ -185,8 +185,8 @@ class Recorder:
         self._note_change()
         return result
 
-    def select_head_ids(self, utterance, cfg):
-        heads = _real_select_head_ids(utterance, cfg)
+    def select_head_ids(self, utterance, cfg, **kwargs):
+        heads = _real_select_head_ids(utterance, cfg, **kwargs)
         self.heads.append(list(heads))
         return heads
 

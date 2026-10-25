@@ -9,7 +9,7 @@ import re
 import time
 import urllib.error
 import urllib.request
-from typing import Protocol
+from typing import Callable, Protocol
 
 from agavai.config import Config
 from agavai.brain import create_brain
@@ -167,17 +167,19 @@ def fallback_head_ids(utterance: str, cfg: Config) -> list[str]:
     return KeywordRouter().select(utterance)[:2]
 
 
-def select_head_ids(utterance: str, cfg: Config) -> list[str]:
+def select_head_ids(utterance: str, cfg: Config, *, report: Callable[[str], None] | None = None) -> list[str]:
     started = time.monotonic()
     if cfg.router.backend == "none":
         return []
     router = make_router(cfg)
     source = cfg.router.backend
+    failure = ""
     try:
         heads = router.select(utterance)
     except Exception as exc:
         log.warning("router backend=%s failed (%s: %s); fallback=%s", cfg.router.backend, type(exc).__name__, exc, cfg.router.fallback)
         heads = []
+        failure = f" ({type(exc).__name__})"
     out = []
     for hid in heads:
         if hid in {"chat", ""}:
@@ -188,7 +190,8 @@ def select_head_ids(utterance: str, cfg: Config) -> list[str]:
     # name a head, and without its tools the model can only talk.
     if not out:
         out = fallback_head_ids(utterance, cfg)
-        if out:
-            source = "keyword"
+        source = cfg.router.fallback
+    if report:
+        report(f"{cfg.router.backend}{failure} → {source} · heads: {', '.join(out[:2]) or 'none'}")
     log.info("router backend=%s source=%s heads=%s secs=%.2f", cfg.router.backend, source, ",".join(out[:2]) or "none", time.monotonic() - started)
     return out[:2]

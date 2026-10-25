@@ -192,6 +192,7 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
     heads = list(ui.model_heads) if messages else []
     ui.pending_action = None
     ui.user(text, keep_display=continue_conversation)
+    ui.pipeline_event("Control", f"{command} · model and router bypassed")
     messages.append({"role": "user", "content": text})
     if command == "no":
         reply = "Cancelled the pending action." if pending else "There is no pending action to cancel."
@@ -423,6 +424,8 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if escalated or cfg.large_brain is None:
                 raise LlmError(reason)
             log.warning("turn escalated from=%s to=%s: %s", active_cfg.model_id, cfg.large_brain.model_id, reason)
+            if ui:
+                ui.pipeline_event("Fallback", f"{active_cfg.model_id} → {cfg.large_brain.model_id}: {reason}")
             routing_spent = routes_itself(active_cfg, cfg)
             active_cfg = cfg.large_brain
             backend = create_brain(active_cfg, chat=chat, health=health)
@@ -439,6 +442,8 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             escalate(str(exc))
         if prior_messages and not backend.tool_only and not escalated:
             try:
+                if ui:
+                    ui.brain(active_cfg, "Context")
                 related = _continues_conversation(text, prior_messages, replace(cfg, llm=active_cfg))
             except LlmError as exc:
                 escalate(str(exc))
@@ -449,15 +454,22 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 prior_messages = []
                 prior_heads = []
                 ui.user(text)
+                ui.brain(active_cfg, "Context · new conversation")
 
         def select_tools():
             all_tools = active_cfg.tool_selection == "all" or cfg.router.backend == "none" or routes_itself(active_cfg, cfg)
             if all_tools:
                 heads = []
+                if ui:
+                    detail = "combined with Needle inference" if routes_itself(active_cfg, cfg) else "bypassed · all tools"
+                    ui.pipeline_event("Router", detail)
             elif routing_spent:
                 heads = _merge_heads(fallback_head_ids(text, cfg), prior_heads)
+                if ui:
+                    ui.pipeline_event("Router", f"{cfg.router.fallback} fallback after combined Needle · heads: {', '.join(heads) or 'none'}")
             else:
-                heads = _merge_heads(select_head_ids(text, cfg), prior_heads)
+                report = (lambda detail: ui.pipeline_event("Router", detail)) if ui else None
+                heads = _merge_heads(select_head_ids(text, cfg, report=report), prior_heads)
             return heads, _turn_tools(heads, cfg, ui, all_tools=all_tools)
 
         head_ids, selected = select_tools()
@@ -508,6 +520,8 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 continue
             rounds += 1
             try:
+                if ui:
+                    ui.brain(active_cfg, "Brain")
                 message = backend.respond(messages, offered)
             except LlmError as exc:
                 escalate(str(exc))
@@ -563,6 +577,8 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 head_ids.extend(extra_heads)
                 selected = _turn_tools(head_ids, cfg, ui)
                 selected_names = {item["function"]["name"] for item in selected}
+                if ui:
+                    ui.pipeline_event("Tools", f"Missing-head retry · added: {', '.join(extra_heads)}")
                 continue
             for call in calls:
                 name = (call.get("function") or {}).get("name") or ""
