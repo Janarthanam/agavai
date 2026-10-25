@@ -4,9 +4,9 @@ Every layer of a voice request should leave a line in one place, so a bad reques
 
 ## Surface
 
-- [~] P1 voice Log each request through speech recognition, routing, the model, tools and speech in the user journal, tagged with one request id
+- [x] P1 voice Log each request through speech recognition, routing, the model, tools and speech in the user journal, tagged with one request id
 
-Status: in progress.
+Status: implemented, validated and committed on `t3/request-logging` (`bfc869e`, `b3d586a`). Waiting for input: may `t3/request-logging` be merged into `main`? It fast-forwards from `68f2fc7`. Merging means running the merge in the main checkout `/home/janar/Projects/agavai`, which has an untracked `:memory:.ses` that isn't mine. The running assistant uses `~/.local/bin/agavai` → `t3-0363bfd0` (`t3/test-whistle-needle-engines`), so this logging is not live until that branch takes it.
 
 ### Acceptance
 
@@ -43,3 +43,40 @@ Status: in progress.
     - User-facing CLI messages (`agavai stop` with no listener, overlay summon failure) stay on stderr. Diagnostics from the background path move to the log.
   - Out of scope here: the energy/Silero VAD and the Whistle/Needle brain tiers exist only on `t3/test-whistle-needle-engines`. They need log lines when that branch merges into `main`.
   - Planned files: `src/agavai/{journal,config,__main__,app,asr,orchestrator,router,llm,tools,tts}.py`, `share/config.example.toml`, `features/environment.py`, a new `features/request_log.feature` with steps, `features/config.feature`, `docs/flow.md`, this task.
+- 2026-10-25T12:46:05+05:30 — Claude Code session request-logging — implemented and committed: `bfc869e` (code and tests) and `b3d586a` (docs).
+  - `src/agavai/journal.py`:
+    - `setup(level)` attaches a `SysLogHandler("/dev/log")` with ident `agavai: ` to the `agavai` logger, unless that logger already has a handler.
+    - `tagged(handler)` adds the `request=%(request)s` prefix.
+    - `start_request(session_id)` numbers captures, and `clip()` makes one line of at most 500 characters for debug text.
+  - Where `setup` is called: `main()` calls it with `info` before loading config, logs a config that fails to load with its traceback, then calls it again with `[log] level`.
+  - Lines per module:
+    - `__main__`: session start and end (`ended` reason, set at each return and logged in `finally`), `asr end reason=eou|empty|enter|cancel|stream_ended words= secs=`, `listen failed`, `asr failed`, `asr did not start`, `turn failed` (replaces `traceback.print_exc`), and `session crashed`.
+    - `asr`: `asr ready device= load_secs=`; worker stderr is logged instead of printed, and `_failure` keeps the same overlay text.
+    - `router`: a warning naming the exception and fallback, then `router backend= source= heads= secs=`. Fallback `none` still returns no heads.
+    - `llm.chat`: `llm tools= prompt_tokens= completion_tokens= calls= secs=`, read from llama-server's `usage`.
+    - `orchestrator`: `run_turn` wraps `_run_turn` with `turn start`/`turn done` (text and reply at debug), plus `context choice=`, `turn control=`, and warnings for a stopped model, `LlmError` and exhausted steps.
+    - `tools.call_tool`: wraps `_run_tool` with `tool name= status= secs=`, where status reuses `ui._action_failed`. Arguments and result are at debug, and a raised exception leaves its traceback.
+    - `tts`: engine, Kokoro `synth_secs` and `playback=`, and failures as warnings. Local `log` path variables were renamed `log_path` so they no longer shadow the module logger.
+    - `app`: `invoke summoned the overlay; started_session=`, plus an error when summon fails. The user-facing stderr line stays.
+  - Config: `[log] level` (`info` or `debug`), validated in `load_config`.
+  - Files: `src/agavai/{journal,__main__,app,asr,config,llm,orchestrator,router,tools,tts}.py`, `share/config.example.toml`, `features/environment.py`, `features/request_log.feature`, `features/steps/request_log_steps.py`, `features/config.feature`, `features/steps/config_steps.py`, `docs/{flow,architecture}.md`.
+  - Tests: `features/environment.py` installs an in-memory handler on the `agavai` logger, so the suite never writes to the user's journal. Verified: no `agavai` journal lines appeared from suite runs. `request_log.feature` covers:
+    - the journal datagram format;
+    - a strict per-layer sequence for a typed request, with no text at `info`;
+    - text at `debug`;
+    - capture numbering and endings in a listen session;
+    - recognizer readiness;
+    - a recognizer that does not start;
+    - a turn traceback;
+    - router fallback;
+    - invoke outcome;
+    - a config error.
+  - Validation:
+    - `PYTHONPATH=src AGAVAI_CONFIG="$PWD/share/config.example.toml" <t3-0363bfd0>/.venv/bin/behave --tags=-asr_model`: 259 passed, 3 skipped.
+    - Without `AGAVAI_CONFIG`, the two `asr_worker` scenarios fail on missing numpy because they read `[asr] venv` from the live host config, which belongs to the other branch. That's environment, not this change.
+    - Mutations, each caught by exactly its scenario: removing the per-capture `start_request`, dropping the tool line, logging the turn text at `info`, and dropping the router failure warning. The unmutated copy passes.
+    - Live check on the host, with request `e2e0test-1`, the keyword router, the real `agavai-llm` and the `clock_now` tool: four lines under `journalctl --user -t agavai`, with real token counts (`prompt_tokens=15 completion_tokens=2`).
+  - Observed, not changed: before the first turn of a session completes, each capture calls `ui.listening()`, which begins a new Snapshot session id. So noise before the first request moves later requests to a new prefix. Documented in `docs/flow.md` under Request log.
+  - Follow-ups:
+    - When `t3/test-whistle-needle-engines` merges, its energy/Silero VAD, Whistle and Needle/brain tiers need lines in this format. That branch already has a few `log.info` calls (`ASR ready`, `ASR endpoint`, `ASR final`, `brain …`), which would start reaching the journal.
+    - The detached listener's stdout and stderr still go to `/dev/null`. Its diagnostics now go to the log instead.
