@@ -2,7 +2,7 @@
 
 - [x] P1 ui Show the running version and each pipeline stage from a small help icon
 
-Status: complete. Implementation committed as `c52d059`; installation/deployment is not part of this change.
+Status: in progress. Implementation committed as `c52d059`; user authorized deployment from main with Parakeet streaming, Qwen/all and no Jev router.
 
 ### Acceptance
 
@@ -20,3 +20,5 @@ Status: complete. Implementation committed as `c52d059`; installation/deployment
 - 2026-10-25T19:02:18+05:30 — Codex session pipeline-help — implementation and self-review finished, awaiting commit. Final full E2E BDD run with `AGAVAI_NATIVE_UI_CHECK=1`, example config and installed Cactus/Silero test assets: 31 features, 440 scenarios and 2159 steps passed; four opt-in brain-comparison scenarios skipped. Native scenario runs all four real Quickshell checks (compact, canvas-focus, recording, help), including keyboard scrolling/Escape, Enter isolation, all corners, live updates, stale metadata and recording bypass. Corrected the focus fixture by mapping with on-demand focus and parenting QtTest to the target window. Inspected the captured help panel visually; version and wrapped stage details are readable. `git diff --check` clean. Scope reviewed against the user request; no deployment or installed files changed.
 
 - 2026-10-25T19:02:32+05:30 — Codex session pipeline-help — complete. Commit `c52d059` implements the user request and the acceptance criteria above. Validation: full BDD 440 scenarios/2159 steps passed, including all four native checks; four opt-in comparison scenarios skipped. Self-review and visual inspection finished; code working tree clean after commit. Deployment requires separately authorized changes outside this repository.
+
+- 2026-10-25T19:05:00+05:30 — Codex session pipeline-help-deploy — main fast-forwarded from `31db757` to `09bdac7` after fetching origin (no newer main commits). Scope: deploy native help from main; configure installed Parakeet streaming/native → Qwen3-4B/all-tools, router none, no redundant fallback. Existing speech assets and Qwen service found. Installed launcher still points to recordings-deploy; no active recording/listener. Planned host files: config.toml, agavai launchers, janar.agavai plugin and Agavai user units; backup before replacement. Unrelated main checkout `:memory:.ses` remains untouched.
