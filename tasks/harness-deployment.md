@@ -1,8 +1,9 @@
 # Deploy the Agavai harness from main
 
 - [x] P1 voice Deploy the validated in-process harness and UI-independent events
+- [ ] P2 voice Deploy durable sessions, spoken audio and structured turn results
 
-Status: complete. Owner: Codex session harness-deploy. User authorized deployment. Preserve the saved Whistle/Cactus ASR, Silero VAD, Needle router/primary and Qwen fallback configuration. Deploy from local main; no remote push requested. P2 persistence remains planned.
+Status: in progress. Owner: Codex session harness-results-deploy. User authorized deployment of durable sessions and structured results. Preserve the saved Whistle/Cactus ASR, Silero VAD, Needle router/primary and Qwen fallback configuration. Deploy from local main; no remote push requested.
 
 ### Acceptance
 
@@ -20,3 +21,5 @@ Status: complete. Owner: Codex session harness-deploy. User authorized deploymen
 - 2026-10-26T11:29:04+05:30 — Codex session harness-deploy — validation: installed `agavai explain/status` identifies the new harness and existing Whistle/VAD/Silero/Needle/Qwen configuration. Live installed “what time is it” completed with a typed successful screen read, Qwen interpretation and Kokoro; UI reports `0.1.0 · 933cf25`, answered task and actual Needle→Qwen execution. Model-quality limitation: Needle chose `screen_context` rather than the dedicated time tool; this deployment does not change model inference quality. Native BDD `features/pipeline_help.feature:35` passed (1 scenario / 5 steps, all four underlying compact/canvas-focus/recording/help checks). Earlier intermittent focus failures remain historical evidence, not a bug fix claim. Logs: `/tmp/agavai-harness-deploy-smoke.log`, `/tmp/agavai-harness-deploy-native.log`. Existing full runtime validation: 471 scenarios / 2353 steps passed before deployment. Reviewed diff; current changes only deployment-status docs and trackers. Implementation/deployment complete, awaiting bookkeeping commit. P2 persistence remains planned; no recording/audio data deleted.
 
 - 2026-10-26T11:29:21+05:30 — Codex session harness-deploy — complete: deployment/validation evidence committed as `abdd390` and fast-forwarded into installed local main. Runtime first activated at `933cf25`; later commits contain documentation/bookkeeping only. Saved model configuration unchanged, services healthy, native BDD and live smoke passed. Main and implementation checkout clean before this final task-only status update. Changed file: `tasks/harness-deployment.md`. No remote push.
+
+- 2026-10-26 — Codex session harness-results-deploy — started after explicit deploy request at clean `dcb1e79`; installed main is clean `dee5cce`. Fetch found no newer origin/main; main is an ancestor, so integration can fast-forward. Scope: deploy persistence (`76c738b`) and structured results (`b253af8`) from main, update changed Chat.qml, validate saved configuration/services/installed result and session APIs plus native BDD. Existing listener is speaking with answered status and no active recording; stop gracefully before switching code. Back up installed source/config/plugin/units first. No installer migrations, model/config/layout changes or remote push. Changed repository file: this deployment tracker; host changes are the authorized deployment and isolated validation.
