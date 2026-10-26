@@ -183,7 +183,7 @@ class _Captures:
 
 def _listen(context, captures, turn):
     with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.cue_think"), patch("agavai.harness.session.hide_listen"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="completed"), patch("agavai.harness.session.open_stream", return_value=_Captures(captures)), patch("agavai.harness.Harness.run_turn", side_effect=turn if isinstance(turn, Exception) else lambda text, **kwargs: turn(text, context.cfg, context.ui, **kwargs)):
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
 
 
 @when("an automatic session hears a request, noise, and a follow-up")

@@ -136,7 +136,7 @@ def session(context, sequences, stop_body=None):
         return "Done"
 
     with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start") as chime, patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", side_effect=stop_body or default_stop) as submit:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.submit_count = submit.call_count
         context.submit_calls = submit.call_args_list
         context.start_chimes = chime.call_count
@@ -159,7 +159,7 @@ def missing(context):
 
     scripted = _Down()
     with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", return_value="Done") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.submit_count = submit.call_count
 
 
@@ -167,7 +167,7 @@ def missing(context):
 def recognizer_down(context):
     down = AsrError("Streaming ASR model is not installed. Run scripts/download-asr.sh.")
     with patch("agavai.harness.session.cue_start") as chime, patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.open_stream", side_effect=down), patch("agavai.harness.session._run_stop_body") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.submit_count = submit.call_count
         context.start_chimes = chime.call_count
 
@@ -258,7 +258,7 @@ def _choice_session(context, sequences, replies):
 
     scripted = _Scripted(sequences, on_open=opened)
     with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.speak"), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.harness.session.open_stream", return_value=scripted), patch("agavai.harness.session._run_stop_body", side_effect=stop_body):
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.submit_count = len(context.continued)
 
 

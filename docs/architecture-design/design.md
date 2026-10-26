@@ -15,7 +15,8 @@ acceptance matrix and references.
 
 | Component | Code / interface |
 |---|---|
-| Harness | Harness(cfg, ui).run_turn(text, continue_conversation=...) |
+| Harness | Harness(cfg, on_event=consumer, should_cancel=callback).run_turn(text, continue_conversation=...) |
+| Output events | harness/events.py: ordered, serializable HarnessEvent envelopes with detached data |
 | Session controller | harness/session.py: listener identity, ASR events, controls, recording |
 | Context store | harness/context.py: tasks, archive, proposals, source revision, prompt projection |
 | Decision layer | harness/routing.py: capability/source policy, language task relation |
@@ -27,7 +28,8 @@ acceptance matrix and references.
 | Native projection | ui.py, canvas.py, plugin/Chat.qml, plugin/BarWidget.qml |
 
 The former orchestrator and CLI-owned listener were migrated rather than retained
-alongside a second harness. ChatUi owns display data only.
+alongside a second harness. ChatUi owns display data only and consumes events
+through `on_harness_event`. Headless consumers require no native snapshot.
 
 ## Critical flows
 
@@ -48,7 +50,7 @@ sequenceDiagram
     Model-->>Engine: Answer or candidate calls
     Engine->>Execute: Validate and dispatch ordered calls
     Execute-->>Context: Full typed outcome, task and request identity
-    Engine-->>Session: Accepted reply and snapshot projection
+    Engine-->>Session: Accepted reply and UI-independent output events
 ~~~
 
 Recording summaries bind corrected source before calling a language model, with no

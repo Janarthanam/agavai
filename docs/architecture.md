@@ -20,8 +20,10 @@ flowchart LR
     Harness <--> Brain[Needle worker / llama-server]
     Harness --> Execute[Execution manager]
     Execute --> Tools[Allowlisted desktop adapters]
-    Harness --> Snapshot[Native snapshot]
-    Session --> Snapshot
+    Harness --> Events[Harness output events]
+    Session --> Events
+    Events --> Snapshot[Native snapshot]
+    Events --> Collector[Headless consumer]
     Snapshot --> UI[Quickshell overlay]
     Harness --> TTS[Speech service / playback]
 ~~~
@@ -39,11 +41,19 @@ microphone session. Closing it discards session memory; recording files survive.
 | Context store | Session/task/request identity, complete task messages, task archive, source revision, hold/draft, pending proposal |
 | Execution manager | Ordered call records, exact arguments, actual full outcomes |
 | Inference slot | One outstanding provider operation and cancellation fence |
+| Harness output | Ordered domain events, detached payloads and independent cancellation input |
 | Native snapshot | Transcripts, canvas, task status, tool status, actual pipeline events |
 
 ChatUi has no model-message history, inherited tools or executable pending action.
 A snapshot cannot resurrect a proposal. Task reset archives the previous task,
 clears its prompt/head inheritance and invalidates confirmation.
+
+`Harness(cfg, on_event=consumer, should_cancel=callback)` has no UI dependency.
+`ChatUi.on_harness_event` is the native snapshot adapter. A headless collector
+receives the same versioned event envelope and full tool outcomes without creating
+`ui.json`. See the [event contract](voice-agent-harness.md#ui-independent-event-interface).
+The stream is synchronous and memory-only; [durable sessions and saved-by-default
+spoken-turn audio](../tasks/session-persistence.md) remain planned P2 work.
 
 ## Routing and models
 
@@ -108,6 +118,7 @@ with existing timeouts; interruption does not claim rollback.
 |---|---|
 | __main__.py | CLI parsing and command composition |
 | harness/__init__.py | Harness entry point and owned context |
+| harness/events.py | Versioned output events and sink; no graphical imports |
 | harness/session.py | Capture, listener/control transport, recording lifecycle |
 | harness/context.py | Task state, history/archive, prompt packing |
 | harness/routing.py | Task decisions and context relation |

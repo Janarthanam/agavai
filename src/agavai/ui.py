@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from agavai import __version__
+from agavai.brain import brain_label
 from agavai.config import Config, LlmConfig
-from agavai.canvas import display_for, OPEN_EXTS
+from agavai.canvas import answer_block, display_for, OPEN_EXTS
+from agavai.harness.events import HarnessEvent
 from agavai.richtext import rich_text
 from agavai.tts import speech_engines
 
@@ -60,11 +62,6 @@ def _running_version() -> str:
         except (OSError, subprocess.SubprocessError):
             pass
     return f"{__version__} · source revision unavailable"
-
-
-def brain_label(tier: LlmConfig) -> str:
-    label = f"{tier.model_id} · {tier.backend} · {tier.model_path.name}"
-    return label + (f" · {tier.base_url} ({tier.alias})" if tier.backend == "llama-server" else "")
 
 
 def _pipeline_config(cfg: Config) -> list[dict[str, str]]:
@@ -118,6 +115,63 @@ class ChatUi:
         self.data["execution"] = []
         self.data["model_id"] = (cfg.small_brain or cfg.llm).model_id
         self.data["input_mode"] = "typed"
+
+    def on_harness_event(self, event: HarnessEvent) -> None:
+        """Project domain events through the existing native snapshot methods."""
+        if event.kind != "session_started" and self.cancelled():
+            return
+        data = event.data
+        match event.kind:
+            case "session_started":
+                self.begin_session(event.session_id)
+            case "request_committed" | "task_started" | "confirmation_requested":
+                pass  # turn_input projects the selected task's presentation separately.
+            case "turn_input":
+                self.user(data["text"], keep_display=data["keep_context"])
+            case "conversation_cleared":
+                self.clear_conversation()
+            case "listening":
+                self.listening() if data["fresh"] else self.continue_listening()
+            case "partial":
+                self.partial(data["text"])
+            case "level":
+                self.level(data["db"], data["vad_state"], data["vad_backend"])
+            case "transcribing":
+                self.transcribing()
+            case "stage":
+                self.pipeline_event(data["stage"], data["detail"])
+            case "decision":
+                self.pipeline_event("Decision", f"{data['capability']} · {data['reason']}")
+            case "model_requested":
+                self.data["model_id"] = data["model_id"]
+                self.pipeline_event(data["purpose"], "Requested " + data["label"])
+            case "tool_started":
+                self.tool_start(data["name"], data["arguments"])
+            case "tool_completed":
+                self.tool_done(data["name"], data["result"], status=data["status"])
+            case "answer":
+                self.display(answer_block(data["title"], data["markdown"]))
+            case "display":
+                self.display(data["content"])
+            case "reply":
+                self.assistant(data["text"])
+            case "source_changed":
+                self.data["source"] = data["source"]
+                self._write()
+            case "task_status":
+                self.task_state(event.task_id, event.request_id, data["status"])
+            case "recording":
+                self.recording(data["content"], summon=data["summon"])
+            case "recording_ended":
+                self.end_recording()
+            case "speech":
+                self.speech(data["engine"])
+            case "idle":
+                self.idle()
+            case "error":
+                self.error(data["message"])
+            case _:
+                raise ValueError(f"Unsupported harness event: {event.kind}")
 
     def begin_session(self, session_id: str) -> None:
         """Reset the overlay to a blank session: prior turns and canvas drop."""

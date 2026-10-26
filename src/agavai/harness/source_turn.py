@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 
-from agavai.canvas import answer_block, read_aloud
+from agavai.canvas import read_aloud
 from agavai.harness.sources import SourceError, correct_transcript, load_recording, refresh_recording, transcript
 from agavai.llm import LlmError, parse_tool_calls
 
@@ -32,25 +32,22 @@ def byte_chunks(text, limit):
     return out
 
 
-def run_source_turn(text, decision, cfg, ui, context, infer, create_brain, chat, health):
+def run_source_turn(text, decision, cfg, output, context, infer, create_brain, chat, health):
     try:
         if decision.capability == "correction":
             reply = correct_transcript(cfg, context, text)
-            if ui:
-                ui.pipeline_event("Source", "Transcript corrected; previous derived answer is stale" if context.derived_revision else "Transcript corrected; heard words retained")
-                ui.data["source"] = {"kind": "recording", "path": str(context.recording),
-                                     "revision": context.source_revision,
-                                     "derived_stale": bool(context.derived_revision and context.derived_revision != context.source_revision)}
-                ui.display(None)
+            output.pipeline_event("Source", "Transcript corrected; previous derived answer is stale" if context.derived_revision else "Transcript corrected; heard words retained")
+            output.source_changed({"kind": "recording", "path": str(context.recording),
+                                 "revision": context.source_revision,
+                                 "derived_stale": bool(context.derived_revision and context.derived_revision != context.source_revision)})
+            output.display(None)
             context.remember([*context.messages, {"role": "user", "content": text},
                               {"role": "assistant", "content": reply}], [])
-            if ui:
-                ui.assistant(reply)
+            output.assistant(reply)
             return reply
         meta = load_recording(cfg, context, text)
         revision = context.source_revision
-        if ui:
-            ui.pipeline_event("Source", f"{meta['title']} · transcript revision {revision[:12]}")
+        output.pipeline_event("Source", f"{meta['title']} · transcript revision {revision[:12]}")
         source = transcript(meta)
         if not source.strip():
             raise SourceError("That recording has no transcript to summarize.")
@@ -58,8 +55,7 @@ def run_source_turn(text, decision, cfg, ui, context, infer, create_brain, chat,
         if tier is None:
             raise SourceError("This request needs a language model. Configure a local Qwen brain to interpret recordings.")
         backend = create_brain(tier, chat=chat, health=health)
-        if ui:
-            ui.brain(tier, "Source reasoning")
+        output.brain(tier, "Source reasoning")
         if not infer(backend.ready):
             raise LlmError("The language model is not running. Run: agavai services sync")
         limit = max(256, (tier.ctx_size - tier.max_tokens) * 2 - 4000 - len(text.encode()))
@@ -89,18 +85,15 @@ def run_source_turn(text, decision, cfg, ui, context, infer, create_brain, chat,
         context.derived_revision = revision
         spoken = re.split(r"\n|(?<=[.!?])\s+", content, maxsplit=1)[0].strip("# *-")
         reply = read_aloud(spoken[:280], None)
-        if ui:
-            ui.data["source"] = {"kind": "recording", "path": str(context.recording),
-                                 "revision": revision, "derived_stale": False}
-            ui.display(answer_block(meta["title"], content))
+        output.source_changed({"kind": "recording", "path": str(context.recording),
+                             "revision": revision, "derived_stale": False})
+        output.answer(meta["title"], content)
         context.remember([*context.messages, {"role": "user", "content": text},
                           {"role": "assistant", "content": content}], [])
-        if ui:
-            ui.assistant(reply)
+        output.assistant(reply)
         return reply
     except (SourceError, OSError, ValueError) as exc:
         context.turn_status = "needs_input"
         reply = str(exc)
-        if ui:
-            ui.assistant(reply)
+        output.assistant(reply)
         return reply

@@ -211,7 +211,7 @@ def step_turn(context, text):
 @when('I run a turn with text "{text}" on the chat UI')
 def step_turn_ui(context, text):
     context.before_turn = deepcopy(context.ui.data)
-    context.reply = run_turn(text, context.cfg, context.ui, context=context.harness.context)
+    context.reply = run_turn(text, context.cfg, context.harness.output, context=context.harness.context)
 
 
 @when('I continue the turn with text "{text}"')
@@ -221,7 +221,7 @@ def step_continue(context, text):
     context.before_heads = list(context.harness.context.heads)
     context.context_requests = []
     context.action_requests = []
-    context.reply = run_turn(text, context.cfg, context.ui, context=context.harness.context, continue_conversation=True)
+    context.reply = run_turn(text, context.cfg, context.harness.output, context=context.harness.context, continue_conversation=True)
 
 
 @then('the spoken reply should be "{text}"')

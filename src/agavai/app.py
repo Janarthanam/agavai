@@ -9,13 +9,16 @@ from agavai.harness.session import read_listener, start_session
 log = logging.getLogger(__name__)
 
 
-def run() -> int:
-    cfg = load_config()
+def open_session(cfg, *, record: bool = False) -> int:
     if summon_overlay():
         # A leftover "listening" state with no process must not block a new session.
-        started = read_listener(cfg) is None and start_session(cfg)
+        started = read_listener(cfg) is None and start_session(cfg, record=record)
         log.info("invoke summoned the overlay; started_session=%s", started)
         return 0
     log.error("overlay could not be summoned; no session started")
     print("Could not open Agavai. Ensure the Omarchy shell and janar.agavai plugin are running.", file=sys.stderr)
     return 1
+
+
+def run() -> int:
+    return open_session(load_config())

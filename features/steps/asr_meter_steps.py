@@ -77,7 +77,7 @@ def capture(context, *, cancel=False, empty=False, vad=False):
         return spawn([sys.executable, "-c", WORKER, str(context.recorded)], **kwargs)
 
     with patch("agavai.asr.subprocess.Popen", side_effect=popen), patch("agavai.asr.shutil.which", return_value="/usr/bin/parec"), patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.finish"), patch("agavai.harness.session._publish_pid"), patch("agavai.tts.sweep_playback_wavs"), patch.object(context.ui, "level", side_effect=level), patch("agavai.harness.session._run_stop_body") as submit:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.submit_count = submit.call_count
 
 

@@ -52,7 +52,7 @@ While recording, `ui.json` carries a `recording` block, and a saved recording is
 
 Typed results should include `id`, `kind`, `title`, `subtitle`, preview content/source, source tool, and explicit allowlisted actions. Markdown and HTML are distinct content types. Sanitize HTML, restrict link/media schemes, preserve local paths as data, and use an allowlisted file-open action. Do not execute tool-returned commands. The browser prototype deliberately renders a small escaped Markdown subset; it is not a production Markdown or HTML engine.
 
-The harness execution path passes full tool results to `ChatUi.tool_done()` before building the model-facing text. Typed results (files, folders, images, videos, and the other lists) are sent to the model as kind and readable name. List replies briefly summarize the results and point to the canvas instead of enumerating every filename. Filename-derived spoken labels omit extensions and replace underscores and hyphens with spaces; explicit human titles are retained. Echoed filenames and paths are replaced with those labels. The overlay keeps the full path for opening and preview. `canvas.display_for()` normalizes file search, wallpapers, themes, windows, status, reminders and explicit Markdown/HTML blocks. File search's JSON path list and a newline-path fallback are supported. File paths are encoded into local media URIs; text previews read at most 8 KiB per item. Preview selection is independent of opening. `agavai ui-open` validates the current session, selection and supported file type before invoking `xdg-open` with a fixed argument list; folders can open in the file manager. Executables and desktop launcher files are excluded.
+The harness emits full tool results and typed status in `tool_completed` events before building the model-facing text. `ChatUi.on_harness_event` projects them through `ChatUi.tool_done()`; headless consumers receive the same results without a snapshot. Typed results (files, folders, images, videos, and the other lists) are sent to the model as kind and readable name. List replies briefly summarize the results and point to the canvas instead of enumerating every filename. Filename-derived spoken labels omit extensions and replace underscores and hyphens with spaces; explicit human titles are retained. Echoed filenames and paths are replaced with those labels. The overlay keeps the full path for opening and preview. `canvas.display_for()` normalizes file search, wallpapers, themes, windows, status, reminders and explicit Markdown/HTML blocks. File search's JSON path list and a newline-path fallback are supported. File paths are encoded into local media URIs; text previews read at most 8 KiB per item. Preview selection is independent of opening. `agavai ui-open` validates the current session, selection and supported file type before invoking `xdg-open` with a fixed argument list; folders can open in the file manager. Executables and desktop launcher files are excluded.
 
 Live words come from the streaming local recognizer; simulated words in this prototype do not supply that capability. Keep the final recognizer authoritative, and handle partial revision, cancellation, missing devices, and slow recognition explicitly. The existing microphone meter drives the native orb now.
 
@@ -72,8 +72,10 @@ The `help` native scenario checks the actual session metadata, help toggle, keyb
 
 
 The UI projects harness state; it owns no authoritative history, inherited tool heads
-or executable proposal. The harness supplies the session ID to begin_session;
-entering listening mode keeps that identity. Tool rows receive explicit ok/error/unknown status rather
+or executable proposal. `ChatUi.on_harness_event` consumes the UI-independent
+[output contract](voice-agent-harness.md#ui-independent-event-interface). The
+`session_started` event supplies the session ID to begin_session; entering listening
+mode keeps that identity. Raw answer Markdown is rendered only by this adapter. Tool rows receive explicit ok/error/unknown status rather
 than inspecting result text. Task/request identity and progress are separate from
 tool completion. Recording answers carry source revision and stale-output metadata;
 pipeline help records the actual decision/model/source path.

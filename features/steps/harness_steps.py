@@ -16,11 +16,8 @@ from agavai.harness.engine import CONTEXT_SYSTEM
 from agavai.harness.session import listen_session, request_recording
 from agavai.recording import Recorder, correct, line_text
 from agavai.tools import execute_tool
-
-
-def call(name, arguments):
-    return {"content": "", "tool_calls": [{"id": "replay-" + name, "type": "function",
-            "function": {"name": name, "arguments": json.dumps(arguments)}}]}
+from features.support.tool_replay import call
+from features.support.session_replay import quiet_session
 
 
 @given("an isolated harness with a local scripted language service")
@@ -73,8 +70,15 @@ def harness_service(context):
     cfg.large_brain = LlmConfig(port=server.server_port, max_tokens=256, timeout_secs=5)
     cfg.small_brain = LlmConfig(backend="needle-cactus", model_id="action-replay")
     cfg.recordings.dir = context.runtime_dir / "recordings"
-    context.harness = Harness(cfg, context.ui)
-    assert context.ui.data["session_id"] == context.harness.context.session_id
+    context.harness_events = []
+    def collect(event):
+        context.harness_events.append(event)
+        if not getattr(context, "headless_harness", False):
+            context.ui.on_harness_event(event)
+    cancel = None if getattr(context, "headless_harness", False) else context.ui.cancelled
+    context.harness = Harness(cfg, on_event=collect, should_cancel=cancel)
+    if not getattr(context, "headless_harness", False):
+        assert context.ui.data["session_id"] == context.harness.context.session_id
     context.action = Mock(tool_only=True)
     context.action.ready.return_value = True
     context.action.respond.return_value = {"unsupported": "no match"}
@@ -330,14 +334,19 @@ def cancel_inference(context):
     thread.start()
     context.reply = context.harness.run_turn("open the browser")
     thread.join(2)
-    context.snapshot_at_cancel = context.ui.path.read_text()
+    context.events_at_cancel = deepcopy(context.harness_events)
+    if not getattr(context, "headless_harness", False):
+        context.snapshot_at_cancel = context.ui.path.read_text()
 
 
 @then("late inference cannot change the native snapshot")
+@then("late inference cannot publish another harness event")
 def late_no_write(context):
     context.model_release.set()
     context.harness.context.inference.running.join(2)
-    assert context.ui.path.read_text() == context.snapshot_at_cancel
+    assert context.harness_events == context.events_at_cancel
+    if not getattr(context, "headless_harness", False):
+        assert context.ui.path.read_text() == context.snapshot_at_cancel
     assert context.reply == ""
 
 
@@ -362,7 +371,6 @@ def no_queued_inference(context):
 @when("a recording shortcut arrives during model inference")
 def record_during_model(context):
     import agavai.harness.session as session
-    from contextlib import ExitStack
     context.record_started_while_waiting = False
     class Stream:
         captures = 0
@@ -384,14 +392,8 @@ def record_during_model(context):
         request_recording(context.cfg, "toggle")
     thread = threading.Thread(target=shortcut)
     thread.start()
-    with ExitStack() as stack:
-        for name in ("prepare_listen", "finish", "hide_listen", "cue_start", "cue_think", "cue_record", "cue_listen"):
-            stack.enter_context(patch.object(session, name))
-        stack.enter_context(patch.object(session, "open_stream", return_value=stream))
-        stack.enter_context(patch("agavai.tts.sweep_playback_wavs"))
-        stack.enter_context(patch("agavai.tts._interruptible_speak", return_value="completed"))
-        stack.enter_context(patch("agavai.recording._encode", return_value="Replay keeps uncompressed audio."))
-        listen_session(context.cfg, context.ui, harness=context.harness)
+    with quiet_session(), patch.object(session, "open_stream", return_value=stream):
+        listen_session(context.cfg, harness=context.harness)
     thread.join(2)
     context.harness.context.inference.running.join(2)
 

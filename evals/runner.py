@@ -242,14 +242,14 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
         stack.enter_context(patch.object(orchestrator, "call_tool", recorder.call_tool))
         stack.enter_context(patch.object(orchestrator, "select_head_ids", recorder.select_head_ids))
         ui = ChatUi(cfg)
-        harness = Harness(cfg, ui)
+        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
         in_session = 0
         for index, turn in enumerate(case.turns):
             if turn.get("new_session"):
                 clock.advance(float(turn.get("advance_hours", 12)))
                 world.now = clock.now
                 ui = ChatUi(cfg)
-                harness = Harness(cfg, ui)
+                harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
                 in_session = 0
             say = turn["say"]
             heard = spoken(say) if spoken and index == 0 else None

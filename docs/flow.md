@@ -119,7 +119,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 **In-process tools, not MCP inside the turn.** The voice loop calls `DISPATCH` directly so the 4B does not speak a second protocol. `agavai mcp` exposes the same functions for other clients. Putting MCP on the voice path would add a stdio hop and a second schema encoding without changing what can run. Assumption: every desktop action the model needs is already a named function.
 
-**Streaming ASR, not a file transcript.** Transport in is one 16 kHz mono capture. [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1) emits text while audio is still arriving. Interim hypotheses update user context and the overlay. They are not turns. End of utterance commits the line. End of boundary does not. The device defaults to CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. Detail is in [audio.md](audio.md). Voxtype’s file API stays on F9 dictation only. `ChatUi.partial` is the snapshot write for an interim line.
+**Streaming ASR, not a file transcript.** Transport in is one 16 kHz mono capture. [Parakeet-Realtime-EOU-120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1) emits text while audio is still arriving. Interim hypotheses update user context and the overlay. They are not turns. End of utterance commits the line. End of boundary does not. The device defaults to CPU. When the config selects GPU and an NVIDIA GPU is present, the same model runs there. Detail is in [audio.md](audio.md). Voxtype’s file API stays on F9 dictation only. `partial` harness events carry interim lines; `ChatUi.on_harness_event` projects them to the native snapshot.
 
 **Native Parakeet turn taking comes from the recognizer.** The legacy silence gate and Silero do not decide its endpoint. Whistle uses the explicit VAD or manual policy described above. Both use the existing capture; a second `parec` tap must not decide the turn. Enter commits the finalized hypothesis. Escape drops it. The LLM, including the router, does not run on a partial.
 
@@ -137,7 +137,7 @@ There are no containers. Voxtype’s sanitizer on port 18765 is a third llama-se
 
 The confirmation schema reserves one slot within `[router] max_tools`, including on missing-head retry. With fewer than two slots, or no desktop tools selected, it is unavailable. Outside the explicit wait/pause/resume hold controls, another nonempty committed utterance invalidates the pending proposal before health/classification; Qwen can prepare a replacement with corrected arguments. Empty input and partials leave it intact. Fresh conversation/session, isolated `Agavai`, process exit or dismissal clear it. Cancellation is checked before and after preparation/execution; it cannot undo a tool that already ran. An incorrect ASR EOU can still split a longer sentence: whole-utterance matching cannot repair endpointing.
 
-**Show structured answers on the canvas.** On a turn with a ChatUi and no desktop tools, Qwen is offered only the orchestration-only `show_answer(title, markdown, summary)`. A call must be alone, and all three fields must be nonblank. The Markdown becomes an `answer` canvas block, which expands the overlay, and the summary is the spoken reply. The turn ends in the same round, so no second model call runs after the canvas is published. The call and the Markdown stay in model history for follow-ups. These turns use a shorter chat system prompt without the desktop-tool lines. With those lines, Qwen3-4B put only 1 or 2 of 5 list answers on screen, and fewer still when the rule followed the short-answer rule. On an action route, a missing-head retry that adds desktop tools switches back to the desktop prompt; reasoning and synthesis remain restricted. A turn run without a ChatUi is never offered `show_answer`. Turns with desktop tools keep their whole `[router] max_tools` budget for those tools.
+**Show structured answers on the canvas.** On a turn with an event consumer and no desktop tools, Qwen is offered only the orchestration-only `show_answer(title, markdown, summary)`. A call must be alone, and all three fields must be nonblank. An `answer` event carries the title and raw Markdown, and the summary is the spoken reply. The native adapter renders an `answer` canvas block that expands the overlay; headless consumers receive the same content without a renderer. The turn ends in the same round, so no second model call runs after the canvas is published. The call and the Markdown stay in model history for follow-ups. These turns use a shorter chat system prompt without the desktop-tool lines. With those lines, Qwen3-4B put only 1 or 2 of 5 list answers on screen, and fewer still when the rule followed the short-answer rule. On an action route, a missing-head retry that adds desktop tools switches back to the desktop prompt; reasoning and synthesis remain restricted. A turn without an event consumer is never offered `show_answer`. A headless sink can receive it. Turns with desktop tools keep their whole `[router] max_tools` budget for those tools.
 
 ### How it fails
 
@@ -264,8 +264,12 @@ and [execution](../src/agavai/harness/execution.py) run in process.
   No measured end-to-end latency SLA is claimed.
 - **Configuration.** Existing brain, endpoint, head-router and service keys remain.
   Capability can select a language tier directly.
-- **Observability.** Snapshot: actual decision/model/source/fallback events, source
-  revision, task progress and tool outcomes. Logs retain originating request identity.
+- **Observability.** `Harness(cfg, on_event=consumer, should_cancel=callback)` emits
+  ordered, versioned events independently of the UI. Envelopes carry sequence, UTC
+  timestamp and session/task/request IDs. Task transitions are explicit; tool events
+  include call IDs and full typed outcomes. The native adapter projects actual
+  decisions/models/sources/fallback, revisions and progress into its snapshot.
+  Logs retain originating request identity. See the [event contract](voice-agent-harness.md#ui-independent-event-interface).
 
 Full module contracts and source/cancellation sequences:
 [voice-agent-harness.md](voice-agent-harness.md).
@@ -335,7 +339,7 @@ The harness owns model history, proposals and task archives; the snapshot owns p
 
 [src/agavai/ui.py](../src/agavai/ui.py).
 
-- **Deploy.** A JSON file, `$XDG_RUNTIME_DIR/agavai/ui.json`, written by ListenSession or by `agavai ask`. Overlay and Bar only read it.
+- **Deploy.** A JSON file, `$XDG_RUNTIME_DIR/agavai/ui.json`, written by the `ChatUi.on_harness_event` adapter in the listen or ask process. Overlay and Bar only read it. Headless harness callers need no snapshot.
 - **Lifecycle.** Writes are a temp file and `replace`. `begin_session` clears turns, transcript and display, and receives the authoritative `session_id` from the harness. Entering listening mode keeps it. `clear_conversation` clears presentation content while keeping that session id, so dismissal still suppresses late writes during a topic change. `continue_listening` clears the live transcript line and the error, and leaves the canvas. After `agavai cancel` stores the session id in `dismissed-session`, further writes from that id are skipped. `ui-open` checks the session id, `openable`, an absolute path, and the extension allowlist, then runs `xdg-open` with a fixed argument list.
 - **Latency.** The file is the UI protocol. Assumption: readers see a replace as one snapshot, not a torn write. Interim hypotheses are the hottest writer. A slow reader falls behind the file watch; nothing queues intermediate frames.
 - **Throughput.** One writer process in the voice path. `agavai ask` is another writer and will replace the file. It is not coordinated with ListenSession.

@@ -14,14 +14,13 @@ class ExecutionManager:
         if cancelled():
             return None
         fn = call["function"]
-        record = {"id": call.get("id"), "name": fn["name"], "arguments": fn.get("arguments") or "{}",
+        record = {"id": call.get("id") or fn["name"], "name": fn["name"], "arguments": fn.get("arguments") or "{}",
                   "status": "running", "task_id": task_id, "request_id": request_id}
         self.records.append(record)
         result = dispatch(fn["name"], fn.get("arguments") or "{}", cfg)
         record.update(status=result.status, result=result.text)
-        # The result remains recorded even if dismissal happened during the side effect.
-        if cancelled():
-            return None
+        # Observers must receive the actual outcome even if cancellation arrived
+        # during the side effect; the controller suppresses subsequent work.
         return result
 
 

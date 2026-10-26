@@ -10,9 +10,15 @@ import time
 from typing import Protocol
 
 from agavai.llm import LlmError, parse_tool_calls
+from agavai.config import LlmConfig
 from agavai.worker import WorkerError, WorkerProcess
 
 log = logging.getLogger(__name__)
+
+
+def brain_label(tier: LlmConfig) -> str:
+    label = f"{tier.model_id} · {tier.backend} · {tier.model_path.name}"
+    return label + (f" · {tier.base_url} ({tier.alias})" if tier.backend == "llama-server" else "")
 
 
 class BrainBackend(Protocol):

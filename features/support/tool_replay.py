@@ -1,6 +1,12 @@
 """Tool response replay used by end-to-end turn scenarios."""
+import json
 from unittest.mock import Mock, patch
 from agavai.outcomes import ToolOutcome
+
+
+def call(name, arguments):
+    return {"content": "", "tool_calls": [{"id": "replay-" + name, "type": "function",
+            "function": {"name": name, "arguments": json.dumps(arguments)}}]}
 
 
 def tool_patch(target, *, return_value=None, side_effect=None, wraps=None):

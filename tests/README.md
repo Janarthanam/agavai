@@ -52,3 +52,15 @@ real recording files, context and tool dispatch, with scripted OS/ASR boundaries
 They cover source grounding and limits, revisions, corrections, input hold, task
 changes, compaction, unknown effects, cancellation and recording during inference.
 These establish harness contracts; model quality remains separate evaluation evidence.
+
+`features/harness_events.feature` exercises that same harness with a collector and
+no snapshot. A separate process blocks `agavai.ui` imports while using the real HTTP
+transport. Scenarios cover ordered identities/task changes, confirmation payloads,
+full outcomes after cancellation, raw Markdown, source revisions, consumer failure
+and payload isolation, plus headless capture/recording controls. External OS,
+microphone and model-service boundaries are scripted; no live microphone is used.
+
+```bash
+env -u AGAVAI_NATIVE_UI_CHECK AGAVAI_CONFIG="$PWD/share/config.example.toml" \
+  PYTHONPATH=src .venv/bin/behave features/harness_events.feature
+```

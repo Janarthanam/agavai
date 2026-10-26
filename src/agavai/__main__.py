@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "ask":
         text = " ".join(args.text)
         ui = ChatUi(cfg)
-        harness = Harness(cfg, ui)
+        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
         journal.start_request(str(ui.data["session_id"]))
         cue_think(cfg)
         write_state(cfg, "thinking")
@@ -153,7 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         write_state(cfg, "idle")
         return 0
     if args.cmd == "listen":
-        return listen_session(cfg, ChatUi(cfg), record=args.record)
+        ui = ChatUi(cfg)
+        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
+        return listen_session(cfg, harness=harness, record=args.record)
     if args.cmd == "record":
         return request_recording(cfg, args.action)
     if args.cmd == "recording":

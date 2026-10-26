@@ -111,7 +111,7 @@ def _run(context, patches):
     for item in patches:
         item.start()
     try:
-        return listen_session(context.cfg, context.ui, record=True)
+        return listen_session(context.cfg, harness=context.harness, record=True)
     finally:
         for item in reversed(patches):
             item.stop()
@@ -191,7 +191,7 @@ def step_assistant_toggle(context):
     for item in patches:
         item.start()
     try:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
     finally:
         for item in reversed(patches):
             item.stop()
@@ -200,8 +200,9 @@ def step_assistant_toggle(context):
 def _record_cmd_idle(context, argv):
     with patch("agavai.__main__.load_config", return_value=context.cfg), patch("agavai.__main__.write_card"), \
             patch("agavai.harness.session.read_listener", return_value=None), \
-            patch("agavai.harness.session.summon_overlay", return_value=True), \
-            patch("agavai.harness.session.start_session", return_value=True) as start:
+            patch("agavai.app.summon_overlay", return_value=True), \
+            patch("agavai.app.read_listener", return_value=None), \
+            patch("agavai.app.start_session", return_value=True) as start:
         context.exit_code = main(argv)
         context.start_calls = start.call_args_list
 
@@ -233,7 +234,7 @@ def step_voice_start(context, text):
     for item in patches:
         item.start()
     try:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
     finally:
         for item in reversed(patches):
             item.stop()

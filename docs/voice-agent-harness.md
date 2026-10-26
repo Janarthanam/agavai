@@ -23,8 +23,9 @@ The initial harness must own:
 4. **Execution.** Validate calls, bind confirmations to their exact arguments,
    track completed calls, preserve actual outcomes across model escalation, and
    separate tool completion from fulfillment of the user's request.
-5. **Presentation.** Publish actual decisions, sources and outcomes to the native
-   snapshot, then produce an appropriate spoken response.
+5. **Output boundary.** Publish ordered, serializable decisions, sources and
+   outcomes through a UI-independent event sink, then produce an appropriate
+   spoken response. The native snapshot is one consumer.
 6. **Architectural parity.** CLI, live voice, recordings, typed requests, evals,
    BDD fixtures and current specifications use the same harness contracts.
 
@@ -70,8 +71,10 @@ flowchart TD
     Execution --> Tools[Allowlisted tool adapters]
     Tools -->|typed outcome and source| Execution
     Execution --> Context
-    Engine --> View[Native snapshot and canvas]
-    Session --> View
+    Engine --> Events[Harness output events]
+    Session --> Events
+    Events --> View[Native snapshot and canvas]
+    Events --> Collector[Headless collector]
     Engine --> Speech[Speech output service]
 ```
 
@@ -120,6 +123,65 @@ A new task archives the previous task and drops inherited tools and unrelated
 conversation from the next prompt. It does not delete recordings or pretend earlier actions never ran.
 Continuing a task keeps its relevant sources. A correction changes a source or
 pending request revision; it never rewrites the historical result of an action.
+
+### UI-independent event interface
+
+The public interface has no concrete UI parameter:
+
+```python
+events = []
+harness = Harness(cfg, on_event=events.append, should_cancel=cancelled.is_set)
+reply = harness.run_turn("list the planets")
+serialized = [event.to_dict() for event in events]
+```
+
+`on_event` receives one `HarnessEvent` synchronously on the controller thread.
+The constructor emits `session_started`. Each event has `schema_version=1`, a
+session-local increasing `sequence`, UTC ISO `timestamp`, `session_id`, `task_id`,
+`request_id`, a typed `kind` and a detached `data` dictionary. `to_dict()` produces
+JSON-serializable data. Consumers cannot mutate action arguments or context through
+the payload; consumer exceptions reach the caller as `EventDeliveryError` with
+the original cause, so source/model handlers cannot misclassify them. There is one sink,
+no background event bus, replay log or durable-delivery guarantee. Slow consumers
+delay the controller, so callbacks must stay short.
+
+`request_committed` records raw input once, before task classification. Its task
+ID is the task at admission. `task_started` explicitly reports each subsequent
+change, with the new envelope task ID and `previous_task_id` in its payload.
+Later action/result events carry the task selected for that request. Request IDs
+remain stable across classification and fallback. Capture events before the first
+request have an empty request ID; subsequent capture events reflect the current
+context and do not themselves commit another turn.
+
+| Event kinds | Payload contract |
+|---|---|
+| `session_started`, `request_committed`, `task_started`, `task_status` | Session lifecycle, raw `text`, previous task identity, or progress `status` |
+| `turn_input`, `conversation_cleared`, `listening`, `partial`, `transcribing`, `level` | Effective input and context retention, capture state, provisional text, dB/VAD metadata |
+| `decision`, `model_requested`, `stage` | Capability/reason/source, actual model/backend/path/purpose, or stage/detail |
+| `confirmation_requested` | Validated action `name`, exact `arguments` object and `question`; no action has executed |
+| `tool_started`, `tool_completed` | `name` and `call_id`; exact argument JSON on start, full `result` and typed `status` on completion |
+| `answer`, `reply`, `source_changed`, `display` | Title/raw Markdown, spoken text, source revision/staleness, or normalized content |
+| `recording`, `recording_ended`, `speech`, `idle`, `error` | Recording metadata, lifecycle, actual speech engine or error message; no raw audio |
+
+The event sink enables structured answers and confirmations even in a headless
+caller. Without a sink, those interactive tool schemas are not offered.
+`should_cancel` is a separate input callback; an event consumer's return value has
+no execution authority. Cancellation fences late model output. If cancellation
+arrives during a dispatched side effect, its actual `tool_completed` event is
+still emitted before `task_status=cancelled`; further actions and reply are
+suppressed. Cancellation cannot undo that side effect.
+
+`ChatUi.on_harness_event` adapts these events to the existing native snapshot
+methods and renders Markdown there. Harness producers never read the snapshot
+or import `agavai.ui`. Shared pure-Python canvas normalization supplies spoken
+result labels independently of the renderer. A dismissed native adapter ignores
+late projections, while a headless collector can retain the actual outcome.
+
+Durable sessions are [P2 work](../tasks/session-persistence.md), not implemented
+by the event interface. The planned layout uses a SQLite ledger and separate
+per-turn audio attachments, retained by default for accepted spoken input per
+the user's decision. Current task context remains in memory, existing explicit
+recordings remain durable, and there is no session history selector yet.
 
 ### Voice and correction semantics
 
@@ -269,13 +331,28 @@ Code: [execution.py](../src/agavai/harness/execution.py).
 - **Observability:** call ID, arguments revision, status, result reference,
   source kind, cancellation and request fulfillment independently of transport.
 
+### Harness output events
+
+Code: [events.py](../src/agavai/harness/events.py).
+
+- **Deployment:** in process, constructed by `Harness`; no graphical imports.
+- **Lifecycle/protocol:** one ordered `HarnessEvent` callback with detached data;
+  native and headless consumers use the same versioned contract above.
+- **Performance:** synchronous callback/deep-copy cost is on the controller path;
+  no new latency SLA is claimed. Consumers must not perform long blocking work.
+- **Throughput:** one controller producer and one sink; capture updates follow
+  existing bounded audio-level cadence. No queue, retries or replay retention.
+- **Configuration:** optional `on_event` and independent `should_cancel` callback.
+- **Observability:** sequence, timestamp, session/task/request/call identity,
+  actual decisions/models, complete outcomes, source revisions and task progress.
+
 ### Native snapshot and speech output
 
 - **Deployment:** snapshot writer and speech client in process; native Quickshell
   surface and existing synthesis/playback services remain separate.
-- **Lifecycle/protocol:** harness projections contain view data and actual
-  pipeline events. UI commands return to the controller. UI state is never the
-  authoritative conversation memory.
+- **Lifecycle/protocol:** `ChatUi.on_harness_event` projects domain events into
+  view data and actual pipeline events. UI commands return to the controller.
+  UI state is never the authoritative conversation memory.
 - **Performance:** metadata/capture updates do not wait for reasoning. Keep
   microphone level updates bounded; speech starts only from an accepted reply.
 - **Throughput:** one current snapshot and one accepted spoken response; stale
@@ -296,6 +373,7 @@ sequenceDiagram
     participant Engine as Turn engine
     participant Model as Reasoning service
     participant Execute as Execution manager
+    participant Events as Harness output events
     participant View as Native snapshot and canvas
     Session->>Context: Recording saved: identity and source revision
     Session->>Router: Committed "summarize this recording" + task snapshot
@@ -304,11 +382,13 @@ sequenceDiagram
     Context-->>Engine: Source text/chunks + provenance
     Engine->>Model: Request + source; no unrelated desktop tools
     Model-->>Engine: Grounded summary
-    Engine->>View: Summary canvas + spoken synopsis + source
+    Engine->>Events: Source revision + raw Markdown answer + spoken synopsis
+    Events->>View: Native adapter renders the accepted answer
     Session->>Router: Committed "replace cube flow with Kubeflow"
     Router-->>Execute: Exact recording/segment/revision, or clarification
     Execute->>Context: Apply validated correction, preserve heard words
-    Context-->>View: Updated transcript; prior summary is stale
+    Engine->>Events: Updated source revision; prior summary is stale
+    Events-->>View: Native adapter projects source change
 ```
 
 The saved recording enters the context store when capture finishes, not by OCR
@@ -402,6 +482,10 @@ cancelled describes harness progress, not proof of a model answer's factual accu
 recording files and tool dispatch with scripted external services. Existing speech
 workers, endpoints, native UI, allowlist, confirmations and engine scenarios remain
 regression requirements. Deployment is a separate operation.
+[Headless event BDD](../features/harness_events.feature) additionally forbids UI
+imports in a separate process and checks event identity/order, confirmations,
+raw answer content, source revisions, cancellation, payload isolation, consumer
+failure and recording controls without a snapshot.
 
 ## Conclusion & References
 

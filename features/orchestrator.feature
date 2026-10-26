@@ -106,7 +106,7 @@ Feature: Local tool loop
     And the tool "wallpaper_next" should have been called once
     And the model was given the chat instructions, then the desktop instructions
 
-  Scenario: A turn without a chat UI has no canvas, so an on-screen answer is refused
+  Scenario: A turn without an event consumer is not offered a structured answer
     Given the router selects no heads
     And llama-server shows this answer
       """

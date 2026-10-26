@@ -15,9 +15,9 @@ from agavai.brain import create_brain
 from agavai.llm import LlmError, chat, health, parse_tool_calls
 from agavai.heads import head_for_tool, schemas_for_heads
 from agavai.router import fallback_head_ids, routes_itself, select_head_ids
-from agavai.canvas import answer_block, model_view, read_aloud
+from agavai.canvas import model_view, read_aloud
 from agavai.tools import DISPATCH, OPENAPI_TOOLS, execute_tool as call_tool
-from agavai.ui import ChatUi
+from agavai.harness.events import HarnessOutput
 from agavai.harness.context import ContextStore, PendingAction
 from agavai.harness.inference import TurnCancelled
 from agavai.harness.routing import CONTEXT_SYSTEM, continues_conversation, decide
@@ -90,15 +90,15 @@ _SHOW_ANSWER = {
 
 
 def _turn_tools(
-    head_ids: list[str], cfg: Config, ui: ChatUi | None, *, all_tools: bool = False,
+    head_ids: list[str], cfg: Config, output: HarnessOutput, *, all_tools: bool = False,
 ) -> list[dict[str, Any]]:
-    can_confirm = ui is not None and (all_tools or cfg.router.max_tools > 1)
+    can_confirm = output.interactive and (all_tools or cfg.router.max_tools > 1)
     if all_tools:
         selected = list(OPENAPI_TOOLS)
     else:
         selected = schemas_for_heads(head_ids, limit=cfg.router.max_tools - int(can_confirm))
     # Questions with no desktop tools can still put a structured answer on the canvas.
-    if ui is not None and not selected and cfg.router.max_tools > 0:
+    if output.interactive and not selected and cfg.router.max_tools > 0:
         return [_SHOW_ANSWER]
     if can_confirm and selected:
         selected.append({
@@ -137,7 +137,7 @@ def _call_arguments(call: dict[str, Any], label: str) -> dict[str, Any]:
     return arguments
 
 
-def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: ChatUi, context: ContextStore) -> str:
+def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], output: HarnessOutput, context: ContextStore) -> str:
     proposal = _call_arguments(call, "confirmation")
     name = proposal.get("name")
     arguments = proposal.get("arguments")
@@ -149,39 +149,46 @@ def _prepare_confirmation(call: dict[str, Any], selected_names: set[str], ui: Ch
     _validate_call({"function": {"name": name, "arguments": json.dumps(arguments)}}, OPENAPI_TOOLS)
     context.pending_action = PendingAction(context.session_id, name, arguments)
     context.turn_status = "awaiting_confirmation"
-    return read_aloud(question, ui.data.get("display"))
+    output.emit("confirmation_requested", name=name, arguments=arguments, question=question)
+    return read_aloud(question, output.current_result)
 
 
-def _show_answer(call: dict[str, Any], ui: ChatUi) -> str:
+def _show_answer(call: dict[str, Any], output: HarnessOutput) -> str:
     """Publish the model's structured answer on the canvas; its summary is the spoken reply."""
     answer = _call_arguments(call, "on-screen answer")
     title, markdown, summary = (answer.get(key) for key in ("title", "markdown", "summary"))
     if not all(isinstance(value, str) and value.strip() for value in (title, markdown, summary)):
         raise LlmError("An on-screen answer needs a title, Markdown, and a spoken summary.")
-    ui.display(answer_block(title.strip(), markdown.strip()))
+    output.answer(title.strip(), markdown.strip())
     return read_aloud(summary, None)
 
 
 def _finish_with_local_call(
     calls: list[dict[str, Any]], note: str, reply: str,
-    messages: list[dict[str, Any]], ui: ChatUi, head_ids: list[str], context: ContextStore,
+    messages: list[dict[str, Any]], output: HarnessOutput, head_ids: list[str], context: ContextStore,
 ) -> str:
     """End the turn on a call handled here, without another model round."""
     messages.append({"role": "assistant", "content": None, "tool_calls": calls})
     messages.append({"role": "tool", "tool_call_id": calls[0].get("id") or calls[0]["function"]["name"], "content": note})
     messages.append({"role": "assistant", "content": reply})
     _remember(context, messages, head_ids)
-    ui.assistant(reply)
+    output.assistant(reply)
     return reply
 
 
-def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation: bool, context: ContextStore) -> str | None:
+def _start_task(context: ContextStore, output: HarnessOutput) -> None:
+    previous = context.task_id
+    context.new_task()
+    output.emit("task_started", previous_task_id=previous)
+
+
+def _handle_control(text: str, cfg: Config, output: HarnessOutput, *, continue_conversation: bool, context: ContextStore) -> str | None:
     command = control_command(text)
     if command == "agavai":
-        context.new_task()
+        _start_task(context, output)
         context.turn_status = "listening"
-        ui.clear_conversation()
-        ui.continue_listening()
+        output.clear_conversation()
+        output.continue_listening()
         return ""
     pending = context.pending_action if continue_conversation else None
     if pending and pending.session_id != context.session_id:
@@ -192,8 +199,8 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
     messages = list(context.messages) if continue_conversation else []
     heads = list(context.heads) if messages else []
     context.pending_action = None
-    ui.user(text, keep_display=continue_conversation)
-    ui.pipeline_event("Control", f"{command} · model and router bypassed")
+    output.user(text, keep_display=continue_conversation)
+    output.pipeline_event("Control", f"{command} · model and router bypassed")
     messages.append({"role": "user", "content": text})
     if command == "no":
         reply = "Cancelled the pending action." if pending else "There is no pending action to cancel."
@@ -206,17 +213,17 @@ def _handle_control(text: str, cfg: Config, ui: ChatUi, *, continue_conversation
             "function": {"name": pending.name, "arguments": json.dumps(pending.arguments, ensure_ascii=False)},
         }
         messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
-        result = _execute_tool_call(call, cfg, ui, messages, context)
+        result = _execute_tool_call(call, cfg, output, messages, context)
         if result is None:
             return ""
-        reply = read_aloud(result, ui.data.get("display"))
+        reply = read_aloud(result, output.current_result)
         if not reply:
             reply = "The action returned no result."
         elif reply.startswith(("{", "[")) or len(reply) > 280 or len(re.split(r"(?<=[.!?])\s+", reply)) > 2:
             reply = "The action returned more detail than I can read aloud. I have kept its result."
     messages.append({"role": "assistant", "content": reply})
     _remember(context, messages, heads)
-    ui.assistant(reply)
+    output.assistant(reply)
     return reply
 
 
@@ -230,27 +237,25 @@ def _model_tool_text(name: str, result: str) -> str:
 
 
 def _execute_tool_call(
-    call: dict[str, Any], cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]], context: ContextStore,
+    call: dict[str, Any], cfg: Config, output: HarnessOutput, messages: list[dict[str, Any]], context: ContextStore,
 ) -> str | None:
     fn = call.get("function") or {}
     name = fn.get("name") or ""
     raw_args = fn.get("arguments") or "{}"
-    if ui:
-        if ui.cancelled():
-            return None
-        ui.tool_start(name, raw_args)
-        if ui.cancelled():
-            return None
-    outcome = context.execution.execute(call, cfg, call_tool, lambda: context.should_cancel() or bool(ui and ui.cancelled()), task_id=context.task_id, request_id=context.request_id)
+    if context.should_cancel():
+        return None
+    output.tool_start(name, raw_args, call_id=call.get("id") or name)
+    if context.should_cancel():
+        return None
+    outcome = context.execution.execute(call, cfg, call_tool, context.should_cancel, task_id=context.task_id, request_id=context.request_id)
     if outcome is None:
         return None
     result = outcome.text
     if outcome.status != "ok":
         context.turn_status = "unknown" if outcome.status == "unknown" else "failed"
-    if ui:
-        if ui.cancelled():
-            return None
-        ui.tool_done(name, result, status=outcome.status)
+    output.tool_done(name, result, status=outcome.status, call_id=call.get("id") or name)
+    if context.should_cancel():
+        return None
     model_text = _model_tool_text(name, result)
     if outcome.status == "unknown":
         model_text = "Outcome unknown. Do not automatically retry this action. " + model_text
@@ -303,13 +308,13 @@ def _already_listed(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _list_images(text: str, cfg: Config, ui: ChatUi | None, messages: list[dict[str, Any]], context: ContextStore) -> None:
+def _list_images(text: str, cfg: Config, output: HarnessOutput, messages: list[dict[str, Any]], context: ContextStore) -> None:
     if not _asks_for_images(text) or _already_listed(messages):
         return
     call = {"id": "wallpaper_list", "type": "function",
             "function": {"name": "wallpaper_list", "arguments": "{}"}}
     messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
-    _execute_tool_call(call, cfg, ui, messages, context)
+    _execute_tool_call(call, cfg, output, messages, context)
 
 
 def _remember(context: ContextStore, messages: list[dict[str, Any]], heads: list[str]) -> None:
@@ -324,7 +329,7 @@ def _call_key(call):
 def run_turn(
     text: str,
     cfg: Config,
-    ui: ChatUi | None = None,
+    output: HarnessOutput | None = None,
     *,
     continue_conversation: bool = False,
     context: ContextStore,
@@ -334,93 +339,85 @@ def run_turn(
     started = time.monotonic()
     log.info("turn start continue=%s", continue_conversation)
     log.debug('turn text "%s"', journal.clip(text))
+    output = output or HarnessOutput(context)
     context.committed_requests.append(text)
     context.request_id = uuid.uuid4().hex
     context.turn_status = "pending"
+    output.emit("request_committed", text=text)
     try:
-        reply = _run_turn(text, cfg, ui, continue_conversation=continue_conversation, context=context)
+        reply = _run_turn(text, cfg, output, continue_conversation=continue_conversation, context=context)
     except TurnCancelled:
         context.pending_action = None
         context.turn_status = "cancelled"
         log.info("turn cancelled; late inference has no execution authority")
-        if ui:
-            ui.task_state(context.task_id, context.request_id, context.turn_status)
+        output.task_state(context.turn_status)
         return ""
-    if context.should_cancel() or (ui and ui.cancelled()):
+    if context.should_cancel():
         context.pending_action = None
         context.turn_status = "cancelled"
     elif context.turn_status == "pending":
         context.turn_status = "answered"
-    if ui:
-        ui.task_state(context.task_id, context.request_id, context.turn_status)
+    output.task_state(context.turn_status)
     log.info("turn done secs=%.2f", time.monotonic() - started)
     log.debug('turn reply "%s"', journal.clip(reply))
     return reply
 
 
-def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversation: bool, context: ContextStore) -> str:
+def _run_turn(text: str, cfg: Config, output: HarnessOutput, *, continue_conversation: bool, context: ContextStore) -> str:
     text = text.strip()
     command = text.rstrip(".!?…").casefold()
     if command in {"wait", "pause"}:
         context.held = True
         context.turn_status = "held"
-        if ui:
-            ui.user(text, keep_display=True)
-            ui.assistant("Paused. Say resume when you are ready.")
+        output.user(text, keep_display=True)
+        output.assistant("Paused. Say resume when you are ready.")
         return "Paused. Say resume when you are ready."
     if command == "resume" and context.held:
         context.held = False
         context.turn_status = "listening"
-        if ui:
-            ui.user(text, keep_display=True)
-            ui.assistant("Ready. Continue your request.")
+        output.user(text, keep_display=True)
+        output.assistant("Ready. Continue your request.")
         return "Ready. Continue your request."
     if context.held and command != "agavai":
         context.turn_status = "held"
         context.draft = " ".join(filter(None, [context.draft, text]))
-        if ui:
-            ui.partial(context.draft)
+        output.partial(context.draft)
         return ""
     if context.draft and command != "agavai":
         text = context.draft + " " + text
         context.draft = ""
     if not text:
         return "I did not hear anything."
-    if context.should_cancel() or (ui and ui.cancelled()):
+    if context.should_cancel():
         context.pending_action = None
         return ""
-    if ui:
-        reply = _handle_control(text, cfg, ui, continue_conversation=continue_conversation, context=context)
-        if reply is not None:
-            return reply
-        # A new committed request replaces any proposal; partials never reach here.
-        context.pending_action = None
+    reply = _handle_control(text, cfg, output, continue_conversation=continue_conversation, context=context)
+    if reply is not None:
+        return reply
+    # A new committed request replaces any proposal; partials never reach here.
+    context.pending_action = None
     if not continue_conversation:
-        context.new_task()
+        _start_task(context, output)
     prior_messages = list(context.messages) if continue_conversation else []
     prior_heads = list(context.heads) if prior_messages else []
-    if ui:
-        ui.user(text, keep_display=bool(prior_messages))
+    output.user(text, keep_display=bool(prior_messages))
     try:
-        cancelled = lambda: context.should_cancel() or bool(ui and ui.cancelled())
+        cancelled = context.should_cancel
         infer = lambda operation: context.inference.call(operation, cancelled)
         decision = decide(text, has_recording=context.source_active)
-        if ui:
-            ui.pipeline_event("Decision", f"{decision.capability} · {decision.reason}")
+        output.decision(decision)
         if decision.source:
             if prior_messages and not context.source_active:
-                context.new_task()
-                if ui:
-                    ui.user(text)
-            return run_source_turn(text, decision, cfg, ui, context, infer, create_brain, chat, health)
+                _start_task(context, output)
+                output.user(text)
+            return run_source_turn(text, decision, cfg, output, context, infer, create_brain, chat, health)
         active_cfg = cfg.small_brain or cfg.llm
         if active_cfg.backend == "needle-cactus" and decision.capability in {"reasoning", "resolve"}:
             tier = language_tier(cfg)
             if tier is None:
                 raise LlmError("This request needs language reasoning. Configure a local Qwen brain, or ask for a supported desktop action.")
             active_cfg = tier
-            if ui:
-                ui.brain(active_cfg, "Decision · language required")
+            output.brain(active_cfg, "Decision · language required")
         backend = create_brain(active_cfg, chat=chat, health=health)
         escalated = active_cfg is cfg.large_brain
         rounds = 0
@@ -436,8 +433,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if escalated or cfg.large_brain is None:
                 raise LlmError(reason)
             log.warning("turn escalated from=%s to=%s: %s", active_cfg.model_id, cfg.large_brain.model_id, reason)
-            if ui:
-                ui.pipeline_event("Fallback", f"{active_cfg.model_id} → {cfg.large_brain.model_id}: {reason}")
+            output.pipeline_event("Fallback", f"{active_cfg.model_id} → {cfg.large_brain.model_id}: {reason}")
             routing_spent = routes_itself(active_cfg, cfg)
             active_cfg = cfg.large_brain
             backend = create_brain(active_cfg, chat=chat, health=health)
@@ -458,45 +454,40 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             relation_tier = language_tier(cfg) if backend.tool_only else active_cfg
             if relation_tier is None:
                 raise LlmError("I need a language model to resolve that follow-up. Say Agavai to start a fresh task.")
-            if ui:
-                ui.brain(relation_tier, "Context")
+            output.brain(relation_tier, "Context")
             related = continues_conversation(text, prior_messages,
                 replace(cfg, llm=relation_tier), context,
                 lambda tier, messages, tools: infer(lambda: chat(tier, messages, tools=tools)))
             if cancelled():
                 return ""
-            if ui:
-                ui.pipeline_event("Context", "follow-up" if related else "new task")
+            output.pipeline_event("Context", "follow-up" if related else "new task")
             if not related:
-                context.new_task()
+                _start_task(context, output)
                 prior_messages = []
                 prior_heads = []
-                if ui:
-                    ui.user(text)
-                    ui.brain(active_cfg, "Context · new conversation")
+                output.user(text)
+                output.brain(active_cfg, "Context · new conversation")
 
         def select_tools():
             if synthesizing or decision.capability == "reasoning":
-                return [], _turn_tools([], cfg, ui)
+                return [], _turn_tools([], cfg, output)
             all_tools = active_cfg.tool_selection == "all" or cfg.router.backend == "none" or routes_itself(active_cfg, cfg)
             if all_tools:
                 heads = []
-                if ui:
-                    detail = "combined with Needle inference" if routes_itself(active_cfg, cfg) else "bypassed · all tools"
-                    ui.pipeline_event("Router", detail)
+                detail = "combined with Needle inference" if routes_itself(active_cfg, cfg) else "bypassed · all tools"
+                output.pipeline_event("Router", detail)
             elif routing_spent:
                 heads = _merge_heads(fallback_head_ids(text, cfg), prior_heads)
-                if ui:
-                    ui.pipeline_event("Router", f"{cfg.router.fallback} fallback after combined Needle · heads: {', '.join(heads) or 'none'}")
+                output.pipeline_event("Router", f"{cfg.router.fallback} fallback after combined Needle · heads: {', '.join(heads) or 'none'}")
             else:
-                report = (lambda detail: ui.pipeline_event("Router", detail)) if ui else None
+                report = lambda detail: output.pipeline_event("Router", detail)
                 events = []
                 chosen = infer(lambda: select_head_ids(text, cfg, report=events.append))
                 if report:
                     for detail in events:
                         report(detail)
                 heads = _merge_heads(chosen, prior_heads)
-            return heads, _turn_tools(heads, cfg, ui, all_tools=all_tools)
+            return heads, _turn_tools(heads, cfg, output, all_tools=all_tools)
 
         if decision.capability == "resolve":
             if backend.tool_only:
@@ -513,8 +504,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if parse_tool_calls(resolution) or not isinstance(resolved, dict) or not isinstance(resolved.get("request"), str) or not resolved["request"].strip():
                 raise LlmError("Please state the complete corrected request before I take any action.")
             text = resolved["request"].strip()
-            if ui:
-                ui.pipeline_event("Decision", "Resolved final request before tool proposal")
+            output.pipeline_event("Decision", "Resolved final request before tool proposal")
         head_ids, selected = select_tools()
         selection_changed = False
         selected_names = {item["function"]["name"] for item in selected}
@@ -524,7 +514,7 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             {"role": "user", "content": text},
         ]
         if "wallpaper" in head_ids and "wallpaper_list" in selected_names and _asks_for_images(text):
-            _list_images(text, cfg, ui, messages, context)
+            _list_images(text, cfg, output, messages, context)
         retried = False
         for _ in range(active_cfg.max_tool_rounds + (cfg.large_brain.max_tool_rounds + 1 if cfg.large_brain else 0)):
             if cancelled():
@@ -546,11 +536,10 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 continue
             rounds += 1
             try:
-                if ui:
-                    ui.brain(active_cfg, "Brain")
+                output.brain(active_cfg, "Brain")
                 packed = context.pack(messages, offered, active_cfg)
-                if ui and context.compacted_exchanges:
-                    ui.pipeline_event("Context budget", f"{context.compacted_exchanges} older exchanges omitted from prompt; source history retained")
+                if context.compacted_exchanges:
+                    output.pipeline_event("Context budget", f"{context.compacted_exchanges} older exchanges omitted from prompt; source history retained")
                 message = infer(lambda: backend.respond(packed, offered))
             except TurnCancelled:
                 raise
@@ -581,21 +570,20 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if "request_confirmation" in names:
                 if len(calls) != 1 or "request_confirmation" not in selected_names:
                     raise LlmError("A confirmation must be requested alone in an interactive turn.")
-                reply = _prepare_confirmation(calls[0], selected_names, ui, context)
-                return _finish_with_local_call(calls, "Awaiting user confirmation. No action has executed.", reply, messages, ui, head_ids, context)
+                reply = _prepare_confirmation(calls[0], selected_names, output, context)
+                return _finish_with_local_call(calls, "Awaiting user confirmation. No action has executed.", reply, messages, output, head_ids, context)
             if "show_answer" in names and "show_answer" in selected_names:
                 if len(calls) != 1:
                     raise LlmError("An on-screen answer must be shown alone.")
-                reply = _show_answer(calls[0], ui)
-                return _finish_with_local_call(calls, "Shown on screen.", reply, messages, ui, head_ids, context)
+                reply = _show_answer(calls[0], output)
+                return _finish_with_local_call(calls, "Answer published.", reply, messages, output, head_ids, context)
             if not calls:
                 if "wallpaper_list" in selected_names and decision.capability == "action" and not synthesizing:
-                    _list_images(text, cfg, ui, messages, context)
-                reply = read_aloud(_strip_think(content), ui.data.get("display") if ui else None)
+                    _list_images(text, cfg, output, messages, context)
+                reply = read_aloud(_strip_think(content), output.current_result)
                 messages.append({"role": "assistant", "content": reply})
                 _remember(context, messages, head_ids)
-                if ui:
-                    ui.assistant(reply)
+                output.assistant(reply)
                 return reply
             extra_heads: list[str] = []
             for call in calls:
@@ -607,10 +595,9 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
             if extra_heads and not retried and decision.capability != "reasoning" and not synthesizing:
                 retried = True
                 head_ids.extend(extra_heads)
-                selected = _turn_tools(head_ids, cfg, ui)
+                selected = _turn_tools(head_ids, cfg, output)
                 selected_names = {item["function"]["name"] for item in selected}
-                if ui:
-                    ui.pipeline_event("Tools", f"Missing-head retry · added: {', '.join(extra_heads)}")
+                output.pipeline_event("Tools", f"Missing-head retry · added: {', '.join(extra_heads)}")
                 continue
             for call in calls:
                 name = (call.get("function") or {}).get("name") or ""
@@ -629,13 +616,13 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                 if key in completed_calls:
                     messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": completed_calls[key]})
                     continue
-                result = _execute_tool_call(call, cfg, ui, messages, context)
+                result = _execute_tool_call(call, cfg, output, messages, context)
                 if result is None:
                     return ""
                 completed_calls[key] = messages[-1]["content"]
             if backend.tool_only:
                 results = [completed_calls[_call_key(call)] for call in calls]
-                reply = read_aloud(". ".join(results), ui.data.get("display") if ui else None)
+                reply = read_aloud(". ".join(results), output.current_result)
                 if any(result.startswith(("{", "[")) or len(result) > 280 for result in results):
                     if cfg.large_brain and not escalated and cfg.large_brain.backend == "llama-server":
                         synthesizing = True
@@ -646,22 +633,19 @@ def _run_turn(text: str, cfg: Config, ui: ChatUi | None, *, continue_conversatio
                     reply = "The action returned no result."
                 messages.append({"role": "assistant", "content": reply})
                 _remember(context, messages, head_ids)
-                if ui:
-                    ui.assistant(reply)
+                output.assistant(reply)
                 return reply
         context.turn_status = "incomplete"
         msg = "I ran out of tool steps before finishing."
         log.warning("turn ran out of tool steps after %d rounds", active_cfg.max_tool_rounds)
-        if ui:
-            ui.error(msg)
+        output.error(msg)
         return msg
     except TurnCancelled:
         raise
     except LlmError as exc:
         context.turn_status = "failed"
         log.warning("turn error: %s", exc)
-        if ui:
-            ui.error(str(exc))
+        output.error(str(exc))
         return str(exc)
 
 

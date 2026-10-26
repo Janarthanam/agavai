@@ -172,9 +172,9 @@ def help_listener(context):
     cfg.runtime_dir = context.help_dir / 'agavai'
     ui = ChatUi(cfg)
     with patch.dict(os.environ, context.help_env), patch('agavai.ui.summon_overlay'):
-        harness = Harness(cfg, ui)
+        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
         ui.listening()
-        _run_stop_body(cfg, ui, False, text='what time is it', harness=harness)
+        _run_stop_body(cfg, harness.output, False, text='what time is it', harness=harness)
     context.help_snapshot = json.loads(ui.path.read_text())
 
 

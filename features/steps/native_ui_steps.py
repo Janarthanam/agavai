@@ -79,7 +79,7 @@ def long_results(context):
             context.model_result = messages[-1]["content"]
         return reply.pop(0)
     with patch("agavai.harness.engine.health", return_value=True), patch("agavai.harness.engine.select_head_ids", return_value=["files"]), patch("agavai.harness.engine.chat", side_effect=chat), tool_patch("agavai.harness.engine.call_tool", return_value=result):
-        run_turn("find notes", context.cfg, context.ui, context=context.harness.context)
+        run_turn("find notes", context.cfg, context.harness.output, context=context.harness.context)
 
 
 @then("the native browser has {count:d} items")

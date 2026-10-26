@@ -23,12 +23,12 @@ def step_ui(context):
     context.add_cleanup(context.summon.stop)
     context.ui = ChatUi(cfg)
     context.cfg = cfg
-    context.harness = Harness(cfg, context.ui)
+    context.harness = Harness(cfg, on_event=context.ui.on_harness_event, should_cancel=context.ui.cancelled)
 
 
 @when("the UI starts listening")
 def step_listen(context):
-    context.harness = Harness(context.cfg, context.ui)
+    context.harness = Harness(context.cfg, on_event=context.ui.on_harness_event, should_cancel=context.ui.cancelled)
     context.ui.listening()
 
 
@@ -65,7 +65,7 @@ def step_idle(context):
 @when("I open a second chat UI on the same runtime dir")
 def step_second(context):
     context.ui = ChatUi(context.cfg)
-    context.harness = Harness(context.cfg, context.ui)
+    context.harness = Harness(context.cfg, on_event=context.ui.on_harness_event, should_cancel=context.ui.cancelled)
 
 
 @then('the snapshot phase should be "{phase}"')

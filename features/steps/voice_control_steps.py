@@ -59,7 +59,7 @@ def dependencies(context):
 @given("a browser launch is awaiting confirmation")
 def pending_browser(context):
     context.control_responses.append(_browser_proposal())
-    context.reply = run_turn("open the browser but confirm first", context.cfg, context.ui, context=context.harness.context)
+    context.reply = run_turn("open the browser but confirm first", context.cfg, context.harness.output, context=context.harness.context)
     assert context.reply == "Open the browser?", context.reply
     assert context.harness.context.pending_action.name == "launch"
     assert context.harness.context.pending_action.arguments == {"target": "browser"}
@@ -170,7 +170,7 @@ def stale(context):
 @when("a control request combines two tool heads")
 def budget(context):
     context.control_router.side_effect = lambda text, cfg, **kwargs: ["wallpaper", "system"]
-    context.reply = run_turn("show wallpaper and system settings", context.cfg, context.ui, context=context.harness.context)
+    context.reply = run_turn("show wallpaper and system settings", context.cfg, context.harness.output, context=context.harness.context)
 
 
 @when("a real control listen loop receives")
@@ -202,7 +202,7 @@ def voice_loop(context):
     stream = Mock()
     stream.events.side_effect = events
     with patch("agavai.harness.session.prepare_listen"), patch("agavai.harness.session.hide_listen"), patch("agavai.harness.session.finish"), patch("agavai.harness.session.cue_listen"), patch("agavai.harness.session.cue_start"), patch("agavai.harness.session.cue_think") as think, patch("agavai.harness.session._publish_pid"), patch("agavai.harness.session.open_stream", return_value=stream), patch("agavai.tts.sweep_playback_wavs"), patch("agavai.tts._interruptible_speak", return_value="kokoro") as playback:
-        context.listen_result = listen_session(context.cfg, context.ui, harness=context.harness)
+        context.listen_result = listen_session(context.cfg, harness=context.harness)
         context.control_playback = playback.call_args_list
         context.control_think_count = think.call_count
 
