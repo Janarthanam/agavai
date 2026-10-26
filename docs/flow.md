@@ -274,6 +274,34 @@ and [execution](../src/agavai/harness/execution.py) run in process.
 Full module contracts and source/cancellation sequences:
 [voice-agent-harness.md](voice-agent-harness.md).
 
+### Durable sessions and audio
+
+[Session repository](../src/agavai/harness/storage.py),
+[audio finalizer](../src/agavai/harness/audio.py), and
+[session CLI](../src/agavai/session_cli.py) run in process.
+
+- **Lifecycle.** Persistence defaults on. Canonical events/checkpoints commit before
+  UI delivery and tool dispatch. A nonempty accepted spoken turn owns its bounded
+  PCM spool; abandoned captures discard it. One background finalizer encodes audio
+  using the recording encoder, then publishes an atomic checksummed attachment.
+  Close drains accepted audio before releasing the session lock and listener PID.
+- **Recovery.** Explicit resume restores context and complete exchanges. Interrupted
+  side effects are unknown, never retried. Saved confirmation authority is cleared;
+  generic Yes/Continue/Resume requests a fresh instruction. Audio interrupted during
+  finalization stays incomplete. Missing recordings/audio remain inspectable.
+- **Performance.** SQLite FULL/WAL transactions are synchronous; levels, provisional
+  partials and repetitive recording frames are excluded. Encoding has a 15-second
+  deadline plus bounded duration checks and uses one worker, with at most two
+  pending attachments. New capture/action control does not wait for encoding.
+- **Configuration.** `[sessions] enabled`, `dir`, `save_audio`, `retention_days`,
+  `max_audio_mb`; `AGAVAI_SESSION_DIR` overrides the data directory. Zero retention
+  and quota mean unlimited. Quota uses conservative PCM reservations and refuses
+  new audio visibly; no automatic deletion. Pruning is an explicit CLI command.
+- **Observability.** `agavai session list/show/export` exposes durable facts,
+  configuration fingerprints, full tool outcomes, source revisions and attachment
+  states. Native session identity opens history/new/resume controls. `ui.json`
+  remains disposable. See [session persistence](session-persistence.md).
+
 ### Router
 
 [src/agavai/router.py](../src/agavai/router.py) and [src/agavai/heads.py](../src/agavai/heads.py).

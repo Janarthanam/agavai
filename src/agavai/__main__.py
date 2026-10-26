@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from agavai.feedback import finish
 from agavai.llm import health
 from agavai.mcp_server import serve_stdio
 from agavai.harness import Harness
+from agavai.harness.events import EventDeliveryError
 from agavai.setup import ROUTERS, SPEECH
 from agavai.state import read_state, write_state
 from agavai.tts import cue_think, speak
@@ -28,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     listen = sub.add_parser("listen", help="Listen and submit when the utterance ends")
     listen.add_argument("--record", action="store_true", help="Record instead; the microphone closes when the recording stops")
+    listen.add_argument("--session", help="Resume a durable session ID")
     record = sub.add_parser("record", help="Start or stop a recording, or pause, resume, or mark it")
     record.add_argument("action", nargs="?", default="toggle", choices=["toggle", "stop", "pause", "resume", "mark"])
     saved = sub.add_parser("recording", help="Change a saved recording")
@@ -44,6 +47,22 @@ def main(argv: list[str] | None = None) -> int:
     ui_open.add_argument("--session", required=True)
     ask = sub.add_parser("ask", help="Run a typed request (no microphone)")
     ask.add_argument("text", nargs="+")
+    ask.add_argument("--session", help="Continue a durable session ID")
+    sessions = sub.add_parser("session", help="Inspect, resume, export or delete durable sessions")
+    session_commands = sessions.add_subparsers(dest="session_cmd", required=True)
+    session_commands.add_parser("list")
+    new_session = session_commands.add_parser("new")
+    new_session.add_argument("--listen", action="store_true")
+    for name in ("show", "resume", "close", "export", "delete"):
+        command = session_commands.add_parser(name)
+        command.add_argument("id")
+        if name == "export":
+            command.add_argument("destination")
+        if name == "delete":
+            command.add_argument("--yes", action="store_true")
+    prune = session_commands.add_parser("prune")
+    prune.add_argument("--older-than-days", type=int)
+    prune.add_argument("--yes", action="store_true")
     say = sub.add_parser("speak", help="Speak text with Kokoro (no LLM)")
     say.add_argument("text", nargs="+")
     sub.add_parser("status")
@@ -83,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     journal.setup(cfg.log.level)
     cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
     write_card(cfg)
+
+    if args.cmd == "session":
+        from agavai.session_cli import run
+        try:
+            return run(cfg, args)
+        except (ValueError, OSError, sqlite3.Error, EventDeliveryError) as exc:
+            print(f"agavai session: {exc}", file=sys.stderr)
+            return 1
 
     if args.cmd == "ui-open":
         from agavai.ui import open_result
@@ -127,21 +154,32 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if engine in {"kokoro", "espeak"} else 1
     if args.cmd == "ask":
         text = " ".join(args.text)
-        ui = ChatUi(cfg)
-        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
-        journal.start_request(str(ui.data["session_id"]))
-        cue_think(cfg)
-        write_state(cfg, "thinking")
-        reply = harness.run_turn(text)
-        if ui.cancelled():
+        try:
+            if args.session:
+                from agavai.session_cli import stop_listener, allow_resume
+                stop_listener(cfg, matching=args.session)
+                allow_resume(cfg, args.session)
+            ui = ChatUi(cfg)
+            harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled, session_id=args.session)
+        except (ValueError, OSError, sqlite3.Error, EventDeliveryError) as exc:
+            print(f"agavai ask: {exc}", file=sys.stderr)
+            return 1
+        try:
+            journal.start_request(str(ui.data["session_id"]))
+            cue_think(cfg)
+            write_state(cfg, "thinking")
+            reply = harness.run_turn(text, continue_conversation=bool(harness.context.committed_requests))
+            if ui.cancelled():
+                write_state(cfg, "idle")
+                return 0
+            write_state(cfg, "speaking")
+            harness.output.speech(speak(reply, cfg))
+            harness.output.idle()
             write_state(cfg, "idle")
+            print(reply)
             return 0
-        write_state(cfg, "speaking")
-        ui.speech(speak(reply, cfg))
-        ui.idle()
-        write_state(cfg, "idle")
-        print(reply)
-        return 0
+        finally:
+            harness.close()
     if args.cmd == "cancel":
         cancel_ui(cfg)
         # Publish the marker before SIGTERM; the listener reads it in its handler.
@@ -154,8 +192,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "listen":
         ui = ChatUi(cfg)
-        harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled)
-        return listen_session(cfg, harness=harness, record=args.record)
+        try:
+            harness = Harness(cfg, on_event=ui.on_harness_event, should_cancel=ui.cancelled, session_id=args.session)
+        except (ValueError, OSError, sqlite3.Error, EventDeliveryError) as exc:
+            from uuid import uuid4
+            log.exception("session could not start")
+            ui.begin_session(args.session or uuid4().hex)
+            ui.error(str(exc))
+            write_state(cfg, "error")
+            return 1
+        try:
+            return listen_session(cfg, harness=harness, record=args.record)
+        finally:
+            harness.close()
     if args.cmd == "record":
         return request_recording(cfg, args.action)
     if args.cmd == "recording":

@@ -17,7 +17,7 @@ from agavai.harness import Harness
 from agavai.recording import Recorder, control as recording_control, correct, recover
 from agavai.state import read_state, write_state
 from agavai.tts import cue_listen, cue_record, cue_start, cue_think, speak
-from agavai.harness.events import HarnessOutput
+from agavai.harness.events import EventDeliveryError, HarnessOutput
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ def _correct_cmd(cfg, folder: Path, line: int, text: str) -> int:
     return 0
 
 
-def start_session(cfg, *, record: bool = False) -> bool:
+def start_session(cfg, *, record: bool = False, session_id: str | None = None) -> bool:
     """Shared detached-start guard: O_EXCL lock → existence check → publish.
 
     Returns True when this caller spawned the listener; False when a session
@@ -151,7 +151,7 @@ def start_session(cfg, *, record: bool = False) -> bool:
         if read_listener(cfg) is not None:
             return False
         proc = subprocess.Popen(
-            [sys.executable, "-m", "agavai", "listen", *(["--record"] if record else [])],
+            [sys.executable, "-m", "agavai", "listen", *(["--record"] if record else []), *(["--session", session_id] if session_id else [])],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -200,7 +200,9 @@ def listen_session(cfg, *, harness: Harness, record: bool = False) -> int:
     prev_handler = signal.signal(signal.SIGTERM, on_sigterm)
     prev_record_handler = signal.signal(signal.SIGUSR1, on_record_request)
     reply: str | None = None
-    followups = 0
+    followups = len(harness.context.committed_requests)
+    harness.input_mode = "spoken"
+    capture = None
     stream = None
     ended = "crashed"
     try:
@@ -218,10 +220,16 @@ def listen_session(cfg, *, harness: Harness, record: bool = False) -> int:
             return 1
         cue_start(cfg)
         while True:
+            if capture is not None:
+                capture.discard()
+            harness.poll_audio()
+            capture = harness.capture_audio()
             heard, text = _await_utterance(
                 cfg,
                 output,
                 stream,
+                audio=capture,
+                poll_audio=harness.poll_audio,
                 fresh=followups == 0,
                 stop_requested=lambda: stop_requested or external_cancel(),
                 cancel_requested=lambda: cancel_requested or external_cancel(),
@@ -267,6 +275,7 @@ def listen_session(cfg, *, harness: Harness, record: bool = False) -> int:
                 continue_conversation=followups > 0,
                 text=text,
                 harness=harness,
+                audio=capture,
             )
             if reply is None:  # cancelled mid-turn
                 finish(cfg)
@@ -285,29 +294,32 @@ def listen_session(cfg, *, harness: Harness, record: bool = False) -> int:
         log.exception("session crashed")
         raise
     finally:
+        if capture is not None:
+            capture.discard()
         log.info("session end reason=%s", ended)
-        if stream is not None:
-            stream.close()
-        from agavai.brain import close_brains
-        close_brains()
-        from agavai.tts import sweep_playback_wavs
-
-        sweep_playback_wavs()
         try:
-            _pid_path(cfg).unlink()
-        except OSError:
-            pass
-        if read_state(cfg) in {"listening", "recording"}:
-            write_state(cfg, "idle")
-        harness.should_cancel = external_cancel
-        signal.signal(signal.SIGTERM, prev_handler)
-        signal.signal(signal.SIGUSR1, prev_record_handler)
+            if stream is not None:
+                stream.close()
+            from agavai.brain import close_brains
+            close_brains()
+            from agavai.tts import sweep_playback_wavs
+            sweep_playback_wavs()
+        finally:
+            try:
+                harness.close()
+            finally:
+                _pid_path(cfg).unlink(missing_ok=True)
+                if read_state(cfg) in {"listening", "recording"}:
+                    write_state(cfg, "idle")
+                harness.should_cancel = external_cancel
+                signal.signal(signal.SIGTERM, prev_handler)
+                signal.signal(signal.SIGUSR1, prev_record_handler)
     print(reply or "")
     return 0
 
 
 def _await_utterance(
-    cfg, output: HarnessOutput, stream, *, fresh: bool, stop_requested, cancel_requested, record_requested=lambda: False
+    cfg, output: HarnessOutput, stream, *, fresh: bool, stop_requested, cancel_requested, record_requested=lambda: False, audio=None, poll_audio=lambda: None
 ) -> tuple[str, str]:
     """Capture one utterance. Returns (speech|cancel|record|error|ended, text)."""
     try:
@@ -328,10 +340,15 @@ def _await_utterance(
     def captured(reason: str, line: str = "") -> None:
         log.info("asr end reason=%s words=%d secs=%.2f", reason, len(line.split()), time.monotonic() - started)
 
+    def on_level(db):
+        poll_audio()
+        output.level(db, "active" if cfg.asr.endpoint == "vad" else "off",
+                     cfg.vad.backend if cfg.asr.endpoint == "vad" else "off")
+
     try:
         for kind, text in stream.events(
-            on_level=lambda db: output.level(db, "active" if cfg.asr.endpoint == "vad" else "off",
-                                         cfg.vad.backend if cfg.asr.endpoint == "vad" else "off"),
+            **({"audio_tap": audio.write} if audio is not None else {}),
+            on_level=on_level,
             should_stop=lambda: stop_requested() or record_requested(),
             should_cancel=lambda: record_requested() or (stop_requested() and cancel_requested()),
         ):
@@ -455,6 +472,10 @@ def _record_session(cfg, output: HarnessOutput, requests: _RecordRequests, stopp
     folder = recorder.finish()
     harness.context.recording = folder
     harness.context.source_active = True
+    from agavai.harness.sources import refresh_recording
+    refresh_recording(cfg, harness.context)
+    output.source_changed({"kind": "recording", "path": str(folder), "revision": harness.context.source_revision,
+                           "derived_stale": bool(harness.context.derived_revision and harness.context.derived_revision != harness.context.source_revision)})
     cue_record(cfg, starting=False)
     output.end_recording()
     if dismissed():
@@ -477,6 +498,7 @@ def _run_stop_body(
     continue_conversation: bool = False,
     text: str = "",
     harness: Harness,
+    audio=None,
 ) -> str | None:
     """Run one committed line. The text is already final."""
 
@@ -497,7 +519,9 @@ def _run_stop_body(
     if not resetting:
         write_state(cfg, "thinking")
     try:
-        reply = harness.run_turn(text, continue_conversation=continue_conversation)
+        reply = harness.run_turn(text, continue_conversation=continue_conversation, audio=audio)
+    except EventDeliveryError:
+        raise
     except Exception:
         log.exception("turn failed")
         reply = "The local agent hit an error."

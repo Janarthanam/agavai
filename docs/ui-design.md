@@ -48,6 +48,20 @@ The expanded status row has a small, keyboard-accessible `?` button for version 
 
 Help labels the running session writer's Python version and source revision at first UI construction, including a modified-source marker when applicable; installed packages without Git metadata report that the revision is unavailable. It describes the session's loaded configuration, never rereads the saved config, and never inherits version/pipeline information from a previous writer. Configured input, endpoint, router, primary/fallback brains, actions and reply order are separate from latest-turn execution. Execution reports routing bypass or its actual fallback source, context/model requests, escalation, missing-head retries, tool dispatch, and the selected speech engine/playback outcome. Brain labels describe the requested model/backend, not independently verified server weights. Typed requests explicitly bypass microphone/ASR/endpointing. During recording the panel instead explains that content bypasses the assistant pipeline. An older snapshot without metadata shows an unavailable message rather than guessing.
 
+The expanded status row also shows the short session ID and whether it is saved
+or temporary. A saved session opens a bounded history selector with New session
+and explicit Resume actions. Browsing history preserves listening and results;
+Escape closes history first, and minimizing closes it. History and pipeline help
+are mutually exclusive. Selecting a session dismisses the old listener and waits
+for its action/audio finalization; after five seconds it reports a retryable wait
+instead of killing the process. Typed requests continue the selected saved
+session (`ask --session`), stopping its microphone owner first. Resume rebuilds
+recent turns and canvas from durable events, labels interrupted outcomes unknown,
+and requires fresh instructions for interrupted or previously pending actions.
+Audio-save warnings are shown beneath the status row without changing capture.
+The full timeline and source/audio availability are available through
+`agavai session show ID`; the snapshot is a bounded projection.
+
 While recording, `ui.json` carries a `recording` block, and a saved recording is a `recording` canvas holding only its folder path. The overlay reads that folder's `recording.json` itself, so a saved correction shows without the listen session rewriting the snapshot. `ui.json` now carries `transcript: {text, final}`, a typed `display` block with ordered items and a presentation `id`, formatted `answer_html`, and a session identifier. `level_db` drives the mic. Cancellation marks the session and suppresses late snapshot writes; the overlay notifies the controller. Snapshot writes remain atomic. Partial transcript updates are accepted only during listening.
 
 Typed results should include `id`, `kind`, `title`, `subtitle`, preview content/source, source tool, and explicit allowlisted actions. Markdown and HTML are distinct content types. Sanitize HTML, restrict link/media schemes, preserve local paths as data, and use an allowlisted file-open action. Do not execute tool-returned commands. The browser prototype deliberately renders a small escaped Markdown subset; it is not a production Markdown or HTML engine.

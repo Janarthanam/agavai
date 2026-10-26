@@ -187,7 +187,7 @@ def voice_loop(context):
     sequences.append([])
     context.control_capture_snapshots = []
 
-    def events(on_level, should_stop=None, should_cancel=None):
+    def events(on_level, should_stop=None, should_cancel=None, audio_tap=None):
         context.control_capture_snapshots.append(deepcopy(context.ui.data))
         final = ""
         for event in sequences.pop(0) if sequences else []:

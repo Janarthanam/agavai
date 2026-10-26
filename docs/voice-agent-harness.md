@@ -133,18 +133,23 @@ The public interface has no concrete UI parameter:
 events = []
 harness = Harness(cfg, on_event=events.append, should_cancel=cancelled.is_set)
 reply = harness.run_turn("list the planets")
+harness.close()
 serialized = [event.to_dict() for event in events]
 ```
 
 `on_event` receives one `HarnessEvent` synchronously on the controller thread.
-The constructor emits `session_started`. Each event has `schema_version=1`, a
+The constructor emits `session_started`, or `session_resumed` for an explicit
+`session_id`. `close()` drains audio, checkpoints and emits `session_closed`.
+Each event has `schema_version=1`, a
 session-local increasing `sequence`, UTC ISO `timestamp`, `session_id`, `task_id`,
 `request_id`, a typed `kind` and a detached `data` dictionary. `to_dict()` produces
 JSON-serializable data. Consumers cannot mutate action arguments or context through
 the payload; consumer exceptions reach the caller as `EventDeliveryError` with
 the original cause, so source/model handlers cannot misclassify them. There is one sink,
-no background event bus, replay log or durable-delivery guarantee. Slow consumers
-delay the controller, so callbacks must stay short.
+no background event bus or consumer retry protocol. Default persistence records
+canonical events transactionally before the sink, independently of its presence.
+Storage failures stop dispatch. Slow consumers delay the controller, so callbacks
+must stay short.
 
 `request_committed` records raw input once, before task classification. Its task
 ID is the task at admission. `task_started` explicitly reports each subsequent
@@ -156,7 +161,7 @@ context and do not themselves commit another turn.
 
 | Event kinds | Payload contract |
 |---|---|
-| `session_started`, `request_committed`, `task_started`, `task_status` | Session lifecycle, raw `text`, previous task identity, or progress `status` |
+| `session_started`, `session_resumed`, `session_closed`, `request_committed`, `task_started`, `task_status` | Session lifecycle, raw `text`, previous task identity, or progress `status` |
 | `turn_input`, `conversation_cleared`, `listening`, `partial`, `transcribing`, `level` | Effective input and context retention, capture state, provisional text, dB/VAD metadata |
 | `decision`, `model_requested`, `stage` | Capability/reason/source, actual model/backend/path/purpose, or stage/detail |
 | `confirmation_requested` | Validated action `name`, exact `arguments` object and `question`; no action has executed |
@@ -178,11 +183,23 @@ or import `agavai.ui`. Shared pure-Python canvas normalization supplies spoken
 result labels independently of the renderer. A dismissed native adapter ignores
 late projections, while a headless collector can retain the actual outcome.
 
-Durable sessions are [P2 work](../tasks/session-persistence.md), not implemented
-by the event interface. The planned layout uses a SQLite ledger and separate
-per-turn audio attachments, retained by default for accepted spoken input per
-the user's decision. Current task context remains in memory, existing explicit
-recordings remain durable, and there is no session history selector yet.
+Durable sessions use a schema-versioned SQLite ledger, full context checkpoints
+and separate audio files. Accepted spoken input saves audio by default; typed
+turns have no audio. `audio_status` includes attachment state, relative path,
+checksum and any warning, with the original turn identity. A bounded capture
+spool and one encoder worker keep encoding off the controller; level callbacks
+publish finished metadata during subsequent listening. `listen_session` closes its
+harness before unpublishing the listener PID. Headless one-shot callers must call
+`Harness.close()` themselves.
+
+`Harness(cfg, session_id=...)` claims a process lease and restores context, full
+outcomes and source bindings. It never dispatches a saved request or restores a
+pending confirmation. Interrupted effects are unknown; generic Yes/Continue/Resume
+requires a fresh instruction. Configuration for each resumed writer is recorded
+on its lifecycle event. The native adapter rebuilds presentation from saved events;
+it does not put replayed events back into the ledger. CLI and native session
+identity/history use the same repository. See [session-persistence.md](session-persistence.md)
+for paths, controls, export, deletion and recovery contracts.
 
 ### Voice and correction semantics
 
@@ -342,7 +359,8 @@ Code: [events.py](../src/agavai/harness/events.py).
 - **Performance:** synchronous callback/deep-copy cost is on the controller path;
   no new latency SLA is claimed. Consumers must not perform long blocking work.
 - **Throughput:** one controller producer and one sink; capture updates follow
-  existing bounded audio-level cadence. No queue, retries or replay retention.
+  existing bounded audio-level cadence. The presentation sink has no retries;
+  durable domain events are retained independently.
 - **Configuration:** optional `on_event` and independent `should_cancel` callback.
 - **Observability:** sequence, timestamp, session/task/request/call identity,
   actual decisions/models, complete outcomes, source revisions and task progress.

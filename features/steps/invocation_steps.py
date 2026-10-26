@@ -19,7 +19,7 @@ class _Scripted:
         self.sequences = [list(seq) for seq in sequences]
         self.on_open = on_open
 
-    def events(self, on_level, should_stop=None, should_cancel=None):
+    def events(self, on_level, should_stop=None, should_cancel=None, audio_tap=None):
         if self.on_open:
             self.on_open()
         seq = self.sequences.pop(0) if self.sequences else []
@@ -150,7 +150,7 @@ def speech(context):
 @when("an automatic session has no microphone")
 def missing(context):
     class _Down:
-        def events(self, on_level, should_stop=None, should_cancel=None):
+        def events(self, on_level, should_stop=None, should_cancel=None, audio_tap=None):
             raise AsrError("Microphone input is unavailable. Check your input device and try again.")
             yield None
 
@@ -247,7 +247,7 @@ def _choice_session(context, sequences, replies):
     def opened():
         context.phases.append(context.ui.data.get("phase"))
 
-    def stop_body(cfg, ui, stop_requested, continue_conversation=False, text="", harness=None):
+    def stop_body(cfg, ui, stop_requested, continue_conversation=False, text="", harness=None, audio=None):
         context.continued.append(continue_conversation)
         reply = replies.pop(0)
         ui.assistant(reply)

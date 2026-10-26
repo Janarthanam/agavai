@@ -391,6 +391,14 @@ def _run_turn(text: str, cfg: Config, output: HarnessOutput, *, continue_convers
     if context.should_cancel():
         context.pending_action = None
         return ""
+    if context.recovery_required:
+        if command in {"yes", "continue", "resume"}:
+            context.turn_status = "needs_input"
+            reply = "The previous session was interrupted or awaiting confirmation. Review its outcomes and give a fresh instruction; no saved action has been repeated."
+            output.user(text, keep_display=True)
+            output.assistant(reply)
+            return reply
+        context.recovery_required = False
     reply = _handle_control(text, cfg, output, continue_conversation=continue_conversation, context=context)
     if reply is not None:
         return reply

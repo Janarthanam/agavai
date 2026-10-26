@@ -10,7 +10,8 @@ from agavai.brain import brain_label
 from agavai.canvas import display_for
 
 EventKind = Literal[
-    "session_started", "request_committed", "task_started", "turn_input", "conversation_cleared",
+    "session_started", "session_resumed", "session_closed", "audio_status",
+    "request_committed", "task_started", "turn_input", "conversation_cleared",
     "listening", "partial", "level", "transcribing", "stage", "decision",
     "model_requested", "confirmation_requested", "tool_started", "tool_completed", "answer", "display",
     "reply", "source_changed", "task_status", "recording", "recording_ended",
@@ -41,9 +42,10 @@ class EventDeliveryError(RuntimeError):
 
 
 class HarnessOutput:
-    def __init__(self, context, sink: EventSink | None = None):
+    def __init__(self, context, sink: EventSink | None = None, *, on_record: EventSink | None = None):
         self.context = context
         self.sink = sink
+        self.on_record = on_record
         self.sequence = 0
         self.phase = "idle"
         self.current_result = None
@@ -52,19 +54,21 @@ class HarnessOutput:
     def interactive(self) -> bool:
         return self.sink is not None
 
-    def emit(self, kind: EventKind, **data) -> None:
+    def emit(self, kind: EventKind, *, request_id: str | None = None, task_id: str | None = None, **data) -> None:
         self.sequence += 1
         event = HarnessEvent(self.sequence, datetime.now(timezone.utc).isoformat(),
-            self.context.session_id, self.context.task_id, self.context.request_id,
+            self.context.session_id, task_id if task_id is not None else self.context.task_id, request_id if request_id is not None else self.context.request_id,
             kind, deepcopy(data))
-        if self.sink is not None:
-            try:
+        try:
+            if self.on_record is not None:
+                self.on_record(event)
+            if self.sink is not None:
                 self.sink(event)
-            except Exception as exc:
-                raise EventDeliveryError(f"Could not deliver {kind}: {exc}") from exc
+        except Exception as exc:
+            raise EventDeliveryError(f"Could not deliver {kind}: {exc}") from exc
 
-    def begin_session(self) -> None:
-        self.emit("session_started")
+    def begin_session(self, **metadata) -> None:
+        self.emit("session_started", **metadata)
 
     def clear_conversation(self) -> None:
         self.current_result = None

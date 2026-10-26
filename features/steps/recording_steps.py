@@ -82,7 +82,7 @@ class _AssistantScript:
     def __init__(self, utterances) -> None:
         self.utterances = list(utterances)
 
-    def events(self, on_level, should_stop=None, should_cancel=None):
+    def events(self, on_level, should_stop=None, should_cancel=None, audio_tap=None):
         for item in self.utterances.pop(0) if self.utterances else []:
             if callable(item):
                 item()
@@ -217,7 +217,7 @@ def step_voice_start(context, text):
         context.streams.append(continuous)
         return recording if continuous else assistant
 
-    def model_turn(cfg, ui, stop_requested, *, continue_conversation=False, text="", harness=None):
+    def model_turn(cfg, ui, stop_requested, *, continue_conversation=False, text="", harness=None, audio=None):
         # The model's tool call; its spoken reply comes before the recording starts.
         context.tool_result = call_tool("start_recording", {}, cfg)
         return "Recording."

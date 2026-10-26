@@ -64,8 +64,19 @@ def step_idle(context):
 
 @when("I open a second chat UI on the same runtime dir")
 def step_second(context):
+    context.harness.close()
     context.ui = ChatUi(context.cfg)
     context.harness = Harness(context.cfg, on_event=context.ui.on_harness_event, should_cancel=context.ui.cancelled)
+    context.add_cleanup(context.harness.close)
+
+
+@when("I resume the saved session in a second chat UI")
+def step_resume_ui(context):
+    sid = context.harness.context.session_id
+    context.harness.close()
+    context.ui = ChatUi(context.cfg)
+    context.harness = Harness(context.cfg, on_event=context.ui.on_harness_event, should_cancel=context.ui.cancelled, session_id=sid)
+    context.add_cleanup(context.harness.close)
 
 
 @then('the snapshot phase should be "{phase}"')

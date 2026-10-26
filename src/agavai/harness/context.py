@@ -41,12 +41,30 @@ class ContextStore:
     should_cancel: Callable[[], bool] = field(default=lambda: False, repr=False)
     held: bool = False
     draft: str = ""
+    recovery_required: bool = False
+    remembered_request_id: str = ""
+
+    def checkpoint(self) -> dict:
+        names = ("session_id", "request_id", "turn_status", "task_id", "messages", "heads",
+                 "committed_requests", "archived_tasks", "source_active", "source_revision",
+                 "derived_revision", "compacted_exchanges", "held", "draft", "recovery_required", "remembered_request_id")
+        return {**{name: deepcopy(getattr(self, name)) for name in names},
+                "recording": str(self.recording) if self.recording else None,
+                "execution": deepcopy(self.execution.records)}
+
+    @classmethod
+    def from_checkpoint(cls, data: dict) -> ContextStore:
+        values = deepcopy(data)
+        values["recording"] = Path(values["recording"]) if values.get("recording") else None
+        values["execution"] = ExecutionManager(values.pop("execution"))
+        return cls(**values)
 
     def new_task(self) -> None:
         if self.messages:
             self.archived_tasks.append({"id": self.task_id, "messages": self.messages, "heads": self.heads})
         self.task_id = uuid.uuid4().hex
         self.messages = []
+        self.remembered_request_id = ""
         self.heads = []
         self.pending_action = None
         self.compacted_exchanges = 0
@@ -55,6 +73,7 @@ class ContextStore:
         self.source_active = False
 
     def remember(self, messages: list[dict], heads: list[str]) -> None:
+        self.remembered_request_id = self.request_id
         self.messages = deepcopy([m for m in messages if m.get("role") != "system"])
         self.heads = list(heads)
 

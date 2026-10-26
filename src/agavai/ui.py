@@ -89,6 +89,7 @@ def _pipeline_config(cfg: Config) -> list[dict[str, str]]:
 class ChatUi:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
+        self._replaying = False
         self.path = cfg.runtime_dir / "ui.json"
         self.data: dict[str, Any] = {
             "phase": "idle",
@@ -118,12 +119,44 @@ class ChatUi:
 
     def on_harness_event(self, event: HarnessEvent) -> None:
         """Project domain events through the existing native snapshot methods."""
-        if event.kind != "session_started" and self.cancelled():
+        if event.kind not in {"session_started", "session_resumed"} and self.cancelled():
             return
         data = event.data
         match event.kind:
-            case "session_started":
+            case "session_started" | "session_resumed":
                 self.begin_session(event.session_id)
+                self.data["session"] = {"id": event.session_id, "persistent": data.get("persistent", False),
+                                        "resumed": event.kind == "session_resumed", "directory": data.get("directory")}
+                self.data["sessions"] = data.get("history", [])
+                if event.kind == "session_resumed":
+                    from agavai.harness.storage import SessionRepository
+                    saved = SessionRepository(self.cfg.sessions.dir).inspect(event.session_id)
+                    self._replaying = True
+                    try:
+                        projected = {"turn_input", "conversation_cleared", "stage", "decision", "model_requested",
+                                     "tool_started", "tool_completed", "answer", "display", "reply", "source_changed", "task_status", "speech", "error"}
+                        unknown = {(r["request_id"], r["call_id"]): r for r in saved["executions"] if r["status"] == "unknown"}
+                        for item in saved["events"]:
+                            if item["kind"] in projected:
+                                self.on_harness_event(HarnessEvent(**item))
+                            if item["kind"] == "tool_started":
+                                record = unknown.get((item["request_id"], item["data"]["call_id"]))
+                                if record:
+                                    self.tool_done(record["name"], record["result"], status="unknown")
+                    finally:
+                        self._replaying = False
+                    if saved["turns"] and saved["turns"][-1]["audio"]:
+                        self.data["audio_status"] = saved["turns"][-1]["audio"]
+                    self.data["task"] = {"id": event.task_id, "request_id": event.request_id, "status": data["status"]}
+                    if data.get("recovery_required"):
+                        self.data["error"] = "Previous request interrupted or awaiting confirmation. Review the session and give a fresh instruction."
+                    self._set_phase("idle", "Session restored")
+                self._write()
+            case "session_closed":
+                pass
+            case "audio_status":
+                self.data["audio_status"] = data
+                self.pipeline_event("Saved audio", data["status"] + (": " + data["warning"] if data.get("warning") else ""))
             case "request_committed" | "task_started" | "confirmation_requested":
                 pass  # turn_input projects the selected task's presentation separately.
             case "turn_input":
@@ -192,6 +225,7 @@ class ChatUi:
         self.data.pop("completion", None)
         self.data.pop("source", None)
         self.data.pop("task", None)
+        self.data.pop("audio_status", None)
         self.data["execution"] = []
 
     def task_state(self, task_id: str, request_id: str, status: str) -> None:
@@ -358,7 +392,7 @@ class ChatUi:
         self.data["asr_endpoint"] = self.cfg.asr.endpoint
 
     def _write(self, *, summon: bool = False) -> None:
-        if self.cancelled():
+        if self._replaying or self.cancelled():
             return
         self.cfg.runtime_dir.mkdir(parents=True, exist_ok=True)
         blob = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"

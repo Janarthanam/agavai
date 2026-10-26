@@ -75,7 +75,7 @@ class StreamingRecognizer:
             self.close()
             raise
 
-    def events(self, on_level, should_stop=None, should_cancel=None):
+    def events(self, on_level, should_stop=None, should_cancel=None, audio_tap=None):
         if not shutil.which("parec"):
             raise AsrError(MIC_ERROR)
         self._uid += 1
@@ -94,7 +94,7 @@ class StreamingRecognizer:
                 self._parec = subprocess.Popen(ParecSource.ARGV, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             except OSError as exc:
                 raise AsrError(MIC_ERROR) from exc
-            self._pump = threading.Thread(target=self._pump_audio, args=(uid,), daemon=True)
+            self._pump = threading.Thread(target=self._pump_audio, args=(uid, None, audio_tap), daemon=True)
             self._pump.start()
             next_level = 0.0
             started = time.monotonic()
@@ -235,7 +235,7 @@ class StreamingRecognizer:
     def _send(self, kind, uid, payload=b"", *, timeout=2):
         self._worker.send(struct.pack(">cI", kind, uid) + payload, timeout=timeout)
 
-    def _pump_audio(self, uid, on_audio=None):
+    def _pump_audio(self, uid, on_audio=None, audio_tap=None):
         got = False
         tail = b""
         try:
@@ -269,6 +269,8 @@ class StreamingRecognizer:
                 while len(data) - offset >= frame_bytes:
                     frame = data[offset:offset + frame_bytes]
                     offset += frame_bytes
+                    if audio_tap is not None:
+                        audio_tap(frame)
                     self._level_db = rms_dbfs(frame)
                     self._send(b"A", uid, frame)
                     if self._endpointer is not None:
@@ -284,7 +286,10 @@ class StreamingRecognizer:
                             return
                 tail = data[offset:]
             if len(tail) >= 2:
-                self._send(b"A", uid, tail[:len(tail) - len(tail) % 2])
+                frame = tail[:len(tail) - len(tail) % 2]
+                if audio_tap is not None:
+                    audio_tap(frame)
+                self._send(b"A", uid, frame)
         except (OSError, AsrError) as exc:
             if not self._stop_pump.is_set():
                 self._pump_error = f"Microphone/ASR input failed: {exc}"

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Check the actual overlay in an isolated Quickshell instance on Wayland.
 
-Pass scenario names (compact, canvas-focus, recording, help) to run only those.
+Pass scenario names (compact, canvas-focus, recording, help, sessions) to run only those.
 """
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import tempfile
 import wave
 
 root = Path(__file__).resolve().parents[1]
-scenarios = sys.argv[1:] or ['compact', 'canvas-focus', 'recording', 'help']
+scenarios = sys.argv[1:] or ['compact', 'canvas-focus', 'recording', 'help', 'sessions']
 shell = Path('/usr/share/omarchy/shell')
 env = os.environ.copy()
 # Keep logs and snapshots isolated while connecting to the current compositor.
@@ -45,7 +46,10 @@ with tempfile.TemporaryDirectory(prefix='agv-') as directory:
     # The overlay's commands reach this stub, never a real recording.
     stub_log = runtime / 'agavai-commands.log'
     (runtime / 'bin').mkdir()
-    (runtime / 'bin' / 'agavai').write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{stub_log}"\n')
+    history = json.dumps([{'id': 'a' * 32, 'title': 'Current session'}, {'id': 'b' * 32, 'title': 'Earlier session'}])
+    (runtime / 'bin' / 'agavai').write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{stub_log}"\n'
+        f'if [ "$*" = "session list" ]; then printf "%s\\n" {shlex.quote(history)}; fi\n')
     (runtime / 'bin' / 'agavai').chmod(0o755)
     env.update(XDG_RUNTIME_DIR=directory, WAYLAND_DISPLAY=str(display), QT_QPA_PLATFORM='wayland',
                PATH=f"{runtime / 'bin'}:{env['PATH']}", AGAVAI_UI_RECORDING=str(folder))
@@ -73,6 +77,10 @@ with tempfile.TemporaryDirectory(prefix='agv-') as directory:
     commands = stub_log.read_text().splitlines() if stub_log.is_file() else []
     if 'help' in scenarios and any(c == 'stop' or c.startswith('ui-open ') for c in commands):
         raise SystemExit(f'help: reading help must not submit speech or open a hidden result: {commands}')
+    if 'sessions' in scenarios:
+        for command in ('session resume ' + 'b' * 32, 'session new --listen', 'ask --session ' + 'a' * 32 + ' continue my work'):
+            if commands.count(command) != 1:
+                raise SystemExit(f'sessions: expected exactly one {command!r}, got {commands}')
     expected = ['record pause', 'record mark', f'recording correct {folder} 1 The canary ships on Thursday.']
     if 'recording' in scenarios and [c for c in commands if c.startswith(('record ', 'recording '))] != expected:
         raise SystemExit(f'recording: the overlay ran {commands}, expected {expected}')

@@ -69,6 +69,17 @@ api_key_env = "OPENROUTER_API_KEY"
 # from it, and the orb stays in place: bottom-right | bottom-left | top-right | top-left
 placement = "bottom-right"
 
+[sessions]
+# Durable context, ordered events and full tool outcomes. AGAVAI_SESSION_DIR overrides dir.
+enabled = true
+# Default directory: $XDG_DATA_HOME/agavai (normally ~/.local/share/agavai).
+# dir = "~/.local/share/agavai"
+save_audio = true
+# Zero means unlimited. Pruning is explicit: agavai session prune --yes.
+retention_days = 0
+# Refuse new audio at this total quota; never delete older audio automatically.
+max_audio_mb = 0
+
 [recordings]
 # Each recording is a folder here: the audio, recording.json (segments,
 # marks, and corrections), and a readable transcript.md. Kept until deleted.

@@ -77,6 +77,41 @@ ShellRoot {
             Qt.quit();
         }
     }
+    function sessionStep(step, panel, details) {
+        var sid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        if (step === 0) {
+            input.parent = panel.contentItem;
+            chat.applySnapshot(JSON.stringify({session_id: sid, phase: "listening", session: {id: sid, persistent: true}, turns: [{user: "hello", assistant: "Hello."}]}));
+            chat.compact = false;
+        } else if (step === 1) {
+            var toggle = find(chat, "agavaiSessions");
+            check(toggle.visible && toggle.enabled && toggle.text.indexOf("aaaaaaaa") >= 0 && toggle.text.indexOf("saved") >= 0, "Expanded view must identify the durable session");
+            toggle.clicked();
+        } else if (step === 2) {
+            check(chat.historyOpen && find(chat, "agavaiSessionHistory").visible && chat.sessionHistory.length === 2, "History must load saved sessions through the CLI");
+            check(chat.phase === "listening" && chat.snapshot.turns[0].assistant === "Hello.", "Browsing history must preserve capture and conversation");
+            input.keyClick(Qt.Key_Escape);
+            check(!chat.historyOpen && chat.opened, "Escape must close history without dismissing capture");
+            find(chat, "agavaiSessions").clicked();
+        } else if (step === 3) {
+            find(chat, "agavaiHistorySessionbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").clicked();
+        } else if (step === 4) {
+            check(!chat.historyOpen, "Successful resume command must close the history selector");
+            find(chat, "agavaiSessions").clicked();
+        } else if (step === 5) {
+            find(chat, "agavaiNewSession").clicked();
+        } else if (step === 6) {
+            chat.typing = true;
+            find(chat, "agavaiTypedInput").text = "continue my work";
+            chat.ask();
+        } else if (step === 7) {
+            find(chat, "agavaiSessions").clicked();
+            chat.compact = true;
+            check(!chat.historyOpen && !chat.wantsKeyboardFocus, "Minimizing must close history and release focus");
+            console.log("COMPACT_UI_PASS");
+            Qt.quit();
+        }
+    }
     function helpStep(step, panel, stage, details, orb) {
         var source = JSON.parse(Quickshell.env("AGAVAI_UI_HELP_JSON"));
         if (step === 0) {
@@ -210,7 +245,9 @@ ShellRoot {
                 var details = find(chat, "agavaiDetails");
                 var orb = find(chat, "agavaiOrb");
                 var closeButton = find(chat, "agavaiClose");
-                if (scenario === "help") {
+                if (scenario === "sessions") {
+                    sessionStep(step, panel, details);
+                } else if (scenario === "help") {
                     helpStep(step, panel, stage, details, orb);
                 } else if (scenario === "canvas-focus") {
                     canvasFocusStep(step, panel, details);

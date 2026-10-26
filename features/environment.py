@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +31,11 @@ def before_all(context):
 
 
 def before_scenario(context, scenario):
+    folder = tempfile.TemporaryDirectory(prefix="agavai-session-bdd-")
+    context.add_cleanup(folder.cleanup)
+    storage = patch.dict(os.environ, AGAVAI_SESSION_DIR=folder.name)
+    storage.start()
+    context.add_cleanup(storage.stop)
     context.request_log.lines.clear()
     logging.getLogger("agavai").setLevel(logging.INFO)
     # A listen process starts outside any request; scenarios share one process.

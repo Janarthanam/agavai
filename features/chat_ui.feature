@@ -36,8 +36,9 @@ Feature: Top chat overlay snapshot
     When the UI finishes tool "wallpaper_list" with "[]"
     Then there is no completion
 
-  Scenario: A new process reloads prior turns from ui.json
+  Scenario: A new process explicitly resumes durable turns
     Given a chat UI in a temp runtime dir
-    When the user says "hello"
-    And I open a second chat UI on the same runtime dir
+    And an isolated harness with a local scripted language service
+    When the harness receives "hello"
+    And I resume the saved session in a second chat UI
     Then the last user line should be "hello"

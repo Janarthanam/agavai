@@ -313,7 +313,15 @@ def _finalize(folder: Path, meta: dict[str, Any]) -> None:
     (folder / "segments.jsonl").unlink(missing_ok=True)
 
 
-def _encode(folder: Path) -> str:
+def _encode(folder: Path, *, timeout: float | None = None) -> str:
+    try:
+        return _encode_audio(folder, timeout)
+    except subprocess.TimeoutExpired:
+        (folder / "audio.opus").unlink(missing_ok=True)
+        return "Audio encoding timed out, so the original WAV is kept."
+
+
+def _encode_audio(folder: Path, timeout: float | None) -> str:
     """Opus from the WAV. The WAV is deleted only once the Opus file has the same length."""
     wav = folder / "audio.wav"
     opus = folder / "audio.opus"
@@ -322,13 +330,14 @@ def _encode(folder: Path) -> str:
     proc = subprocess.run(
         ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(wav),
          "-c:a", "libopus", "-b:a", "24k", "-application", "voip", str(opus)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=timeout,
     )
     if proc.returncode != 0:
         opus.unlink(missing_ok=True)
         return (proc.stderr.strip().splitlines() or ["ffmpeg could not encode the audio."])[-1]
-    expected = _seconds(wav)
-    encoded = _seconds(opus)
+    probe_timeout = 5 if timeout is not None else None
+    expected = _seconds(wav, timeout=probe_timeout)
+    encoded = _seconds(opus, timeout=probe_timeout)
     if expected is None or encoded is None or abs(encoded - expected) > 1.0:
         opus.unlink(missing_ok=True)
         return "The compressed audio did not match the recording, so the original is kept."
@@ -336,10 +345,10 @@ def _encode(folder: Path) -> str:
     return ""
 
 
-def _seconds(path: Path) -> float | None:
+def _seconds(path: Path, *, timeout: float | None = None) -> float | None:
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=timeout,
     )
     try:
         return float(proc.stdout.strip())

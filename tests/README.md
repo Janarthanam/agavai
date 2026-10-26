@@ -64,3 +64,16 @@ microphone and model-service boundaries are scripted; no live microphone is used
 env -u AGAVAI_NATIVE_UI_CHECK AGAVAI_CONFIG="$PWD/share/config.example.toml" \
   PYTHONPATH=src .venv/bin/behave features/harness_events.feature
 ```
+
+`features/session_persistence.feature` exercises process restart/crash, stale
+confirmation rejection, leases, full outcomes, compaction preservation, SQLite
+failure, native snapshot restoration and CLI inspection/export/delete/prune.
+Spoken-turn scenarios run the voice controller with scripted PCM capture; they
+cover real Opus encoding plus WAV fallback, discarded input, retention opt-out,
+quota, encoder timeout, interrupted finalization, missing audio and overlapping
+encoding/capture. A tagged `@asr_model` replay runs the actual streaming worker and
+capture pump on the speech fixture, then verifies the accepted waveform attachment.
+All scenarios isolate default-on storage using `AGAVAI_SESSION_DIR`; no installed
+session database or real microphone is used. `AGAVAI_NATIVE_UI_CHECK=1` additionally
+runs actual Quickshell history/new/resume/typed-continuation interaction with stub
+CLI commands. Run native focus checks on an unlocked desktop.

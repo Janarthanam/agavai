@@ -209,6 +209,15 @@ class RecordingsConfig:
 
 
 @dataclass
+class SessionsConfig:
+    enabled: bool = True
+    dir: Path = field(default_factory=lambda: _expand(os.environ.get("AGAVAI_SESSION_DIR", str(xdg_data() / "agavai"))))
+    save_audio: bool = True
+    retention_days: int = 0
+    max_audio_mb: int = 0
+
+
+@dataclass
 class LogConfig:
     """debug adds what the user said, replies, and tool arguments and results."""
 
@@ -228,6 +237,7 @@ class Config:
     asr: AsrConfig = field(default_factory=AsrConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     recordings: RecordingsConfig = field(default_factory=RecordingsConfig)
+    sessions: SessionsConfig = field(default_factory=SessionsConfig)
     log: LogConfig = field(default_factory=LogConfig)
 
     def llama_for_role(self, role: str = "service") -> LlmConfig | None:
@@ -523,6 +533,23 @@ def load_config(path: Path | None = None) -> Config:
     recordings = data.get("recordings") or {}
     if "dir" in recordings:
         cfg.recordings.dir = _expand(str(recordings["dir"]))
+
+    sessions = data.get("sessions") or {}
+    for key in ("enabled", "save_audio"):
+        if key in sessions:
+            if not isinstance(sessions[key], bool):
+                raise ValueError(f"[sessions] {key} must be a boolean")
+            setattr(cfg.sessions, key, sessions[key])
+    if "dir" in sessions:
+        cfg.sessions.dir = _expand(str(sessions["dir"]))
+    if os.environ.get("AGAVAI_SESSION_DIR"):
+        cfg.sessions.dir = _expand(os.environ["AGAVAI_SESSION_DIR"])
+    for key in ("retention_days", "max_audio_mb"):
+        if key in sessions:
+            value = sessions[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"[sessions] {key} must be a nonnegative integer")
+            setattr(cfg.sessions, key, value)
 
     log = data.get("log") or {}
     if "level" in log:

@@ -22,6 +22,9 @@ flowchart LR
     Execute --> Tools[Allowlisted desktop adapters]
     Harness --> Events[Harness output events]
     Session --> Events
+    Events --> Ledger[SQLite session ledger]
+    Session --> Audio[Accepted-turn audio attachments]
+    Audio --> Ledger
     Events --> Snapshot[Native snapshot]
     Events --> Collector[Headless consumer]
     Snapshot --> UI[Quickshell overlay]
@@ -33,7 +36,9 @@ run in the agavai listen process, or the one-shot agavai ask process. There is n
 harness daemon. ASR/Cactus workers remain isolated processes; llama-server and
 Kokoro retain existing service deployment. Quickshell runs the presentation surface.
 The listener PID plus its /proc start token and exclusive start lock keep one
-microphone session. Closing it discards session memory; recording files survive.
+microphone session. Closing it checkpoints the session and drains accepted audio
+before releasing its lease; ordinary invocation starts a new session. Explicit
+resume restores context from the durable ledger without replaying actions.
 
 | Owner | State |
 |---|---|
@@ -42,6 +47,8 @@ microphone session. Closing it discards session memory; recording files survive.
 | Execution manager | Ordered call records, exact arguments, actual full outcomes |
 | Inference slot | One outstanding provider operation and cancellation fence |
 | Harness output | Ordered domain events, detached payloads and independent cancellation input |
+| Session repository | Durable events, turns, full outcomes, source revisions, config and checkpoints; per-session process lease |
+| Audio finalizer | Bounded accepted-turn spool, encoded attachments and checksums |
 | Native snapshot | Transcripts, canvas, task status, tool status, actual pipeline events |
 
 ChatUi has no model-message history, inherited tools or executable pending action.
@@ -52,8 +59,11 @@ clears its prompt/head inheritance and invalidates confirmation.
 `ChatUi.on_harness_event` is the native snapshot adapter. A headless collector
 receives the same versioned event envelope and full tool outcomes without creating
 `ui.json`. See the [event contract](voice-agent-harness.md#ui-independent-event-interface).
-The stream is synchronous and memory-only; [durable sessions and saved-by-default
-spoken-turn audio](../tasks/session-persistence.md) remain planned P2 work.
+The stream is synchronous. With default persistence enabled, canonical events
+commit to SQLite before presentation or dispatch; levels/partials stay transient.
+[Durable session contracts](session-persistence.md) cover recovery, saved-by-default
+spoken-turn audio, retention, inspection and native history. Personal memory and
+preferences remain outside this implementation.
 
 ## Routing and models
 
@@ -118,6 +128,8 @@ with existing timeouts; interruption does not claim rollback.
 |---|---|
 | __main__.py | CLI parsing and command composition |
 | harness/__init__.py | Harness entry point and owned context |
+| harness/storage.py, harness/audio.py | SQLite ledger/recovery and accepted-turn audio publication |
+| session_cli.py | Inspection/export/deletion and safe native session selection |
 | harness/events.py | Versioned output events and sink; no graphical imports |
 | harness/session.py | Capture, listener/control transport, recording lifecycle |
 | harness/context.py | Task state, history/archive, prompt packing |

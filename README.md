@@ -18,6 +18,15 @@ Open **Agavai** from the app launcher (or `agavai app` / `agavai invoke`). The l
 
 The harness owns task history, confirmations, corrected recording sources, bounded prompt projection and cancellation. Language questions and self-corrections select a language-capable tier; Needle proposes supported actions. Personal memory/preferences are deferred. Local deployment status is recorded in [tasks/harness-deployment.md](tasks/harness-deployment.md).
 
+Sessions now retain committed text, ordered events, full tool outcomes and context
+in `$XDG_DATA_HOME/agavai/sessions.sqlite3` (normally `~/.local/share/agavai`).
+Accepted spoken turns save audio by default under `sessions/<id>/audio/`; typed
+turns have no audio. The expanded widget shows session identity and opens saved
+history. Use `agavai session list`, `agavai session show ID`, and
+`agavai session export ID ./export` to inspect what happened. Resume never replays
+an interrupted action. `[sessions]` controls storage, audio opt-out and explicit
+retention/quota settings; see [session persistence](docs/session-persistence.md).
+
 Default brain: **Qwen3-4B-Instruct-2507 Q4_K_M (~2.5 GB)**. Switch it without editing the systemd unit:
 
 ```bash

@@ -27,7 +27,9 @@ Item {
     property string actionError: ""
     property bool typing: false
     property bool helpOpen: false
-    onCompactChanged: { if (compact) helpOpen = false; }
+    property bool historyOpen: false
+    property var sessionHistory: []
+    onCompactChanged: { if (compact) { helpOpen = false; historyOpen = false; } }
     readonly property bool listening: phase === "listening"
     readonly property bool recording: phase === "recording"
     readonly property var rec: snapshot.recording || null
@@ -42,7 +44,7 @@ Item {
     readonly property var turn: (snapshot.turns || []).length ? snapshot.turns[snapshot.turns.length - 1] : ({})
     readonly property var tools: turn.tools || []
     readonly property var latestTool: tools.length ? tools[tools.length - 1] : null
-    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing || recording || helpOpen
+    readonly property bool expanded: !!display || !!turn.assistant || !!snapshot.error || typing || recording || helpOpen || historyOpen
     readonly property string reviewPath: recording ? "" : openedRecording || (display && display.kind === "recording" ? String(display.path || "") : "")
     readonly property string heard: (snapshot.transcript && snapshot.transcript.text) ? String(snapshot.transcript.text) : ""
     readonly property string transcript: heard || (listening ? "" : (turn.user || ""))
@@ -102,7 +104,8 @@ Item {
             return;
         typing = false;
         typedInput.text = "";
-        askProc.command = ["agavai", "ask", text];
+        askProc.command = root.snapshot.session && root.snapshot.session.persistent
+            ? ["agavai", "ask", "--session", sessionId, text] : ["agavai", "ask", text];
         askProc.running = true;
     }
     function send() {
@@ -135,6 +138,7 @@ Item {
         var canvasCleared = !obj.display && !!snapshot.display;
         if (nextSession !== sessionId) {
             helpOpen = false;
+            historyOpen = false;
             selected = 0;
             actionError = "";
             openedRecording = "";
@@ -182,7 +186,7 @@ Item {
     // Focus elsewhere minimizes the expanded view, but not while a canvas is on
     // screen: with follow_mouse, merely moving the pointer would hide the answer.
     function minimizeIfUnfocused() {
-        if (wantsKeyboardFocus && !display && !helpOpen && !panel.contentItem.Window.window.active)
+        if (wantsKeyboardFocus && !display && !helpOpen && !historyOpen && !panel.contentItem.Window.window.active)
             compact = true;
     }
     function acquireFocus() {
@@ -222,6 +226,28 @@ Item {
     }
     Process {
         id: askProc
+        stderr: StdioCollector {
+            onStreamFinished: { if (text.trim()) root.actionError = text.trim(); }
+        }
+    }
+    Process {
+        id: historyProc
+        command: ["agavai", "session", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { root.sessionHistory = JSON.parse(text); }
+                catch (e) { root.actionError = "Could not read saved sessions."; }
+            }
+        }
+    }
+    Process {
+        id: sessionProc
+        stderr: StdioCollector {
+            onStreamFinished: { if (text.trim()) root.actionError = text.trim(); }
+        }
+        onExited: exitCode => {
+            if (exitCode === 0) root.historyOpen = false;
+        }
     }
     Process {
         id: openProc
@@ -298,8 +324,11 @@ Item {
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
                         if (root.helpOpen) root.helpOpen = false;
+                        else if (root.historyOpen) root.historyOpen = false;
                         else root.dismiss();
                         event.accepted = true;
+                    } else if (root.historyOpen) {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) event.accepted = true;
                     } else if (root.helpOpen) {
                         if ([Qt.Key_Down, Qt.Key_PageDown, Qt.Key_Up, Qt.Key_PageUp].indexOf(event.key) >= 0) {
                             var direction = event.key === Qt.Key_Up || event.key === Qt.Key_PageUp ? -1 : 1;
@@ -328,6 +357,55 @@ Item {
                     y: root.atTop ? stage.inset : parent.height - implicitHeight - stage.inset
                     rowSpacing: Style.space(12)
 
+                    Flickable {
+                        id: historyView
+                        objectName: "agavaiSessionHistory"
+                        Layout.row: root.atTop ? 1 : 0
+                        Layout.column: 0
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(Style.space(300), panel.height * 0.4)
+                        visible: root.historyOpen
+                        clip: true
+                        contentWidth: width
+                        contentHeight: historyItems.implicitHeight
+                        ColumnLayout {
+                            id: historyItems
+                            width: parent.width
+                            spacing: Style.space(8)
+                            NativeButton {
+                                objectName: "agavaiNewSession"
+                                text: "New session"
+                                enabled: !sessionProc.running
+                                onClicked: {
+                                    sessionProc.command = ["agavai", "session", "new", "--listen"];
+                                    sessionProc.running = true;
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: !!root.actionError
+                                text: root.actionError
+                                wrapMode: Text.Wrap
+                                color: root.ink
+                                font.pixelSize: Style.font.caption
+                            }
+                            Repeater {
+                                model: root.sessionHistory
+                                NativeButton {
+                                    required property var modelData
+                                    objectName: "agavaiHistorySession" + modelData.id
+                                    Layout.fillWidth: true
+                                    text: String(modelData.title).slice(0, 42) + " · " + String(modelData.id).slice(0, 8)
+                                    accessibleName: "Resume session " + modelData.title + " " + modelData.id
+                                    enabled: !sessionProc.running
+                                    onClicked: {
+                                        sessionProc.command = ["agavai", "session", "resume", modelData.id];
+                                        sessionProc.running = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Flickable {
                         id: helpView
                         objectName: "agavaiPipelineHelp"
@@ -367,7 +445,7 @@ Item {
                         Layout.row: root.atTop ? 1 : 0
                         Layout.column: 0
                         Layout.fillWidth: true
-                        visible: !root.helpOpen && (!!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool || root.recording)
+                        visible: !root.helpOpen && !root.historyOpen && (!!root.display || root.actionError !== "" || root.typing || root.showsActions || !!root.latestTool || root.recording)
                         spacing: Style.space(12)
 
                         RecordingLive {
@@ -417,6 +495,7 @@ Item {
                                 color: Util.alpha(Commons.Color.foreground, 0.06)
                                 TextInput {
                                     id: typedInput
+                                    objectName: "agavaiTypedInput"
                                     anchors.fill: parent
                                     anchors.margins: Style.space(10)
                                     color: root.ink
@@ -512,11 +591,24 @@ Item {
                                     elide: Text.ElideRight
                                 }
                                 NativeButton {
+                                    objectName: "agavaiSessions"
+                                    quiet: true
+                                    text: root.sessionId.slice(0, 8) + (root.snapshot.session && root.snapshot.session.persistent ? " · saved" : " · temporary")
+                                    accessibleName: "Session history " + root.sessionId
+                                    enabled: !!(root.snapshot.session && root.snapshot.session.persistent)
+                                    onClicked: {
+                                        root.helpOpen = false;
+                                        root.historyOpen = !root.historyOpen;
+                                        root.actionError = "";
+                                        if (root.historyOpen && !historyProc.running) historyProc.running = true;
+                                    }
+                                }
+                                NativeButton {
                                     objectName: "agavaiHelp"
                                     quiet: true
                                     text: "?"
                                     accessibleName: root.helpOpen ? "Close version and pipeline help" : "Version and pipeline help"
-                                    onClicked: root.helpOpen = !root.helpOpen
+                                    onClicked: { root.historyOpen = false; root.helpOpen = !root.helpOpen; }
                                 }
                                 NativeButton {
                                     objectName: "agavaiMinimize"
@@ -525,6 +617,17 @@ Item {
                                     accessibleName: "Minimize assistant"
                                     onClicked: root.compact = true
                                 }
+                            }
+                            Text {
+                                objectName: "agavaiAudioStatus"
+                                Layout.fillWidth: true
+                                horizontalAlignment: root.textTowardOrb
+                                visible: !!root.snapshot.audio_status && (root.snapshot.audio_status.status !== "ready" || !!root.snapshot.audio_status.warning)
+                                text: root.snapshot.audio_status ? String(root.snapshot.audio_status.warning || root.snapshot.audio_status.status) : ""
+                                textFormat: Text.PlainText
+                                color: root.inkMuted
+                                font.pixelSize: Style.font.caption
+                                wrapMode: Text.Wrap
                             }
                             Text {
                                 Layout.fillWidth: true
