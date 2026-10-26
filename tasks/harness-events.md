@@ -1,8 +1,8 @@
 # UI-independent harness events
 
-- [~] P1 voice Decouple the harness from ChatUi through an explicit event interface
+- [x] P1 voice Decouple the harness from ChatUi through an explicit event interface
 
-Status: in progress. Owner: Codex session harness-events. User requested P1 so the harness can be exercised separately from the UI. No deployment or host configuration changes.
+Status: complete. Owner: Codex session harness-events. User requested P1 so the harness can be exercised separately from the UI. No deployment or host configuration changes.
 
 ### Acceptance
 
@@ -24,3 +24,5 @@ Status: in progress. Owner: Codex session harness-events. User requested P1 so t
 - 2026-10-26T09:29:21+05:30 — Codex session harness-events — changed files for handoff: `src/agavai/harness/{__init__,events,engine,execution,session,source_turn}.py`, `src/agavai/{__main__,app,brain,ui}.py`; `evals/runner.py`; `features/harness_events.feature`, `features/orchestrator.feature`, `features/steps/{harness_event,harness,asr_meter,chat_ui,engine,invocation,native_ui,orchestrator,pipeline_help,recording,request_log,voice_control}_steps.py`, `features/support/{session_replay,tool_replay}.py`; `docs/{architecture,flow,ui-design,voice-agent-harness}.md`, `docs/architecture-design/design.md`, `tests/README.md`, this task. P2 storage plan is separately tracked in `tasks/session-persistence.md`. Native compositor focus limitation remains documented under the original harness task; this P1 does not fix it or claim a native desktop rerun.
 
 - 2026-10-26T09:30:51+05:30 — Codex session harness-events — final validation: full Behave suite with installed Cactus/Silero assets and native compositor opt-in unset: 471 scenarios / 2353 steps passed, 0 failed, 5 optional scenarios skipped (four model-comparison experiments and one desktop-help check). All 14 headless scenarios passed separately (82 steps). Python compilation and `git diff --check` passed. Reviewed runtime, adapter, caller migrations, event payloads, BDD and current documentation; reused canvas normalization and existing projection/provider/execution contracts. Implementation complete, awaiting local commit; P2 remains planned.
+
+- 2026-10-26T09:31:03+05:30 — Codex session harness-events — completed P1 in local commit `c86f80a` after the validation above (471 scenarios / 2353 steps passed; 5 optional skipped). P2 plan committed as `48075d0` and remains planned. Changed file in this completion update: `tasks/harness-events.md`. No deployment or native desktop rerun.
