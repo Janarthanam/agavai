@@ -1,8 +1,8 @@
 # Agavai voice-agent harness design
 
-- [~] P0 voice Design Agavai as an in-process harness for voice, context, routing and tool execution
+- [x] P0 voice Design Agavai as an in-process harness for voice, context, routing and tool execution
 
-Status: in progress — native validation has an intermittent focus failure. Owner: Codex session voice-agent-harness. Runtime and documentation parity are implemented and committed locally. The desktop is now unlocked, but the native umbrella fails before help at expanded-view focus acquisition. The same failure reproduces on pre-rewrite main c2d34a9; the standalone canvas-focus check passed once. Follow-up: investigate the existing compositor/test focus behavior before claiming native validation passed. No host deployment is part of this rewrite.
+Status: complete. Owner: Codex session voice-agent-harness. Runtime and documentation parity are implemented and committed. The outstanding native umbrella passed on 2026-10-26 from main `933cf25`; earlier intermittent focus failures remain recorded below and are not claimed fixed. Separately authorized deployment is recorded in [harness-deployment.md](harness-deployment.md).
 
 ### Acceptance
 
@@ -32,3 +32,5 @@ Status: in progress — native validation has an intermittent focus failure. Own
 
 
 - 2026-10-26T06:22:50+05:30 — Codex session voice-agent-harness-native-check — user confirmed the desktop unlocked and requested the final native rerun. Started at clean `0a4eedd`; compositor inspection confirms both displays on, without LOCK. The prescribed BDD scenario `features/pipeline_help.feature:35` failed twice before help: canvas-focus step 1, then compact step 6, both “Expanded view must acquire focus when activated.” Standalone canvas-focus passed once. Compared against pre-rewrite main `c2d34a9`: plugin and native QML fixture are unchanged; the only script change supplies the new explicit session ID for the help fixture. An isolated archive of that baseline, running compact + canvas-focus, reproduces canvas-focus step 1. This establishes an intermittent existing native focus failure; the locked desktop was not the sole cause. Logs: `/tmp/agavai-harness-native-final.log`, `/tmp/agavai-harness-native-confirm.log`, `/tmp/agavai-canvas-focus-rerun.log`, `/tmp/agavai-native-baseline.log`. Native help/recording checks remain unverified by the umbrella because it exits at focus failure. Changed only this tracker; no runtime/UI fixes or host changes. Existing focus behavior is flagged for a separate follow-up rather than added to the harness rewrite scope. Prior implementation commits: `9dbc151`, `0a4eedd`; task remains open pending native validation.
+
+- 2026-10-26T11:29:04+05:30 — Codex session harness-deploy — final native acceptance completed during the user-authorized deployment from main `933cf25`: `AGAVAI_NATIVE_UI_CHECK=1` BDD scenario `features/pipeline_help.feature:35` passed, including compact/canvas-focus/recording/help checks. Source/runtime commits `fe91e46`, `9dbc151`, `0a4eedd`, `c86f80a` are committed and integrated; prior full BDD has 471 scenarios / 2353 steps passing. This closes the remaining validation item; no compositor/test behavior was changed. Log: `/tmp/agavai-harness-deploy-native.log`. Changed file for this completion update: this task; deployment evidence lives in its separate tracker.

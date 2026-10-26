@@ -7,10 +7,11 @@ speech synthesis are replaceable services behind explicit adapters. This is an
 architectural rewrite of the existing application, not a separate framework or
 another daemon. The native UI is a projection of harness state.
 
-This document describes the implemented rewrite on the current branch;
-[flow.md](flow.md) governs runtime behavior. This branch has not been deployed to
-the host. No host configuration or model deployment changes are part of this rewrite. Existing
-recording, confirmation and allowlist guarantees are retained by the implementation.
+This document describes the implemented rewrite; [flow.md](flow.md) governs
+runtime behavior. The separately authorized local deployment from main is recorded
+in [harness-deployment.md](../tasks/harness-deployment.md) and preserves the saved
+model configuration. Existing recording, confirmation and allowlist guarantees
+are retained by the implementation.
 
 The initial harness must own:
 

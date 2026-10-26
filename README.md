@@ -16,7 +16,7 @@ F9 dictation stays Voxtype. **Super+M** invokes Agavai: the line sends when stre
 
 Open **Agavai** from the app launcher (or `agavai app` / `agavai invoke`). The launcher, shortcut, and bar share **one overlay**, which starts listening automatically. Left-click the bar icon to speak; right-click cancels. In the expanded view, Escape or × dismisses the overlay. “Type instead” provides a text entry on the same surface. Reinvoking while a request is active raises the widget without submitting or restarting the command.
 
-The harness owns task history, confirmations, corrected recording sources, bounded prompt projection and cancellation. Language questions and self-corrections select a language-capable tier; Needle proposes supported actions. Personal memory/preferences are deferred. This branch is not a host deployment.
+The harness owns task history, confirmations, corrected recording sources, bounded prompt projection and cancellation. Language questions and self-corrections select a language-capable tier; Needle proposes supported actions. Personal memory/preferences are deferred. Local deployment status is recorded in [tasks/harness-deployment.md](tasks/harness-deployment.md).
 
 Default brain: **Qwen3-4B-Instruct-2507 Q4_K_M (~2.5 GB)**. Switch it without editing the systemd unit:
 

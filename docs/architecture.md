@@ -132,5 +132,5 @@ with existing timeouts; interruption does not claim rollback.
 
 [Component design](architecture-design/design.md) maps modules and critical flows.
 [Harness BDD](../features/harness.feature), speech replays and native UI checks
-validate production entry points. This branch's implementation does not imply a
-host deployment.
+validate production entry points. Local host deployment is recorded separately in
+[harness-deployment.md](../tasks/harness-deployment.md).
