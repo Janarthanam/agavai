@@ -2,7 +2,7 @@
 
 - [x] P2 voice Persist and resume sessions, with explicit audio retention
 
-Status: complete (implementation committed at `76c738b`; not deployed). Owner: Codex session session-persistence. User authorized implementation for observability, with ordinary spoken-turn audio saved by default. P1 events are implemented. No deployment or changes to installed data/config are part of this implementation.
+Status: complete (implementation committed at `76c738b`; deployed from local main at `3c271ec`). Owner: Codex session session-persistence. User authorized implementation for observability, with ordinary spoken-turn audio saved by default. Deployment is recorded separately in `tasks/harness-deployment.md`.
 
 ### Implemented structure
 

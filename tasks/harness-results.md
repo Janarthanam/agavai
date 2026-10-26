@@ -2,7 +2,7 @@
 
 - [x] P1 voice Return typed turn outcomes and migrate clients
 
-Status: complete (implementation committed at `b253af8`; not deployed). Owner: Codex session harness-results. User approved the proposed TurnResult and client changes. No deployment or host configuration/data changes.
+Status: complete (implementation committed at `b253af8`; deployed from local main at `3c271ec`). Owner: Codex session harness-results. User approved the proposed TurnResult and client changes. Deployment is recorded separately in `tasks/harness-deployment.md`.
 
 ### Acceptance
 
