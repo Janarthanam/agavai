@@ -146,7 +146,8 @@ def excessive_recording(context):
 
 @when('the harness receives "{text}"')
 def harness_turn(context, text):
-    context.reply = context.harness.run_turn(text, continue_conversation=bool(context.harness.context.committed_requests))
+    context.turn_result = context.harness.run_turn(text, continue_conversation=bool(context.harness.context.committed_requests))
+    context.reply = context.turn_result.speech_text or ""
 
 
 @then('the language service received "{text}"')
@@ -332,7 +333,8 @@ def cancel_inference(context):
         cancelled.set()
     thread = threading.Thread(target=cancel)
     thread.start()
-    context.reply = context.harness.run_turn("open the browser")
+    context.turn_result = context.harness.run_turn("open the browser")
+    context.reply = context.turn_result.speech_text or ""
     thread.join(2)
     context.events_at_cancel = deepcopy(context.harness_events)
     if not getattr(context, "headless_harness", False):
@@ -362,7 +364,8 @@ def no_queued_inference(context):
     threading.Thread(target=cancel).start()
     context.harness.run_turn("open the browser")
     context.harness.should_cancel = lambda: False
-    context.reply = context.harness.run_turn("open the browser")
+    context.turn_result = context.harness.run_turn("open the browser")
+    context.reply = context.turn_result.speech_text or ""
     assert "still stopping" in context.reply
     context.model_release.set()
     context.harness.context.inference.running.join(2)

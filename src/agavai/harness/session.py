@@ -519,7 +519,9 @@ def _run_stop_body(
     if not resetting:
         write_state(cfg, "thinking")
     try:
-        reply = harness.run_turn(text, continue_conversation=continue_conversation, audio=audio)
+        turn = harness.run_turn(text, continue_conversation=continue_conversation, audio=audio)
+        # Recording takeover cancels inference without dismissing the listener.
+        reply = "" if turn.status == "cancelled" else turn.speech_text or ""
     except EventDeliveryError:
         raise
     except Exception:

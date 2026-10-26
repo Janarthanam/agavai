@@ -17,6 +17,14 @@ proposes tool calls; it is not a general context router. Structured/long results
 require language interpretation or an explicit inability response. Tool completion
 alone does not fulfill a summary request.
 
+The public harness and turn engine return a structured `TurnResult`, not spoken
+text alone. Its status, optional speech/content, current-request executions and
+inclusive event range are finalized once and embedded in `task_status` before
+return. Voice and typed clients speak only present `speech_text`; silent controls
+do not call TTS. Cancellation suppresses speech while preserving actions already
+completed. Blank input creates no request and preserves existing confirmation.
+See the [result contract](voice-agent-harness.md#structured-turn-result).
+
 Task relation uses a reported language tier even with Needle actions. Invalid decisions
 stop and retain earlier context. Without a language tier, “Agavai” starts a fresh task
 rather than guessing continuity. An unrelated request archives the previous task and

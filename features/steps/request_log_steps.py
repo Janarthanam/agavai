@@ -16,6 +16,7 @@ from behave import given, then, when
 
 from agavai import journal
 from agavai.harness.session import listen_session
+from agavai.harness import TurnResult
 from agavai.__main__ import main
 from agavai.router import select_head_ids
 
@@ -188,7 +189,9 @@ def _listen(context, captures, turn):
 
 @when("an automatic session hears a request, noise, and a follow-up")
 def request_noise_followup(context):
-    _listen(context, [[("eou", "find the notes")], [("eou", "")], [("eou", "open the first one")], []], lambda *args, **kwargs: "Done.")
+    result = TurnResult(context.harness.context.session_id, context.harness.context.task_id,
+                        "replay", "answered", "Done.", None, (), None, None)
+    _listen(context, [[("eou", "find the notes")], [("eou", "")], [("eou", "open the first one")], []], lambda *args, **kwargs: result)
 
 
 @when("an automatic session's turn raises \"{error}\"")

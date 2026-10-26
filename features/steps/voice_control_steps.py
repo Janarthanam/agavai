@@ -59,7 +59,8 @@ def dependencies(context):
 @given("a browser launch is awaiting confirmation")
 def pending_browser(context):
     context.control_responses.append(_browser_proposal())
-    context.reply = run_turn("open the browser but confirm first", context.cfg, context.harness.output, context=context.harness.context)
+    context.turn_result = run_turn("open the browser but confirm first", context.cfg, context.harness.output, context=context.harness.context)
+    context.reply = context.turn_result.speech_text or ""
     assert context.reply == "Open the browser?", context.reply
     assert context.harness.context.pending_action.name == "launch"
     assert context.harness.context.pending_action.arguments == {"target": "browser"}
@@ -159,7 +160,8 @@ def empty_local_result(context):
 
 @when("a control request is made without a chat UI")
 def no_ui(context):
-    context.reply = run_turn("open the browser but confirm first", context.cfg, context=context.harness.context)
+    context.turn_result = run_turn("open the browser but confirm first", context.cfg, context=context.harness.context)
+    context.reply = context.turn_result.speech_text or ""
 
 
 @when("the control proposal belongs to another session")
@@ -170,7 +172,8 @@ def stale(context):
 @when("a control request combines two tool heads")
 def budget(context):
     context.control_router.side_effect = lambda text, cfg, **kwargs: ["wallpaper", "system"]
-    context.reply = run_turn("show wallpaper and system settings", context.cfg, context.harness.output, context=context.harness.context)
+    context.turn_result = run_turn("show wallpaper and system settings", context.cfg, context.harness.output, context=context.harness.context)
+    context.reply = context.turn_result.speech_text or ""
 
 
 @when("a real control listen loop receives")

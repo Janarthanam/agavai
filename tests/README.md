@@ -77,3 +77,11 @@ All scenarios isolate default-on storage using `AGAVAI_SESSION_DIR`; no installe
 session database or real microphone is used. `AGAVAI_NATIVE_UI_CHECK=1` additionally
 runs actual Quickshell history/new/resume/typed-continuation interaction with stub
 CLI commands. Run native focus checks on an unlocked desktop.
+
+`features/harness_results.feature` runs the real harness/HTTP/dispatcher and voice
+or typed CLI clients with scripted external boundaries. It checks typed outcomes,
+final-event/SQLite agreement, confirmation, blank/held/reset input, cancellation
+with completed effects, failure/unknown/incomplete statuses, raw source/answer
+content, payload isolation and per-request results after resume. Existing graders
+continue consuming speech text from the structured result. No unit tests or live
+microphone are involved.

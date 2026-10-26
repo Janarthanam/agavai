@@ -8,6 +8,7 @@ from typing import Any, Callable, Literal
 
 from agavai.brain import brain_label
 from agavai.canvas import display_for
+from agavai.harness.results import TurnResult
 
 EventKind = Literal[
     "session_started", "session_resumed", "session_closed", "audio_status",
@@ -49,6 +50,7 @@ class HarnessOutput:
         self.sequence = 0
         self.phase = "idle"
         self.current_result = None
+        self.result_sequence = 0
 
     @property
     def interactive(self) -> bool:
@@ -71,11 +73,15 @@ class HarnessOutput:
         self.emit("session_started", **metadata)
 
     def clear_conversation(self) -> None:
-        self.current_result = None
+        self._set_result(None)
         self.emit("conversation_cleared")
 
-    def task_state(self, status: str) -> None:
-        self.emit("task_status", status=status)
+    def finish_turn(self, result: TurnResult) -> None:
+        self.emit("task_status", status=result.status, result=result.to_dict())
+
+    def _set_result(self, content: dict | None) -> None:
+        self.current_result = deepcopy(content)
+        self.result_sequence = self.sequence + 1
 
     def pipeline_event(self, stage: str, detail: str) -> None:
         self.emit("stage", stage=stage, detail=detail)
@@ -92,7 +98,7 @@ class HarnessOutput:
 
     def listening(self) -> None:
         self.phase = "listening"
-        self.current_result = None
+        self._set_result(None)
         self.emit("listening", fresh=True)
 
     def continue_listening(self) -> None:
@@ -103,11 +109,11 @@ class HarnessOutput:
         self.emit("partial", text=text)
 
     def display(self, content: dict | None) -> None:
-        self.current_result = deepcopy(content)
+        self._set_result(content)
         self.emit("display", content=content)
 
     def answer(self, title: str, markdown: str) -> None:
-        self.current_result = {"kind": "answer", "title": title, "text": markdown}
+        self._set_result({"kind": "answer", "title": title, "text": markdown})
         self.emit("answer", title=title, markdown=markdown)
 
     def source_changed(self, source: dict) -> None:
@@ -122,7 +128,7 @@ class HarnessOutput:
 
     def user(self, text: str, *, keep_display: bool = False) -> None:
         if not keep_display:
-            self.current_result = None
+            self._set_result(None)
         self.phase = "thinking"
         self.emit("turn_input", text=text, keep_context=keep_display)
 
@@ -134,7 +140,7 @@ class HarnessOutput:
         # The spoken reply uses the same normalized labels even without a UI sink.
         content = display_for(name, result)
         if content is not None:
-            self.current_result = content
+            self._set_result(content)
         self.emit("tool_completed", name=name, result=result, status=status, call_id=call_id)
 
     def assistant(self, text: str) -> None:

@@ -168,15 +168,17 @@ def main(argv: list[str] | None = None) -> int:
             journal.start_request(str(ui.data["session_id"]))
             cue_think(cfg)
             write_state(cfg, "thinking")
-            reply = harness.run_turn(text, continue_conversation=bool(harness.context.committed_requests))
-            if ui.cancelled():
+            result = harness.run_turn(text, continue_conversation=bool(harness.context.committed_requests))
+            if result.status == "cancelled" or ui.cancelled():
                 write_state(cfg, "idle")
                 return 0
-            write_state(cfg, "speaking")
-            harness.output.speech(speak(reply, cfg))
+            if result.speech_text:
+                write_state(cfg, "speaking")
+                harness.output.speech(speak(result.speech_text, cfg))
             harness.output.idle()
             write_state(cfg, "idle")
-            print(reply)
+            if result.speech_text:
+                print(result.speech_text)
             return 0
         finally:
             harness.close()

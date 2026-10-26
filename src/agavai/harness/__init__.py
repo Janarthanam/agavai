@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from agavai.harness.context import ContextStore
 from agavai.harness.events import EventSink, HarnessOutput
+from agavai.harness.results import ToolExecution, TurnResult, TurnStatus
 
 
 class Harness:
@@ -66,7 +67,7 @@ class Harness:
     def should_cancel(self, callback):
         self.context.should_cancel = callback
 
-    def run_turn(self, text: str, *, continue_conversation: bool = False, audio=None) -> str:
+    def run_turn(self, text: str, *, continue_conversation: bool = False, audio=None) -> TurnResult:
         from agavai.harness.engine import run_turn
         if self._closed:
             raise ValueError("This harness session is closed.")

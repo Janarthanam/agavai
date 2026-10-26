@@ -18,6 +18,10 @@ Open **Agavai** from the app launcher (or `agavai app` / `agavai invoke`). The l
 
 The harness owns task history, confirmations, corrected recording sources, bounded prompt projection and cancellation. Language questions and self-corrections select a language-capable tier; Needle proposes supported actions. Personal memory/preferences are deferred. Local deployment status is recorded in [tasks/harness-deployment.md](tasks/harness-deployment.md).
 
+`Harness.run_turn()` returns a typed [TurnResult](docs/voice-agent-harness.md#structured-turn-result)
+with status, optional speech/content, execution outcomes and trace identity.
+The event stream supplies progress and embeds that same result at completion.
+
 Sessions now retain committed text, ordered events, full tool outcomes and context
 in `$XDG_DATA_HOME/agavai/sessions.sqlite3` (normally `~/.local/share/agavai`).
 Accepted spoken turns save audio by default under `sessions/<id>/audio/`; typed

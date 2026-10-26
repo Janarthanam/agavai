@@ -15,8 +15,9 @@ acceptance matrix and references.
 
 | Component | Code / interface |
 |---|---|
-| Harness | Harness(cfg, on_event=consumer, should_cancel=callback).run_turn(text, continue_conversation=...) |
+| Harness | Harness(cfg, on_event=consumer, should_cancel=callback).run_turn(text, continue_conversation=...) → TurnResult |
 | Output events | harness/events.py: ordered, serializable HarnessEvent envelopes with detached data |
+| Turn result | harness/results.py: explicit status, optional speech/content, current-request executions and event range; same payload in final task_status |
 | Session controller | harness/session.py: listener identity, ASR events, controls, recording |
 | Context store | harness/context.py: tasks, archive, proposals, source revision, prompt projection |
 | Decision layer | harness/routing.py: capability/source policy, language task relation |
@@ -50,7 +51,7 @@ sequenceDiagram
     Model-->>Engine: Answer or candidate calls
     Engine->>Execute: Validate and dispatch ordered calls
     Execute-->>Context: Full typed outcome, task and request identity
-    Engine-->>Session: Accepted reply and UI-independent output events
+    Engine-->>Session: TurnResult and UI-independent output events
 ~~~
 
 Recording summaries bind corrected source before calling a language model, with no

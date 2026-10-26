@@ -260,7 +260,8 @@ def run_case(case: Case, base_cfg: Config, shipped_caps: set[str], *, spoken: Ca
             t0 = time.monotonic()
             error = ""
             try:
-                reply = harness.run_turn(heard if heard is not None else say, continue_conversation=in_session > 0)
+                result = harness.run_turn(heard if heard is not None else say, continue_conversation=in_session > 0)
+                reply = result.speech_text or ""
             except Exception:  # noqa: BLE001 - a harness or product crash must be visible, not scored as a miss
                 reply = ""
                 error = traceback.format_exc(limit=6)

@@ -399,7 +399,8 @@ def brain_turn(context, small_responses, *, tool_only=False, larger=True, large_
     large_script = iter(large_responses or [{'content':'Larger answer.'}])
     large.respond.side_effect = record
     with patch('agavai.harness.engine.create_brain', side_effect=factory), tool_patch('agavai.harness.engine.call_tool', return_value='Opened browser.') as tool:
-        context.reply = run_turn(text, cfg, context.harness.output, context=context.harness.context)
+        context.turn_result = run_turn(text, cfg, context.harness.output, context=context.harness.context)
+        context.reply = context.turn_result.speech_text or ""
     context.small_engine, context.large_engine = small, large
     context.executed_tools = tool.call_count
 
@@ -725,7 +726,8 @@ def register_brain(context):
         cfg = load_config(path)
         cfg.router.backend = 'keyword'
         with patch('agavai.harness.engine.chat') as chat, patch('agavai.harness.engine.health') as health:
-            context.reply = run_turn('hello', cfg, context.harness.output, context=context.harness.context)
+            context.turn_result = run_turn('hello', cfg, context.harness.output, context=context.harness.context)
+            context.reply = context.turn_result.speech_text or ""
             context.used_llama = chat.called or health.called
 
 
@@ -818,7 +820,8 @@ tool_selection = "{policy}"
     responses = iter([call, {'content':'Finished.'}])
     brain.respond.side_effect = respond
     with patch('agavai.harness.engine.create_brain', return_value=brain), patch('agavai.harness.engine.select_head_ids', return_value=['launch']) as route, tool_patch('agavai.harness.engine.call_tool', return_value='Finished.') as tool:
-        context.reply = run_turn('inspect local agents' if full else 'open the browser', cfg, context.harness.output, context=context.harness.context)
+        context.turn_result = run_turn('inspect local agents' if full else 'open the browser', cfg, context.harness.output, context=context.harness.context)
+        context.reply = context.turn_result.speech_text or ""
     context.mixed_route_calls = route.call_count
     context.mixed_tool_calls = tool.call_args_list
     assert cfg.asr.backend == speech and cfg.small_brain.backend == agent
@@ -849,7 +852,7 @@ def all_tools_confirmed(context):
     assert context.executed_tools == 0
     assert context.harness.context.pending_action.name == 'list_agents'
     with patch('agavai.harness.engine.create_brain') as brain, tool_patch('agavai.harness.engine.call_tool', return_value='Agents listed.') as tool:
-        reply = run_turn('yes', context.cfg, context.harness.output, context=context.harness.context, continue_conversation=True)
+        reply = run_turn('yes', context.cfg, context.harness.output, context=context.harness.context, continue_conversation=True).speech_text or ""
     brain.assert_not_called()
     tool.assert_called_once_with('list_agents', '{}', context.cfg)
     assert reply == 'Agents listed.' and context.harness.context.pending_action is None
@@ -912,7 +915,8 @@ tool_selection = "{policy}"
         {'content': 'Volume increased.'},
     ]
     with patch('agavai.router.create_brain', return_value=router) as factory, patch('agavai.harness.engine.create_brain', return_value=agent), tool_patch('agavai.harness.engine.call_tool', return_value='Volume increased.') as tool:
-        context.reply = run_turn('increase playback level', cfg, context.harness.output, context=context.harness.context)
+        context.turn_result = run_turn('increase playback level', cfg, context.harness.output, context=context.harness.context)
+        context.reply = context.turn_result.speech_text or ""
     context.routing_cfg, context.routing_policy = cfg, policy
     context.routing_factory, context.routing_model = factory, router
     context.routing_agent, context.routing_actions = agent, tool
@@ -1008,7 +1012,8 @@ def needle_router_and_agent(context, router_config, policy):
     with patch('agavai.router.create_brain') as router_factory, \
             patch('agavai.harness.engine.create_brain', return_value=needle), \
             tool_patch('agavai.harness.engine.call_tool', return_value='Volume raised.') as tool:
-        context.reply = run_turn('turn the volume up', cfg, context.harness.output, context=context.harness.context)
+        context.turn_result = run_turn('turn the volume up', cfg, context.harness.output, context=context.harness.context)
+        context.reply = context.turn_result.speech_text or ""
     context.both = SimpleNamespace(cfg=cfg, config=router_config, needle=needle, router=router_factory, tool=tool)
 
 
@@ -1060,7 +1065,8 @@ tool_selection = "routed"
     with patch('agavai.router.create_brain') as router_factory, \
             patch('agavai.harness.engine.create_brain', side_effect=lambda tier, **_: brains[tier.backend]), \
             tool_patch('agavai.harness.engine.call_tool', return_value='Volume raised.') as tool:
-        context.reply = run_turn(text, cfg, context.harness.output, context=context.harness.context)
+        context.turn_result = run_turn(text, cfg, context.harness.output, context=context.harness.context)
+        context.reply = context.turn_result.speech_text or ""
     context.both = SimpleNamespace(cfg=cfg, text=text, needle=needle, offers=offers, router=router_factory, tool=tool)
 
 

@@ -53,6 +53,14 @@ Session start stores effective model/ASR/VAD/router settings and a config digest
 without environment secret values. Checkpoints contain explicit context fields,
 never sockets, worker handles, callbacks or executable pending confirmations.
 
+New `task_status` events retain the finalized serialized `TurnResult` alongside
+`status`. It matches the direct return value, including request-local outcomes
+and inclusive event bounds; no SQLite schema change is required. Earlier events
+without this additive payload still replay. Blank rejected input has no durable
+turn. Audio finalization can publish later events outside the result's range.
+The [result contract](voice-agent-harness.md#structured-turn-result) defines the
+typed interface; restoring a result never restores execution authority.
+
 An action-start event is committed before dispatch. If the process dies before
 the result is committed, inspection/resume treats that outcome as unknown. On
 resume, incomplete exchanges are reconstructed with actual/unknown tool results;

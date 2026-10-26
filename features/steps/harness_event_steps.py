@@ -59,9 +59,9 @@ cfg.runtime_dir = Path(sys.argv[2])
 cfg.small_brain = LlmConfig(port=int(sys.argv[1]), timeout_secs=5)
 events = []
 harness = Harness(cfg, on_event=events.append)
-reply = harness.run_turn("explain gravity")
+result = harness.run_turn("explain gravity")
 assert sys.modules["agavai.ui"] is None
-print(json.dumps({"reply": reply, "events": [event.to_dict() for event in events]}))
+print(json.dumps({"reply": result.speech_text, "result": result.to_dict(), "events": [event.to_dict() for event in events]}))
 '''
     result = subprocess.run([sys.executable, "-c", source, str(context.cfg.large_brain.port), str(context.runtime_dir)],
                             capture_output=True, text=True, timeout=10)
@@ -79,6 +79,7 @@ def isolated_events(context):
     assert all(event["schema_version"] == 1 for event in events)
     assert len({event["session_id"] for event in events}) == 1
     assert context.child_result["reply"]
+    assert events[-1]["data"]["result"] == context.child_result["result"]
     assert context.requests, "The subprocess must use the real HTTP model transport."
 
 

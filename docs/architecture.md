@@ -59,6 +59,10 @@ clears its prompt/head inheritance and invalidates confirmation.
 `ChatUi.on_harness_event` is the native snapshot adapter. A headless collector
 receives the same versioned event envelope and full tool outcomes without creating
 `ui.json`. See the [event contract](voice-agent-harness.md#ui-independent-event-interface).
+Both public and engine `run_turn` calls return a detached `TurnResult` with explicit
+status, optional speech/content, this request's full executions and event range.
+The final `task_status` embeds that same result before return. Voice/CLI/evaluation
+consume `speech_text`; native rendering continues through individual events.
 The stream is synchronous. With default persistence enabled, canonical events
 commit to SQLite before presentation or dispatch; levels/partials stay transient.
 [Durable session contracts](session-persistence.md) cover recovery, saved-by-default
@@ -131,6 +135,7 @@ with existing timeouts; interruption does not claim rollback.
 | harness/storage.py, harness/audio.py | SQLite ledger/recovery and accepted-turn audio publication |
 | session_cli.py | Inspection/export/deletion and safe native session selection |
 | harness/events.py | Versioned output events and sink; no graphical imports |
+| harness/results.py | Typed TurnResult/ToolExecution snapshots and serialization |
 | harness/session.py | Capture, listener/control transport, recording lifecycle |
 | harness/context.py | Task state, history/archive, prompt packing |
 | harness/routing.py | Task decisions and context relation |

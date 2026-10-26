@@ -6,8 +6,9 @@ import re
 import time
 import uuid
 from dataclasses import replace
+from copy import deepcopy
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from agavai import journal
 from agavai.config import Config
@@ -20,6 +21,7 @@ from agavai.tools import DISPATCH, OPENAPI_TOOLS, execute_tool as call_tool
 from agavai.harness.events import HarnessOutput
 from agavai.harness.context import ContextStore, PendingAction
 from agavai.harness.inference import TurnCancelled
+from agavai.harness.results import ToolExecution, TurnResult, TurnStatus
 from agavai.harness.routing import CONTEXT_SYSTEM, continues_conversation, decide
 from agavai.harness.execution import validate_call as _validate_call
 from agavai.harness.source_turn import language_tier, run_source_turn
@@ -333,13 +335,18 @@ def run_turn(
     *,
     continue_conversation: bool = False,
     context: ContextStore,
-) -> str:
+) -> TurnResult:
     if not text.strip():
-        return "I did not hear anything."
+        return TurnResult(
+            session_id=context.session_id, task_id=context.task_id, request_id=None,
+            status="needs_input", speech_text="I did not hear anything.", content=None,
+            executions=(), first_event_sequence=None, last_event_sequence=None,
+        )
     started = time.monotonic()
     log.info("turn start continue=%s", continue_conversation)
     log.debug('turn text "%s"', journal.clip(text))
     output = output or HarnessOutput(context)
+    first_sequence = output.sequence + 1
     context.committed_requests.append(text)
     context.request_id = uuid.uuid4().hex
     context.turn_status = "pending"
@@ -349,18 +356,28 @@ def run_turn(
     except TurnCancelled:
         context.pending_action = None
         context.turn_status = "cancelled"
+        reply = ""
         log.info("turn cancelled; late inference has no execution authority")
-        output.task_state(context.turn_status)
-        return ""
     if context.should_cancel():
         context.pending_action = None
         context.turn_status = "cancelled"
     elif context.turn_status == "pending":
         context.turn_status = "answered"
-    output.task_state(context.turn_status)
+    result = TurnResult(
+        session_id=context.session_id, task_id=context.task_id, request_id=context.request_id,
+        status=cast(TurnStatus, context.turn_status),
+        speech_text=None if context.turn_status == "cancelled" else reply or None,
+        content=deepcopy(output.current_result) if output.result_sequence >= first_sequence else None,
+        executions=tuple(ToolExecution(
+            call_id=record["id"], name=record["name"], arguments=record["arguments"],
+            status=record["status"], result=record["result"],
+        ) for record in context.execution.records if record["request_id"] == context.request_id),
+        first_event_sequence=first_sequence, last_event_sequence=output.sequence + 1,
+    )
+    output.finish_turn(result)
     log.info("turn done secs=%.2f", time.monotonic() - started)
     log.debug('turn reply "%s"', journal.clip(reply))
-    return reply
+    return result
 
 
 def _run_turn(text: str, cfg: Config, output: HarnessOutput, *, continue_conversation: bool, context: ContextStore) -> str:

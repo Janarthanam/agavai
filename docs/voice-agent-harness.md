@@ -132,8 +132,12 @@ The public interface has no concrete UI parameter:
 ```python
 events = []
 harness = Harness(cfg, on_event=events.append, should_cancel=cancelled.is_set)
-reply = harness.run_turn("list the planets")
-harness.close()
+try:
+    result = harness.run_turn("list the planets")
+    if result.speech_text:
+        speak(result.speech_text, cfg)
+finally:
+    harness.close()
 serialized = [event.to_dict() for event in events]
 ```
 
@@ -161,7 +165,8 @@ context and do not themselves commit another turn.
 
 | Event kinds | Payload contract |
 |---|---|
-| `session_started`, `session_resumed`, `session_closed`, `request_committed`, `task_started`, `task_status` | Session lifecycle, raw `text`, previous task identity, or progress `status` |
+| `session_started`, `session_resumed`, `session_closed`, `request_committed`, `task_started` | Session lifecycle, raw `text`, or previous task identity |
+| `task_status` | Final `status` and detached serialized `result`, identical to the returned TurnResult |
 | `turn_input`, `conversation_cleared`, `listening`, `partial`, `transcribing`, `level` | Effective input and context retention, capture state, provisional text, dB/VAD metadata |
 | `decision`, `model_requested`, `stage` | Capability/reason/source, actual model/backend/path/purpose, or stage/detail |
 | `confirmation_requested` | Validated action `name`, exact `arguments` object and `question`; no action has executed |
@@ -200,6 +205,78 @@ on its lifecycle event. The native adapter rebuilds presentation from saved even
 it does not put replayed events back into the ledger. CLI and native session
 identity/history use the same repository. See [session-persistence.md](session-persistence.md)
 for paths, controls, export, deletion and recovery contracts.
+
+### Structured turn result
+
+`Harness.run_turn` and `harness.engine.run_turn` return `TurnResult`, exported with
+`ToolExecution` and `TurnStatus` from `agavai.harness`. Events describe progress;
+the result describes the completed invocation. Returning a result does not certify
+the factual accuracy of model text or imply that every requested action succeeded.
+
+```python
+@dataclass(frozen=True)
+class TurnResult:
+    session_id: str
+    task_id: str
+    request_id: str | None
+    status: TurnStatus
+    speech_text: str | None
+    content: dict | None
+    executions: tuple[ToolExecution, ...]
+    first_event_sequence: int | None
+    last_event_sequence: int | None
+    schema_version: int = 1
+```
+
+`ToolExecution` contains `call_id`, `name`, exact argument JSON in `arguments`,
+typed `status` (`ok`, `error`, `unknown`) and the full `result` text. It is a
+projection of the existing ledger for this request only, including completed
+effects during cancellation. Earlier requests' actions are excluded even after
+resume. The result's IDs identify the final selected task and current request;
+the initial `request_committed` event can refer to the task before classification.
+
+| Turn status | Client meaning |
+|---|---|
+| `answered` | The engine produced a response; inspect executions for action outcomes |
+| `awaiting_confirmation` | A proposal is waiting inside the harness; no proposed action has run |
+| `needs_input` | More or corrected input is required |
+| `held` | Input is paused; finalized words may be buffered as a draft |
+| `listening` | Reset/resume control completed and the listener can continue |
+| `cancelled` | This turn stopped; completed effects remain in executions |
+| `failed` | A model/validation/action failure was handled and reported |
+| `unknown` | An action's outcome could not be established; do not blindly retry |
+| `incomplete` | Model/tool round budget ended before fulfillment |
+
+`speech_text=None` means no speech, including held drafts, silent task reset and
+cancellation. `content` is the last normalized content produced during this turn,
+not an inherited canvas. Explicit answers contain raw Markdown in `text`; tools
+reuse the existing normalized canvas contract. A turn can have no new content
+while the UI retains an earlier canvas. Clears and source invalidation remain
+explicit events. Pending proposals, callbacks and executable authority are never
+included in the result.
+
+Finalization builds one result, publishes its `to_dict()` in `task_status`, then
+returns it. The inclusive sequence bounds run from admission through that final
+event. Payloads are detached from live context and from each other; dataclasses
+are frozen, while the content dictionary is caller-owned. `to_dict()` makes a
+fresh JSON-serializable copy, including an executions array. The result payload
+has schema version 1; the event envelope remains version 1 with an additive field.
+Old persisted status events without a result still replay in the native adapter.
+
+Blank input is rejected before admission: `needs_input`, the existing “I did not
+hear anything.” speech, no executions/content, and `None` request ID and sequence
+bounds. It emits no turn events and changes no context or pending confirmation.
+The voice controller normally filters empty capture before calling the engine.
+Infrastructure/consumer failures raise instead of manufacturing a successful
+result. Audio publication and playback may happen after the turn's final event;
+their later events are outside its range and do not mutate the returned result.
+
+Voice and typed CLI adapters speak only `speech_text` when present and suppress
+cancelled output. `agavai ask` retains plain spoken-text stdout and its existing
+exit-code policy; this change does not add a JSON CLI mode. Evaluation consumes
+the speech field for existing graders. The native adapter continues projecting
+individual events and uses final `status`; it does not render the embedded result
+again or grant it action authority.
 
 ### Voice and correction semantics
 
@@ -349,15 +426,19 @@ Code: [execution.py](../src/agavai/harness/execution.py).
 - **Observability:** call ID, arguments revision, status, result reference,
   source kind, cancellation and request fulfillment independently of transport.
 
-### Harness output events
+### Harness output events and results
 
-Code: [events.py](../src/agavai/harness/events.py).
+Code: [events.py](../src/agavai/harness/events.py),
+[results.py](../src/agavai/harness/results.py).
 
 - **Deployment:** in process, constructed by `Harness`; no graphical imports.
-- **Lifecycle/protocol:** one ordered `HarnessEvent` callback with detached data;
-  native and headless consumers use the same versioned contract above.
+- **Lifecycle/protocol:** one ordered `HarnessEvent` callback with detached data
+  and one finalized `TurnResult` per admitted invocation; native and headless
+  consumers use the same versioned contract above.
 - **Performance:** synchronous callback/deep-copy cost is on the controller path;
-  no new latency SLA is claimed. Consumers must not perform long blocking work.
+  result copying scales with this turn's content and full outcomes. No extra model
+  call or audio-encoding wait is added and no new latency SLA is claimed.
+  Consumers must not perform long blocking work.
 - **Throughput:** one controller producer and one sink; capture updates follow
   existing bounded audio-level cadence. The presentation sink has no retries;
   durable domain events are retained independently.
@@ -381,6 +462,36 @@ Code: [events.py](../src/agavai/harness/events.py).
   model identity and speech outcome; preserve accessible native controls.
 
 ## Low-level design
+
+### Client outcome and cancellation
+
+```mermaid
+sequenceDiagram
+    participant Client as Voice or typed client
+    participant Engine as Turn engine
+    participant Execute as Execution manager
+    participant Events as Harness output events
+    Client->>Engine: run_turn(final text)
+    Engine->>Events: request_committed and task/model progress
+    Engine->>Execute: Validated call with task/request IDs
+    opt Cancellation arrives during the external action
+        Client->>Engine: should_cancel becomes true
+    end
+    Execute-->>Engine: Actual typed tool outcome
+    Engine->>Events: tool_completed with actual outcome
+    Engine->>Engine: Build TurnResult from finalized state
+    Engine->>Events: task_status(status, result.to_dict())
+    Note over Events: Persist canonical result before presentation
+    Engine-->>Client: Same TurnResult
+    Client->>Client: Speak optional speech; inspect status and executions
+```
+
+The finalized input enters the engine once. The execution manager returns its
+actual outcome even if the caller cancelled during the effect. Finalization then
+sets `cancelled`, retains that execution and returns no speech. A recording
+shortcut can supersede inference without dismissing the listener; the voice
+controller continues into recording when its dismissal input is false. The
+result reports the turn's end, not a command to terminate the whole session.
 
 ### Recording summary, then a transcript correction
 
@@ -494,7 +605,7 @@ Execution records include task/request/call identity, exact arguments, full resu
 and ok/error/unknown status. Timeouts and unexpected tool exceptions have unknown
 outcomes and are not automatically retried. Confirmations are schema-validated
 before storage and consumed once. Task status is separate from tool status:
-answered, awaiting_confirmation, needs_input, held, failed, unknown, incomplete or
+answered, awaiting_confirmation, needs_input, held, listening, failed, unknown, incomplete or
 cancelled describes harness progress, not proof of a model answer's factual accuracy.
 
 [Harness E2E BDD](../features/harness.feature) exercises real HTTP model transport,
@@ -505,6 +616,9 @@ regression requirements. Deployment is a separate operation.
 imports in a separate process and checks event identity/order, confirmations,
 raw answer content, source revisions, cancellation, payload isolation, consumer
 failure and recording controls without a snapshot.
+[Structured-result BDD](../features/harness_results.feature) checks final event and
+ledger agreement, per-request outcomes, silent controls, confirmation, cancellation,
+detached content, resume, and actual voice/typed client consumption.
 
 ## Conclusion & References
 

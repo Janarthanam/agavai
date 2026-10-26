@@ -93,3 +93,7 @@ mode keeps that identity. Raw answer Markdown is rendered only by this adapter. 
 than inspecting result text. Task/request identity and progress are separate from
 tool completion. Recording answers carry source revision and stale-output metadata;
 pipeline help records the actual decision/model/source path.
+The final `task_status` also carries the serialized `TurnResult`. The adapter
+projects its status and leaves content to the preceding answer/display/tool
+events, avoiding duplicate rendering. Voice and typed clients use the returned
+optional speech text; a silent result never triggers synthesis.

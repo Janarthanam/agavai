@@ -46,10 +46,10 @@ with patch("agavai.tools._run", side_effect=desktop), patch("agavai.tools.shutil
         audio.write(b"\x00\x20" * 16000)
         harness.input_mode = "spoken"
         with patch("agavai.harness.audio._encode", side_effect=encoding):
-            reply = harness.run_turn(text, audio=audio)
+            result = harness.run_turn(text, audio=audio)
             harness.close()
     else:
-        reply = harness.run_turn(text, continue_conversation=bool(sid))
+        result = harness.run_turn(text, continue_conversation=bool(sid))
         harness.close()
-print(json.dumps({"reply": reply, "session": harness.context.session_id,
+print(json.dumps({"reply": result.speech_text or "", "result": result.to_dict(), "session": harness.context.session_id,
                   "events": [event.to_dict() for event in events]}))

@@ -205,13 +205,15 @@ def step_context_dismiss(context):
 
 @when('I run a turn with text "{text}"')
 def step_turn(context, text):
-    context.reply = run_turn(text, Config(), context=ContextStore())
+    context.turn_result = run_turn(text, Config(), context=ContextStore())
+    context.reply = context.turn_result.speech_text or ""
 
 
 @when('I run a turn with text "{text}" on the chat UI')
 def step_turn_ui(context, text):
     context.before_turn = deepcopy(context.ui.data)
-    context.reply = run_turn(text, context.cfg, context.harness.output, context=context.harness.context)
+    context.turn_result = run_turn(text, context.cfg, context.harness.output, context=context.harness.context)
+    context.reply = context.turn_result.speech_text or ""
 
 
 @when('I continue the turn with text "{text}"')
@@ -221,7 +223,8 @@ def step_continue(context, text):
     context.before_heads = list(context.harness.context.heads)
     context.context_requests = []
     context.action_requests = []
-    context.reply = run_turn(text, context.cfg, context.harness.output, context=context.harness.context, continue_conversation=True)
+    context.turn_result = run_turn(text, context.cfg, context.harness.output, context=context.harness.context, continue_conversation=True)
+    context.reply = context.turn_result.speech_text or ""
 
 
 @then('the spoken reply should be "{text}"')
