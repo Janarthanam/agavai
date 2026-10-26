@@ -113,7 +113,7 @@ ledger JSON, available attachments and source references, never source copies.
   recordings reuse their existing capture/storage path.
 - **Configuration:** audio retention, ASR maximum duration, energy trim threshold.
 - **Observability:** relative path, codec/rate, duration, timestamps, checksum,
-  ready/incomplete/missing/deleted/failed status and encoding warnings.
+  writing/ready/incomplete/missing/failed/quota_exceeded status and encoding warnings.
 
 ### CLI and native projection
 
