@@ -542,4 +542,3 @@ def _run_stop_body(
     if result in {"cancelled", "silent"}:
         return None if result == "cancelled" else reply
     return reply
-

@@ -63,4 +63,3 @@ def continues_conversation(text, prior_messages, cfg, context, chat) -> bool:
         raise LlmError("I could not determine whether that continues our conversation. Please try again.")
     log.info("context choice=%s", choice)
     return choice == "follow_up"
-
